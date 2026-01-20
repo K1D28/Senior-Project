@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  name     String
+  // publicId removed
+}
+
+model HeadJudge {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String        @default("Active")
+  participants Participant[] // Relation to Participant
+  // publicId removed
+}
+
+model Farmer {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String
+  lastLogin    DateTime?
+  participants Participant[]
+  // publicId removed
+}
+
+model QGrader {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String
+  lastLogin    DateTime?
+  participants Participant[] // Relation to Participant
+  // publicId removed
+}
+
+model CuppingEvent {
+  id                Int                            @id @default(autoincrement())
+  name              String
+  date              DateTime
+  description       String?
+  isResultsRevealed Boolean                        @default(false)
+  participants      Participant[]
+  samples           Sample[]
+  tags              CuppingEventTag[]
+  processingMethods CuppingEventProcessingMethod[]
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+}
+
+model Participant {
+  id           Int          @id @default(autoincrement())
+  role         String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  headJudgeId  Int? // Optional relation to HeadJudge
+  headJudge    HeadJudge?   @relation(fields: [headJudgeId], references: [id])
+  qGraderId    Int? // Optional relation to QGrader
+  qGrader      QGrader?     @relation(fields: [qGraderId], references: [id])
+  farmerId     Int? // Optional relation to Farmer
+  farmer       Farmer?      @relation(fields: [farmerId], references: [id])
+}
+
+model Sample {
+  id                    Int           @id @default(autoincrement())
+  blindCode             String        @unique @default(uuid()) // Auto-generate unique blindCode
+  farmName              String
+  farmerId              Int
+  region                String?
+  variety               String
+  processingMethod      String
+  altitude              Float // Added altitude field
+  moisture              Float // Added moisture field
+  adjudicatedFinalScore Float?
+  cuppingEventId        Int?
+  cuppingEvent          CuppingEvent? @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+}
+
+model CuppingEventTag {
+  id           Int          @id @default(autoincrement())
+  tag          String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model CuppingEventProcessingMethod {
+  id           Int          @id @default(autoincrement())
+  method       String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  ADMIN
+  FARMER
+  Q_GRADER
+  HEAD_JUDGE
+}
+
+model User {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  supabaseId String    @unique
+  role       Role // Removed default role
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  name       String? // Added name field
+  status     String? // Added status field
+  lastLogin  DateTime? // Added lastLogin field
+}

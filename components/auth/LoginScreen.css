@@ -1,0 +1,55 @@
+body {
+  background-color: #f5f5f5; /* Light grey background */
+}
+
+.min-h-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5; /* Light grey background */
+}
+
+.bg-surface {
+  background-color: #ffffff; /* White background for the card */
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.bg-primary {
+  background-color: #6f4e37; /* Coffee color */
+  transition: background-color 0.3s ease;
+}
+
+.bg-primary-dark {
+  background-color: #5a3c2a; /* Darker coffee color */
+}
+
+button {
+  color: #ffffff; /* White color for the button */
+  background-color: transparent; /* No background */
+  border: none; /* Remove border */
+  transition: none; /* Remove transitions */
+}
+
+button:hover {
+  color: #ffffff; /* Keep white color on hover */
+  background-color: transparent; /* No background on hover */
+}
+
+button:active {
+  color: #ffffff; /* Keep white color on press */
+  background-color: transparent; /* No background on press */
+}
+
+input {
+  border: 1px solid #ccc;
+  padding: 8px;
+  border-radius: 4px;
+  width: 100%;
+  transition: border-color 0.3s ease;
+}
+
+input:focus {
+  border-color: #6f4e37; /* Coffee color border on focus */
+  outline: none;
+}
