@@ -5,7 +5,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Modal } from '../ui/Modal';
-import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, Mic, X, Lock } from 'lucide-react';
+import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // FIX: Add type definitions for SpeechRecognition API to the global window object to resolve TypeScript errors.
@@ -37,64 +37,24 @@ const FLAVOR_CATEGORIES: Record<string, string[]> = {
 type SampleStatus = 'Not Started' | 'Submitted' | 'Finalized';
 
 // --- Child Components ---
-const DefectCounter: React.FC<{ label: string; count: number; onCountChange: (newCount: number) => void; pointValue: number; }> = ({ label, count, onCountChange, pointValue }) => (
+const DefectCounter: React.FC<{ label: string; count: number; onCountChange: (newCount: number) => void; pointValue: number; disabled?: boolean; }> = ({ label, count, onCountChange, pointValue, disabled }) => (
     <div className="flex justify-between items-center p-3 bg-red-50 border border-red-200 rounded-lg">
         <div><p className="font-semibold text-red-800">{label}</p><p className="text-xs text-red-600">{-pointValue} points per cup</p></div>
-        <div className="flex items-center space-x-2 sm:space-x-3"><Button size="sm" variant="secondary" onClick={() => onCountChange(Math.max(0, count - 1))} className="w-8 h-8 p-0 flex items-center justify-center rounded-full"><Minus size={16} /></Button><span className="font-bold text-lg text-red-800 w-8 text-center tabular-nums">{count}</span><Button size="sm" variant="secondary" onClick={() => onCountChange(count + 1)} className="w-8 h-8 p-0 flex items-center justify-center rounded-full"><Plus size={16} /></Button></div>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+            <Button size="sm" variant="secondary" onClick={() => !disabled && onCountChange(Math.max(0, count - 1))} className="w-8 h-8 p-0 flex items-center justify-center rounded-full" disabled={disabled}><Minus size={16} /></Button>
+            <span className="font-bold text-lg text-red-800 w-8 text-center tabular-nums">{count}</span>
+            <Button size="sm" variant="secondary" onClick={() => !disabled && onCountChange(count + 1)} className="w-8 h-8 p-0 flex items-center justify-center rounded-full" disabled={disabled}><Plus size={16} /></Button>
+        </div>
     </div>
 );
 
-const DescriptorItem: React.FC<{ descriptor: Descriptor; onIntensityChange: (name: string, intensity: number) => void; onRemove: (name: string) => void; }> = ({ descriptor, onIntensityChange, onRemove }) => (
+const DescriptorItem: React.FC<{ descriptor: Descriptor; onIntensityChange: (name: string, intensity: number) => void; onRemove: (name: string) => void; disabled?: boolean; }> = ({ descriptor, onIntensityChange, onRemove, disabled }) => (
     <div className="flex items-center space-x-3 bg-gray-50 p-2 rounded-md">
-        <button onClick={() => onRemove(descriptor.name)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+        <button onClick={() => !disabled && onRemove(descriptor.name)} className="text-gray-400 hover:text-red-500" disabled={disabled}><X size={16} /></button>
         <span className="font-medium text-sm w-28 truncate">{descriptor.name}</span>
-        <input type="range" min="1" max="5" step="1" value={descriptor.intensity} onChange={(e) => onIntensityChange(descriptor.name, parseInt(e.target.value, 10))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+        <input type="range" min="1" max="5" step="1" value={descriptor.intensity} onChange={(e) => !disabled && onIntensityChange(descriptor.name, parseInt(e.target.value, 10))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" disabled={disabled} />
     </div>
 );
-
-// --- Voice Recognition Hook ---
-const useVoiceRecognition = (onResult: (transcript: string) => void) => {
-    const [isListening, setIsListening] = useState(false);
-    const recognitionRef = useRef<any>(null);
-
-    useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.warn("Speech recognition not supported in this browser.");
-            return;
-        }
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-        
-        recognition.onresult = (event: any) => {
-            const transcript = event.results[0][0].transcript;
-            onResult(transcript);
-            setIsListening(false);
-        };
-        recognition.onerror = (event: any) => {
-            console.error("Speech recognition error", event.error);
-            setIsListening(false);
-        };
-        recognition.onend = () => {
-             setIsListening(false);
-        }
-        recognitionRef.current = recognition;
-    }, [onResult]);
-
-    const toggleListening = () => {
-        if (!recognitionRef.current) return;
-        if (isListening) {
-            recognitionRef.current.stop();
-        } else {
-            recognitionRef.current.start();
-            setIsListening(true);
-        }
-    };
-
-    return { isListening, toggleListening, isSupported: !!recognitionRef.current };
-};
 
 // --- Cupping Form Component ---
 interface CuppingFormProps { scoreSheet: ScoreSheet; sample: CoffeeSample; onSave: (updatedSheet: ScoreSheet) => void; onBack: () => void; }
@@ -107,11 +67,6 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
     const [isFlavorModalOpen, setIsFlavorModalOpen] = useState(false);
     const isInitialMount = useRef(true);
 
-    const { isListening, toggleListening, isSupported } = useVoiceRecognition((transcript) => {
-        setNotes(prev => prev ? `${prev} ${transcript}` : transcript);
-        setSaveStatus('unsaved');
-    });
-
     const calculateFinalScore = useCallback(() => {
         const { taints, faults, finalScore, ...rest } = scores;
         const attributeTotal = (Object.values(rest) as number[]).reduce((sum, val) => sum + val, 0); // Ensure val is a number
@@ -123,6 +78,7 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
 
     useEffect(() => {
         if (isInitialMount.current) { isInitialMount.current = false; return; }
+        if (scoreSheet.isSubmitted) return; // Do not autosave if already submitted
         if (saveStatus !== 'unsaved') return;
         setSaveStatus('saving');
         const finalScore = calculateFinalScore();
@@ -131,13 +87,14 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
     }, [scores, notes, descriptors, saveStatus, scoreSheet, calculateFinalScore, debouncedSave]);
 
     const handleDataChange = () => setSaveStatus('unsaved');
-    const handleScoreChange = (field: keyof CuppingScore, value: number) => { setScores(prev => ({ ...prev, [field]: value })); handleDataChange(); };
+    const handleScoreChange = (field: keyof CuppingScore, value: number) => { if (scoreSheet.isSubmitted) return; setScores(prev => ({ ...prev, [field]: value })); handleDataChange(); };
     const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { setNotes(e.target.value); handleDataChange(); };
-    const handleDescriptorIntensityChange = (name: string, intensity: number) => { setDescriptors(prev => prev.map(d => d.name === name ? { ...d, intensity } : d)); handleDataChange(); };
-    const handleRemoveDescriptor = (name: string) => { setDescriptors(prev => prev.filter(d => d.name !== name)); handleDataChange(); };
-    const toggleDescriptor = (name: string) => { setDescriptors(prev => prev.some(d => d.name === name) ? prev.filter(d => d.name !== name) : [...prev, { name, intensity: 3 }]); handleDataChange(); };
+    const handleDescriptorIntensityChange = (name: string, intensity: number) => { if (scoreSheet.isSubmitted) return; setDescriptors(prev => prev.map(d => d.name === name ? { ...d, intensity } : d)); handleDataChange(); };
+    const handleRemoveDescriptor = (name: string) => { if (scoreSheet.isSubmitted) return; setDescriptors(prev => prev.filter(d => d.name !== name)); handleDataChange(); };
+    const toggleDescriptor = (name: string) => { if (scoreSheet.isSubmitted) return; setDescriptors(prev => prev.some(d => d.name === name) ? prev.filter(d => d.name !== name) : [...prev, { name, intensity: 3 }]); handleDataChange(); };
 
     const handleSubmit = (isFinal: boolean) => {
+        if (scoreSheet.isSubmitted) return; // Prevent re-submission
         const finalScore = calculateFinalScore();
         const updatedSheet: ScoreSheet = { ...scoreSheet, scores: { ...scores, finalScore }, notes, descriptors, isSubmitted: isFinal };
         onSave(updatedSheet);
@@ -163,7 +120,7 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                         {scoreFields.map(({ key, label }) => (
                             <div key={key}>
                                 <div className="flex justify-between items-center mb-1"><label className="text-sm font-medium text-gray-700">{label}</label><span className="font-semibold text-primary tabular-nums">{scores[key].toFixed(2)}</span></div>
-                                <input type="range" min="0" max="10" step="0.25" value={scores[key]} onChange={(e) => handleScoreChange(key, parseFloat(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+                                <input type="range" min="0" max="10" step="0.25" value={scores[key]} onChange={(e) => handleScoreChange(key, parseFloat(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" disabled={scoreSheet.isSubmitted} />
                             </div>
                         ))}
                     </div>
@@ -173,26 +130,25 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                         <div>
                             <Label>Smart Notes</Label>
                             <div className="space-y-3 p-3 border border-border rounded-lg">
-                                <div className="flex items-center space-x-2">
-                                    <Button size="sm" onClick={() => setIsFlavorModalOpen(true)}>+ Add Descriptors</Button>
-                                    {isSupported && <Button size="sm" variant="secondary" onClick={toggleListening} className={`flex items-center space-x-1 ${isListening ? 'bg-red-100 text-red-700' : ''}`}><Mic size={16} /><span>{isListening ? 'Listening...' : 'Dictate'}</span></Button>}
+                                    <div className="flex items-center space-x-2">
+                                    <Button size="sm" onClick={() => !scoreSheet.isSubmitted && setIsFlavorModalOpen(true)} disabled={scoreSheet.isSubmitted}>+ Add Descriptors</Button>
                                 </div>
                                 <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                                    {descriptors.length > 0 ? descriptors.map(d => <DescriptorItem key={d.name} descriptor={d} onIntensityChange={handleDescriptorIntensityChange} onRemove={handleRemoveDescriptor} />) : <p className="text-sm text-center text-gray-400 py-4">No descriptors added.</p>}
+                                    {descriptors.length > 0 ? descriptors.map(d => <DescriptorItem key={d.name} descriptor={d} onIntensityChange={handleDescriptorIntensityChange} onRemove={handleRemoveDescriptor} disabled={scoreSheet.isSubmitted} />) : <p className="text-sm text-center text-gray-400 py-4">No descriptors added.</p>}
                                 </div>
                             </div>
                         </div>
                         <div>
                             <Label htmlFor="final-comments">Final Comments</Label>
-                            <textarea id="final-comments" value={notes} onChange={handleNotesChange} rows={3} className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary text-sm" placeholder="e.g., vibrant, floral, tea-like body..."></textarea>
+                            <textarea id="final-comments" value={notes} onChange={handleNotesChange} rows={3} className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary text-sm" placeholder="e.g., vibrant, floral, tea-like body..." disabled={scoreSheet.isSubmitted}></textarea>
                             <div className="flex items-center space-x-2 mt-2">
                                 {quickNotes.map(qn => <Button key={qn} size="sm" variant="secondary" onClick={() => { setNotes(p => `${p} ${qn}.`.trim()); handleDataChange(); }}>{qn}</Button>)}
                             </div>
                         </div>
                         <div className="space-y-3 pt-4 border-t border-border">
                             <h4 className="text-base font-medium text-gray-800">Defects</h4>
-                            <DefectCounter label="Taints" count={scores.taints} onCountChange={(c) => handleScoreChange('taints', c)} pointValue={2} />
-                            <DefectCounter label="Faults" count={scores.faults} onCountChange={(c) => handleScoreChange('faults', c)} pointValue={4} />
+                            <DefectCounter label="Taints" count={scores.taints} onCountChange={(c) => handleScoreChange('taints', c)} pointValue={2} disabled={scoreSheet.isSubmitted} />
+                            <DefectCounter label="Faults" count={scores.faults} onCountChange={(c) => handleScoreChange('faults', c)} pointValue={4} disabled={scoreSheet.isSubmitted} />
                         </div>
                     </div>
                 </div>
@@ -215,13 +171,17 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
             </Modal>
 
             {/* Sticky Footer */}
-            <div className="fixed bottom-0 left-0 right-0 bg-surface p-3 border-t border-border shadow-md z-10">
+                <div className="fixed bottom-0 left-0 right-0 bg-surface p-3 border-t border-border shadow-md z-10">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1"><ChevronLeft size={16} /> <span>Back</span></Button>
                     <div className="text-center"><p className="text-sm text-text-light">Final Score</p><p className="text-2xl font-bold text-text-dark tabular-nums">{calculateFinalScore().toFixed(2)}</p></div>
                     <div className="flex items-center space-x-2 w-40 justify-end">
                         <div className="flex items-center space-x-2 text-sm text-text-light">{saveStatus === 'saving' && <><Save size={16} className="animate-spin" /><span>Saving...</span></>}{saveStatus === 'saved' && <><CheckCircle size={16} className="text-green-600"/><span>Saved</span></>}</div>
-                        <Button onClick={() => handleSubmit(true)} className={saveStatus === 'saving' ? 'opacity-50 cursor-not-allowed' : ''} disabled={saveStatus === 'saving'}>Submit Final</Button>
+                        {!scoreSheet.isSubmitted ? (
+                            <Button onClick={() => handleSubmit(true)} className={saveStatus === 'saving' ? 'opacity-50 cursor-not-allowed' : ''} disabled={saveStatus === 'saving'}>Submit Final</Button>
+                        ) : (
+                            <div className="text-sm font-semibold text-gray-600">Submitted</div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -249,7 +209,12 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                     const events = await response.json();
                     setAssignedEvents(events);
                 } else {
-                    console.error('Failed to fetch Q Grader events');
+                    let serverMsg = `Status ${response.status}`;
+                    try {
+                        const body = await response.text();
+                        try { const parsed = JSON.parse(body); serverMsg = parsed.message || JSON.stringify(parsed); } catch (e) { if (body) serverMsg = body; }
+                    } catch (e) {}
+                    console.error('Failed to fetch Q Grader events:', serverMsg);
                 }
             } catch (error) {
                 console.error('Error fetching Q Grader events:', error);
@@ -258,13 +223,19 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         fetchAssignedEvents();
     }, []);
 
-    const samplesForEvent = useMemo(() => selectedEvent ? appData.samples.filter(s => selectedEvent.sampleIds.includes(s.id)) : [], [selectedEvent, appData.samples]);
+    // Samples come from the server as `sampleObjects` on each event. Do not use appData.samples.
+    const samplesForEvent = useMemo(() => {
+        if (!selectedEvent) return [];
+        const objs = (selectedEvent as any).sampleObjects || (selectedEvent as any).samples || [];
+        return objs.map((s: any) => ({ ...s, id: String(s.id) })) as CoffeeSample[];
+    }, [selectedEvent]);
 
     const getOrCreateScoreSheet = useCallback((sampleId: string): ScoreSheet => {
-        const existing = appData.scores.find(s => s.sampleId === sampleId && s.qGraderId === currentUser.id && s.eventId === selectedEvent!.id);
+        const eventIdStr = String(selectedEvent!.id);
+        const existing = appData.scores.find(s => s.sampleId === sampleId && s.qGraderId === currentUser.id && s.eventId === eventIdStr);
         if (existing) return existing;
         return {
-            id: `new-${sampleId}-${currentUser.id}-${selectedEvent!.id}`, eventId: selectedEvent!.id, qGraderId: currentUser.id, sampleId, isSubmitted: false, notes: '', descriptors: [],
+            id: `new-${sampleId}-${currentUser.id}-${eventIdStr}`, eventId: eventIdStr, qGraderId: currentUser.id, sampleId, isSubmitted: false, notes: '', descriptors: [],
             scores: { fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6, uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6, taints: 0, faults: 0, finalScore: 76 },
         };
     }, [appData.scores, currentUser.id, selectedEvent]);
@@ -332,7 +303,13 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                         <Card key={event.id} title={event.name} className="w-3/4">
                             <p className="text-text-light">Date: {event.date}</p>
                             <p className="text-text-light">Samples to cup: {event.sampleIds.length}</p>
-                            <Button onClick={() => setSelectedEvent(event)} className="mt-4">Start Cupping</Button>
+                            {event.isResultsRevealed ? (
+                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-800 font-semibold text-center">
+                                    Event ended
+                                </div>
+                            ) : (
+                                <Button onClick={() => setSelectedEvent(event)} className="mt-4">Start Cupping</Button>
+                            )}
                         </Card>
                     ))
                 ) : (

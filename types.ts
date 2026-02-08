@@ -66,6 +66,9 @@ export interface CoffeeSample {
   headJudgeNotes?: string;
   adjudicationJustification?: string;
   flaggedForDiscussion?: boolean;
+  isLocked?: boolean;
+  lockedByHeadJudgeId?: string | null;
+  lockedAt?: string | null;
   count?: number; // Added optional count property
 }
 

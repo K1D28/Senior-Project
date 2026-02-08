@@ -18,6 +18,7 @@ export interface AdjudicationData {
     notes?: string;
     justification?: string;
     flagged?: boolean;
+  lock?: boolean;
 }
 
 export interface NewFullEventData {
@@ -135,7 +136,7 @@ function App() {
       handleLogout();
     }, 15 * 60 * 1000); // 15 minutes
     logoutTimerRef.current = timer;
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (currentUser) {
@@ -172,28 +173,218 @@ function App() {
   }
 
   const updateScoreSheet = useCallback((updatedSheet: ScoreSheet) => {
-    setAppData(prevData => {
-      const scoreExists = prevData.scores.some(s => s.id === updatedSheet.id);
+    // Persist to backend (best-effort) and update local state
+    // Optimistic UI update: normalize IDs to strings and apply the updated sheet immediately
+    const normalizedSheet: ScoreSheet = {
+      ...updatedSheet,
+      eventId: String(updatedSheet.eventId),
+      sampleId: String(updatedSheet.sampleId),
+      qGraderId: String(updatedSheet.qGraderId),
+    };
 
-      if (scoreExists) {
-        // Update existing score sheet
-        return {
-          ...prevData,
-          scores: prevData.scores.map(s => s.id === updatedSheet.id ? updatedSheet : s),
-        };
-      } else {
-        // Add new score sheet, assigning a permanent ID
-        const newSheetWithProperId = {
-          ...updatedSheet,
-          id: `scoresheet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        };
-        return {
-          ...prevData,
-          scores: [...prevData.scores, newSheetWithProperId],
-        };
+    setAppData(prev => {
+      const exists = prev.scores.some(s => String(s.sampleId) === normalizedSheet.sampleId && String(s.qGraderId) === normalizedSheet.qGraderId && String(s.eventId) === normalizedSheet.eventId);
+      if (exists) {
+        return { ...prev, scores: prev.scores.map(s => (String(s.sampleId) === normalizedSheet.sampleId && String(s.qGraderId) === normalizedSheet.qGraderId && String(s.eventId) === normalizedSheet.eventId) ? normalizedSheet : s) };
       }
+      return { ...prev, scores: [...prev.scores, normalizedSheet] };
     });
-  }, []);
+
+    (async () => {
+      let persisted = false;
+      try {
+        // Map ScoreSheet -> payload expected by backend
+        const attributes = {
+          fragrance: updatedSheet.scores.fragrance,
+          flavor: updatedSheet.scores.flavor,
+          aftertaste: updatedSheet.scores.aftertaste,
+          acidity: updatedSheet.scores.acidity,
+          body: updatedSheet.scores.body,
+          balance: updatedSheet.scores.balance,
+          uniformity: updatedSheet.scores.uniformity,
+          cleanCup: updatedSheet.scores.cleanCup,
+          sweetness: updatedSheet.scores.sweetness,
+          overall: updatedSheet.scores.overall,
+        };
+        const defects = (Number(updatedSheet.scores.taints || 0) * 2) + (Number(updatedSheet.scores.faults || 0) * 4);
+
+        console.log('DEBUG: sending score POST to backend', { sampleId: updatedSheet.sampleId, eventId: updatedSheet.eventId, qGraderId: updatedSheet.qGraderId });
+        const resp = await fetch('http://localhost:5001/api/qgrader/scores', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+          body: JSON.stringify({ sampleId: parseInt(updatedSheet.sampleId), cuppingEventId: parseInt(updatedSheet.eventId), attributes, defects, comments: updatedSheet.notes, descriptors: updatedSheet.descriptors, isSubmitted: !!updatedSheet.isSubmitted }),
+        });
+
+        if (!resp.ok) {
+          let bodyText = '';
+          try {
+            bodyText = await resp.text();
+          } catch (e) {
+            bodyText = `<unable to read body: ${String(e)}>`;
+          }
+          console.warn('Failed to persist score to server', resp.status, bodyText);
+          if (resp.status === 403) {
+            try {
+              const parsed = JSON.parse(bodyText);
+              alert(`Submission blocked: ${parsed.message || bodyText}`);
+            } catch {
+              alert(`Submission blocked: ${bodyText}`);
+            }
+          }
+        } else {
+          const body = await resp.json();
+          // server returns { score, adjudicatedFinalScore }
+          const serverScore = body.score;
+          // map serverScore back into ScoreSheet shape
+          const mapped: ScoreSheet = {
+            id: `${serverScore.id}`,
+            eventId: `${serverScore.cuppingEventId || updatedSheet.eventId}`,
+            qGraderId: currentUser ? currentUser.id : updatedSheet.qGraderId,
+            sampleId: `${serverScore.sampleId}`,
+            isSubmitted: !!serverScore.isSubmitted,
+            notes: serverScore.comments || updatedSheet.notes,
+            descriptors: serverScore.descriptors ? JSON.parse(serverScore.descriptors) : updatedSheet.descriptors || [],
+            scores: {
+              fragrance: Number(serverScore.fragrance),
+              flavor: Number(serverScore.flavor),
+              aftertaste: Number(serverScore.aftertaste),
+              acidity: Number(serverScore.acidity),
+              body: Number(serverScore.body),
+              balance: Number(serverScore.balance),
+              uniformity: Number(serverScore.uniformity),
+              cleanCup: Number(serverScore.cleanCup),
+              sweetness: Number(serverScore.sweetness),
+              overall: Number(serverScore.overall),
+              taints: 0,
+              faults: 0,
+              finalScore: Number(serverScore.total),
+            }
+          };
+
+          // Reconcile local appData with persisted record returned by server
+          setAppData(prevData => {
+            const exists = prevData.scores.some(s => s.id === mapped.id || (s.sampleId === mapped.sampleId && s.qGraderId === mapped.qGraderId && s.eventId === mapped.eventId));
+            if (exists) {
+              return { ...prevData, scores: prevData.scores.map(s => (s.id === mapped.id || (s.sampleId === mapped.sampleId && s.qGraderId === mapped.qGraderId && s.eventId === mapped.eventId)) ? mapped : s) };
+            }
+            return { ...prevData, scores: [...prevData.scores, mapped] };
+          });
+
+          persisted = true;
+        }
+      } catch (err) {
+        console.error('Error persisting score sheet:', err);
+      }
+
+      // Always attempt to refresh the grader's canonical scores so UI reflects server state
+      try {
+        console.log('Re-fetching grader scores after submit...');
+        const mineResp = await fetch('http://localhost:5001/api/qgrader/scores/mine', { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+        console.log('Re-fetch status:', mineResp.status);
+        if (mineResp.ok) {
+          const rows = await mineResp.json();
+          const refreshed: ScoreSheet[] = rows.map((row: any) => ({
+            id: `${row.id}`,
+            eventId: `${row.cuppingEventId}`,
+            qGraderId: currentUser ? currentUser.id : `${row.qGraderId}`,
+            sampleId: `${row.sampleId}`,
+            isSubmitted: !!row.isSubmitted,
+            notes: row.comments || '',
+            descriptors: row.descriptors ? JSON.parse(row.descriptors) : [],
+            scores: {
+              fragrance: Number(row.fragrance),
+              flavor: Number(row.flavor),
+              aftertaste: Number(row.aftertaste),
+              acidity: Number(row.acidity),
+              body: Number(row.body),
+              balance: Number(row.balance),
+              uniformity: Number(row.uniformity),
+              cleanCup: Number(row.cleanCup),
+              sweetness: Number(row.sweetness),
+              overall: Number(row.overall),
+              taints: 0,
+              faults: 0,
+              finalScore: Number(row.total),
+            }
+          }));
+
+          setAppData(prev => ({ ...prev, scores: [...prev.scores.filter(s => s.qGraderId !== (currentUser ? currentUser.id : '')), ...refreshed] }));
+          console.log('Grader scores refreshed, count:', refreshed.length);
+        } else {
+          console.warn('Could not re-fetch grader scores after submit', mineResp.status);
+        }
+      } catch (e) {
+        console.error('Error re-fetching grader scores after submit:', e);
+      }
+
+      // Fallback: update only local state if persistence failed
+      if (!persisted) {
+        setAppData(prevData => {
+          const scoreExists = prevData.scores.some(s => s.id === updatedSheet.id);
+
+          if (scoreExists) {
+            return {
+              ...prevData,
+              scores: prevData.scores.map(s => s.id === updatedSheet.id ? updatedSheet : s),
+            };
+          } else {
+            const newSheetWithProperId = {
+              ...updatedSheet,
+              id: `scoresheet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+            };
+            return {
+              ...prevData,
+              scores: [...prevData.scores, newSheetWithProperId],
+            };
+          }
+        });
+      }
+    })();
+  }, [currentUser]);
+
+  // Load persisted QGrader scores when a Q Grader logs in
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!currentUser.roles.includes(Role.Q_GRADER)) return;
+
+    (async () => {
+      try {
+        const resp = await fetch('http://localhost:5001/api/qgrader/scores/mine', { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        // Map server rows to ScoreSheet shape
+        const mapped: ScoreSheet[] = data.map((row: any) => ({
+          id: `${row.id}`,
+          eventId: `${row.cuppingEventId}`,
+          qGraderId: currentUser.id,
+          sampleId: `${row.sampleId}`,
+          isSubmitted: !!row.isSubmitted,
+          notes: row.comments || '',
+          descriptors: row.descriptors ? JSON.parse(row.descriptors) : [],
+          scores: {
+            fragrance: Number(row.fragrance),
+            flavor: Number(row.flavor),
+            aftertaste: Number(row.aftertaste),
+            acidity: Number(row.acidity),
+            body: Number(row.body),
+            balance: Number(row.balance),
+            uniformity: Number(row.uniformity),
+            cleanCup: Number(row.cleanCup),
+            sweetness: Number(row.sweetness),
+            overall: Number(row.overall),
+            taints: 0,
+            faults: 0,
+            finalScore: Number(row.total),
+          }
+        }));
+
+        setAppData(prev => ({ ...prev, scores: [...prev.scores.filter(s => s.qGraderId !== currentUser.id), ...mapped] }));
+      } catch (err) {
+        console.error('Error loading persisted QGrader scores:', err);
+      }
+    })();
+  }, [currentUser]);
 
   const revealResults = useCallback((eventId: string) => {
     setAppData(prevData => ({
@@ -463,22 +654,89 @@ function App() {
 }, [generateBlindCode]);
 
   const updateSampleAdjudication = useCallback((sampleId: string, finalData: AdjudicationData) => {
-    setAppData(prevData => ({
-      ...prevData,
-      samples: prevData.samples.map(s => 
-        s.id === sampleId 
-        ? { 
-            ...s, 
-            adjudicatedFinalScore: finalData.score ?? s.adjudicatedFinalScore, 
-            gradeLevel: finalData.grade ?? s.gradeLevel, 
-            headJudgeNotes: finalData.notes ?? s.headJudgeNotes,
-            adjudicationJustification: finalData.justification ?? s.adjudicationJustification,
-            flaggedForDiscussion: finalData.flagged ?? s.flaggedForDiscussion,
-          } 
-        : s
-      ),
-    }));
-  }, []);
+    console.log('updateSampleAdjudication called', { sampleId, finalData, currentUser });
+    (async () => {
+      // If current user is head judge, persist decision to backend
+      if (currentUser && currentUser.roles.includes(Role.HEAD_JUDGE)) {
+        try {
+          const resp = await fetch(`http://localhost:5001/api/headjudge/samples/${sampleId}/decision`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify({ finalScore: finalData.score, gradeLevel: finalData.grade, notes: finalData.notes || finalData.justification || '', lock: Boolean(finalData.lock), flagged: !!finalData.flagged }),
+          });
+          if (!resp.ok) {
+            try {
+              const text = await resp.text();
+              console.error('Head judge decision failed:', resp.status, text);
+            } catch (e) {
+              console.error('Head judge decision failed with status:', resp.status);
+            }
+          }
+          if (resp.ok) {
+            const body = await resp.json();
+            console.log('Head judge decision persisted, server response:', body);
+            let updatedSample = body.sample || {};
+            // Coerce optimistic fields: if the UI requested lock/flag, ensure they appear locally
+            try {
+              updatedSample = {
+                ...updatedSample,
+                isLocked: Boolean(updatedSample.isLocked) || Boolean(finalData.lock),
+                flaggedForDiscussion: typeof updatedSample.flaggedForDiscussion === 'boolean' ? updatedSample.flaggedForDiscussion : Boolean(finalData.flagged),
+                adjudicatedFinalScore: updatedSample.adjudicatedFinalScore ?? finalData.score ?? updatedSample.adjudicatedFinalScore,
+                gradeLevel: updatedSample.gradeLevel ?? finalData.grade ?? updatedSample.gradeLevel,
+                headJudgeNotes: updatedSample.headJudgeNotes ?? finalData.notes ?? updatedSample.headJudgeNotes,
+              };
+            } catch (e) {
+              console.warn('Error coercing updatedSample fields', e);
+            }
+
+            console.log('Applying updatedSample to app state (after coercion):', updatedSample);
+            setAppData(prevData => {
+              const existingIndex = prevData.samples.findIndex(s => String(s.id) === String(sampleId));
+              const normalizedSample = { ...updatedSample, id: String(updatedSample.id ?? sampleId) };
+              if (existingIndex >= 0) {
+                return { ...prevData, samples: prevData.samples.map(s => String(s.id) === String(sampleId) ? { ...s, ...normalizedSample } : s) };
+              } else {
+                return { ...prevData, samples: [...prevData.samples, normalizedSample] };
+              }
+            });
+            // If event results revealed by backend, update event in state
+            if (body.resultsRevealed && updatedSample.cuppingEventId) {
+              setAppData(prev => ({ ...prev, events: prev.events.map(e => e.id === String(updatedSample.cuppingEventId) ? { ...e, isResultsRevealed: true } : e) }));
+            }
+            // Notify headjudge dashboard to refresh submitted scores for this event
+            try {
+              const ev = new CustomEvent('headjudge:decision-saved', { detail: { sampleId, eventId: updatedSample.cuppingEventId } });
+              window.dispatchEvent(ev);
+            } catch (e) {
+              console.warn('Could not dispatch headjudge:decision-saved event', e);
+            }
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to persist head judge adjudication:', err);
+        }
+      }
+
+      // Fallback/local update
+      setAppData(prevData => ({
+        ...prevData,
+        samples: prevData.samples.map(s => 
+          s.id === sampleId 
+          ? { 
+              ...s, 
+              adjudicatedFinalScore: finalData.score ?? s.adjudicatedFinalScore, 
+              gradeLevel: finalData.grade ?? s.gradeLevel, 
+              headJudgeNotes: finalData.notes ?? s.headJudgeNotes,
+              adjudicationJustification: finalData.justification ?? s.adjudicationJustification,
+              flaggedForDiscussion: finalData.flagged ?? s.flaggedForDiscussion,
+            } 
+          : s
+        ),
+      }));
+    })();
+  }, [currentUser]);
   
   const registerForEvent = useCallback((eventId: string, sampleData: NewSampleRegistrationData) => {
     if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;

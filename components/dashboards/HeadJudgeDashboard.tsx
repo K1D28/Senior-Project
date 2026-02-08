@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { User, CuppingEvent, CoffeeSample, ScoreSheet, Descriptor, Role } from '../../types';
 import { AppData } from '../../data';
 import { AdjudicationData } from '../../App';
@@ -146,30 +146,33 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('HeadJudge Finalization: Save & Lock clicked', { finalScore, gradeLevel, headJudgeNotes, justification, showJustification });
         onUpdateAdjudication({
             score: parseFloat(finalScore),
             grade: gradeLevel,
             notes: headJudgeNotes,
             justification: showJustification ? justification : '',
             flagged: false,
+            lock: true,
         });
         onBack();
     };
 
     const handleFlag = () => {
-        onUpdateAdjudication({ flagged: true });
+        console.log('HeadJudge Finalization: Flag for Discussion clicked', { headJudgeNotes, descriptorProfile });
+        onUpdateAdjudication({ flagged: true, lock: false });
         onBack();
     };
     
     return (
         <Card title="Finalization & Action Panel">
-            {sample.adjudicatedFinalScore ? (
-                 <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="mx-auto text-green-600 mb-2" size={32}/>
-                    <h3 className="font-bold text-green-800">Judgement Locked</h3>
-                    <p className="text-sm text-green-700 mt-1">Final Score: {sample.adjudicatedFinalScore.toFixed(2)}</p>
-                 </div>
-            ) : (
+                {sample.isLocked ? (
+                      <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <CheckCircle className="mx-auto text-green-600 mb-2" size={32}/>
+                          <h3 className="font-bold text-green-800">Judgement Locked</h3>
+                          <p className="text-sm text-green-700 mt-1">Final Score: {sample.adjudicatedFinalScore ? sample.adjudicatedFinalScore.toFixed(2) : '—'}</p>
+                      </div>
+                ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <Label htmlFor="finalScore">Final Official Score</Label>
@@ -261,6 +264,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [fetchedScores, setFetchedScores] = useState<ScoreSheet[]>([]);
+    const [fetchedGraders, setFetchedGraders] = useState<User[]>([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -307,6 +312,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 }
                 url += `?eventId=${eventId}`;
             }
+            console.log('Requesting assigned events from URL:', url);
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'include',
@@ -315,8 +321,22 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 const events = await response.json();
                 setAssignedEvents(events);
             } else {
-                console.error(`Error fetching events: ${response.status}`); // Removed force alert
-                setError('');
+                // Try to read the error body to show a helpful message
+                let serverMsg = `Status ${response.status}`;
+                try {
+                    const body = await response.text();
+                    // Try to parse JSON message if present
+                    try {
+                        const parsed = JSON.parse(body);
+                        serverMsg = parsed.message || JSON.stringify(parsed);
+                    } catch (e) {
+                        if (body) serverMsg = body;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+                console.error('Error fetching events:', serverMsg);
+                setError(serverMsg);
             }
         } catch (error) {
             console.error('Unexpected error while fetching events:', error);
@@ -330,7 +350,190 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         fetchAssignedEvents();
     }, []);
 
-    const samplesForEvent = useMemo(() => selectedEvent ? appData.samples.filter(s => selectedEvent.sampleIds.includes(s.id)) : [], [selectedEvent, appData.samples]);
+    // When an event is selected, fetch submitted QGrader scores from the server
+    const loadSubmittedScores = useCallback(async (opts?: { forceEventId?: string }) => {
+        const evId = opts?.forceEventId ?? selectedEvent?.id;
+        if (!evId) {
+            setFetchedScores([]);
+            setFetchedGraders([]);
+            return;
+        }
+
+        try {
+            const url = `http://localhost:5001/api/headjudge/events/${evId}/scores`;
+            console.log('HeadJudge: fetching submitted scores from', url);
+            const res = await fetch(url, { method: 'GET', credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                // Map server QGraderScore objects to frontend ScoreSheet shape
+                const mapped: ScoreSheet[] = Array.isArray(data) ? data.map((s: any) => ({
+                    id: String(s.id),
+                    qGraderId: String(s.qGraderId ?? s.qGrader?.id ?? ''),
+                    sampleId: String(s.sampleId ?? s.sample?.id ?? ''),
+                    eventId: String(s.cuppingEventId ?? (s.sample && s.sample.cuppingEventId) ?? evId ?? ''),
+                    scores: {
+                        fragrance: Number(s.fragrance ?? 0),
+                        flavor: Number(s.flavor ?? 0),
+                        aftertaste: Number(s.aftertaste ?? 0),
+                        acidity: Number(s.acidity ?? 0),
+                        body: Number(s.body ?? 0),
+                        balance: Number(s.balance ?? 0),
+                        uniformity: Number(s.uniformity ?? 0),
+                        cleanCup: Number(s.cleanCup ?? 0),
+                        sweetness: Number(s.sweetness ?? 0),
+                        overall: Number(s.overall ?? 0),
+                        taints: Number(s.defects ?? 0),
+                        faults: 0,
+                        finalScore: Number(s.total ?? 0),
+                    },
+                    descriptors: s.descriptors ? JSON.parse(s.descriptors) : [],
+                    notes: s.comments || s.notes || '',
+                    isSubmitted: Boolean(s.isSubmitted),
+                })) : [];
+                setFetchedScores(mapped);
+                console.log('HeadJudge: fetched mapped scores count', mapped.length, mapped.slice(0,3));
+
+                // Build grader list from included qGrader objects (if present)
+                const gradersMap = new Map<string, User>();
+                if (Array.isArray(data)) {
+                    data.forEach((s: any) => {
+                        const q = s.qGrader || s.qGraderId ? s.qGrader : null;
+                        if (q && q.id) {
+                            const id = String(q.id);
+                            if (!gradersMap.has(id)) {
+                                gradersMap.set(id, {
+                                    id,
+                                    name: q.name || q.email || `Grader ${id}`,
+                                    email: q.email || '',
+                                    roles: [Role.Q_GRADER],
+                                    status: 'Active',
+                                    lastLogin: q.lastLogin || '',
+                                    profilePictureUrl: q.profilePictureUrl || undefined,
+                                } as User);
+                            }
+                        }
+                    });
+                }
+                const gradersArr = Array.from(gradersMap.values());
+                setFetchedGraders(gradersArr);
+                console.log('HeadJudge: fetched graders count', gradersArr.length, gradersArr.slice(0,3));
+            } else {
+                console.error('Failed to fetch submitted scores for event', evId, res.status);
+                setFetchedScores([]);
+            }
+        } catch (err) {
+            console.error('Error fetching submitted scores for event', evId, err);
+            setFetchedScores([]);
+        }
+    }, [selectedEvent]);
+
+    useEffect(() => {
+        loadSubmittedScores();
+
+        const handler = (e: Event) => {
+            try {
+                const ce = e as CustomEvent;
+                const detail = ce.detail || {};
+                // If the saved decision is for the currently selected event, re-fetch
+                if (!selectedEvent || String(detail.eventId) === String(selectedEvent.id)) {
+                    console.log('headjudge:decision-saved received, reloading submitted scores', detail);
+                    loadSubmittedScores({ forceEventId: String(detail.eventId) });
+                    // Also refresh the assigned events to ensure we have latest event state
+                    const refreshAssignedEvents = async () => {
+                        try {
+                            const url = 'http://localhost:5001/api/cupping-events/headjudge';
+                            const res = await fetch(url, { method: 'GET', credentials: 'include' });
+                            if (res.ok) {
+                                const events = await res.json();
+                                setAssignedEvents(events);
+                                console.log('HeadJudge: refreshed assigned events after decision saved', events.length);
+                                // Update selectedEvent with refreshed data to ensure samples display
+                                if (selectedEvent) {
+                                    const refreshedEvent = events.find((e: any) => String(e.id) === String(selectedEvent.id));
+                                    if (refreshedEvent) {
+                                        setSelectedEvent(refreshedEvent);
+                                        console.log('HeadJudge: updated selectedEvent with refreshed data', { eventId: refreshedEvent.id, sampleCount: refreshedEvent.sampleIds?.length });
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Error refreshing assigned events:', err);
+                        }
+                    };
+                    refreshAssignedEvents();
+                }
+            } catch (err) {
+                console.error('Error handling headjudge:decision-saved event', err);
+            }
+        };
+
+        window.addEventListener('headjudge:decision-saved', handler as EventListener);
+        return () => window.removeEventListener('headjudge:decision-saved', handler as EventListener);
+    }, [selectedEvent, loadSubmittedScores]);
+
+    const samplesForEvent = useMemo(() => {
+        if (!selectedEvent) return [];
+        // First try: match against global appData.samples (preloaded)
+        const sampleIdSet = new Set((selectedEvent.sampleIds || []).map(id => String(id)));
+        const found = appData.samples.filter(s => sampleIdSet.has(String(s.id)));
+        // Only use appData.samples if we found ALL expected samples
+        if (found && found.length === sampleIdSet.size && sampleIdSet.size > 0) return found;
+
+        // Fallback: use sample objects provided directly on the event by the server (sampleObjects)
+        if ((selectedEvent as any).sampleObjects) {
+            return (selectedEvent as any).sampleObjects as CoffeeSample[];
+        }
+
+        return [];
+    }, [selectedEvent, appData.samples]);
+
+    // Merge fetched server-submitted scores for the selected event with local appData
+    const mergedAppData = useMemo(() => {
+        if (!selectedEvent) return appData;
+
+        // Scores: keep all scores not belonging to this event, then append server-provided submitted scores
+        const otherScores = appData.scores.filter(s => s.eventId !== selectedEvent.id);
+        const mergedScores = fetchedScores.length > 0 ? [...otherScores, ...fetchedScores] : appData.scores;
+
+        // Ensure samples include any sampleObjects provided on the event (fallback source)
+        // Prefer `appData.samples` values (client-updated) to avoid overwriting fields like `isLocked`.
+        const samplesMap = new Map<string, CoffeeSample>();
+        if ((selectedEvent as any)?.sampleObjects) {
+            ((selectedEvent as any).sampleObjects as CoffeeSample[]).forEach(s => {
+                samplesMap.set(String(s.id), s);
+            });
+        }
+        // Overlay appData.samples so client-updated samples take precedence
+        appData.samples.forEach(s => samplesMap.set(String(s.id), s));
+        const mergedSamples = Array.from(samplesMap.values());
+
+        // Users: merge fetched graders into appData.users (avoid duplicates)
+        const existingUsersById = new Map(appData.users.map(u => [u.id, u]));
+        fetchedGraders.forEach(g => {
+            if (!existingUsersById.has(g.id)) existingUsersById.set(g.id, g);
+        });
+        const mergedUsers = Array.from(existingUsersById.values());
+
+        const merged = { ...appData, scores: mergedScores, users: mergedUsers, samples: mergedSamples } as AppData;
+        console.log('HeadJudge: mergedAppData summary', { mergedScoresCount: merged.scores.length, mergedUsersCount: merged.users.length, mergedSamplesCount: merged.samples.length });
+        return merged;
+    }, [appData, selectedEvent, fetchedScores, fetchedGraders]);
+
+    // Keep the selectedSample object in sync with latest mergedAppData.samples
+    useEffect(() => {
+        if (!selectedSample) return;
+        const updated = mergedAppData.samples.find(s => String(s.id) === String(selectedSample.id));
+        console.log('HeadJudge: syncing check for selectedSample', { selectedSampleId: selectedSample.id, found: !!updated });
+        if (updated) {
+            // Always set the selected sample to the merged version to ensure UI re-renders
+            if (JSON.stringify(updated) !== JSON.stringify(selectedSample)) {
+                console.log('Syncing selectedSample with mergedAppData (changed)', { selectedSampleId: selectedSample.id, updated });
+            } else {
+                console.log('Syncing selectedSample with mergedAppData (force update, no deep diffs) ', { selectedSampleId: selectedSample.id });
+            }
+            setSelectedSample(updated);
+        }
+    }, [mergedAppData, selectedSample]);
 
     if (loading) {
         return <p>Loading events...</p>;
@@ -341,7 +544,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     }
 
     if (selectedSample && selectedEvent) {
-        return <AdjudicationCockpit sample={selectedSample} appData={appData} event={selectedEvent} onBack={() => setSelectedSample(null)} onUpdateAdjudication={onUpdateAdjudication} />
+        return <AdjudicationCockpit sample={selectedSample} appData={mergedAppData} event={selectedEvent} onBack={() => setSelectedSample(null)} onUpdateAdjudication={onUpdateAdjudication} />
     }
 
     if (selectedEvent) {
@@ -379,7 +582,13 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         <Card key={event.id} title={event.name}>
                             <p className="text-text-light mb-1">Date: {event.date}</p>
                              <p className="text-text-light">Total Samples: {event.sampleIds.length}</p>
-                            <Button onClick={() => setSelectedEvent(event)} className="mt-4 flex items-center space-x-2"><Edit size={16} /><span>Adjudicate Event</span></Button>
+                            {event.isResultsRevealed ? (
+                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-800 font-semibold text-center">
+                                    Event ended
+                                </div>
+                            ) : (
+                                <Button onClick={() => setSelectedEvent(event)} className="mt-4 flex items-center space-x-2"><Edit size={16} /><span>Adjudicate Event</span></Button>
+                            )}
                         </Card>
                     ))}
                 </div>

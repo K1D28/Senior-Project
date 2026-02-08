@@ -26,7 +26,7 @@ const ParticipantList: React.FC<{
             users.map(user => (
                 <div key={user.id} className="flex justify-between items-center p-2 bg-surface rounded-md text-sm">
                     <span>{user.name}</span>
-                    <button onClick={() => onRemove(user.id)} className="text-text-light hover:text-red-600">
+                    <button onClick={() => onRemove(String(user.id))} className="text-text-light hover:text-red-600">
                         <X size={16} />
                     </button>
                 </div>
@@ -42,6 +42,8 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
     const [assignedHeadJudgeIds, setAssignedHeadJudgeIds] = useState<string[]>([]);
     const [allHeadJudges, setAllHeadJudges] = useState<User[]>([]);
     const [allQGraders, setAllQGraders] = useState<User[]>([]);
+    const [selectedHeadCandidates, setSelectedHeadCandidates] = useState<string[]>([]);
+    const [selectedQCandidates, setSelectedQCandidates] = useState<string[]>([]);
 
     useEffect(() => {
         const fetchParticipants = async () => {
@@ -88,7 +90,7 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             if (!assignedHeadJudgeIds.includes(userId)) {
                 setAssignedHeadJudgeIds(prev => {
                     const updated = [...prev, userId];
-                    console.log('Updated Head Judge IDs:', updated); // Debugging log
+                    console.log('Updated Head Judge IDs:', updated);
                     return updated;
                 });
             }
@@ -96,22 +98,61 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             if (!assignedQGraderIds.includes(userId)) {
                 setAssignedQGraderIds(prev => {
                     const updated = [...prev, userId];
-                    console.log('Updated Q Grader IDs:', updated); // Debugging log
+                    console.log('Updated Q Grader IDs:', updated);
                     return updated;
                 });
             }
         }
-        console.log('State after adding participant:', {
-            assignedHeadJudgeIds,
-            assignedQGraderIds,
-        }); // Debugging log
     };
     
-    const handleRemoveParticipant = (role: 'qGrader' | 'headJudge', userId: string) => {
+    const handleRemoveParticipant = async (role: 'qGrader' | 'headJudge', userId: string) => {
+        // Optimistic UI update: remove locally first
         if (role === 'headJudge') {
             setAssignedHeadJudgeIds(prev => prev.filter(id => id !== userId));
         } else {
             setAssignedQGraderIds(prev => prev.filter(id => id !== userId));
+        }
+
+        // Then persist change to server immediately
+        try {
+            const updatedQ = (role === 'qGrader' ? assignedQGraderIds.filter(id => id !== userId) : assignedQGraderIds)
+                .map(id => parseInt(id, 10));
+            const updatedH = (role === 'headJudge' ? assignedHeadJudgeIds.filter(id => id !== userId) : assignedHeadJudgeIds)
+                .map(id => parseInt(id, 10));
+
+            const response = await axios.put(`http://localhost:5001/api/cupping-events/${event?.id}/participants`, {
+                assignedQGraderIds: updatedQ,
+                assignedHeadJudgeIds: updatedH,
+            }, { withCredentials: true });
+
+            // Update local state from response to keep in sync (server returns participants array)
+            setAssignedQGraderIds(response.data.participants
+                .filter((p: any) => p.role === 'Q_GRADER')
+                .map((p: any) => String(p.qGrader?.id)));
+            setAssignedHeadJudgeIds(response.data.participants
+                .filter((p: any) => p.role === 'HEAD_JUDGE')
+                .map((p: any) => String(p.headJudge?.id)));
+
+            onUpdate({
+                eventId: event!.id,
+                assignedQGraderIds: response.data.participants
+                    .filter((p: any) => p.role === 'Q_GRADER')
+                    .map((p: any) => String(p.qGrader?.id)),
+                assignedHeadJudgeIds: response.data.participants
+                    .filter((p: any) => p.role === 'HEAD_JUDGE')
+                    .map((p: any) => String(p.headJudge?.id)),
+            });
+        } catch (err) {
+            console.error('Failed to unassign participant:', err);
+            // Revert optimistic change on failure by refetching current participants from server
+            try {
+                const resp = await axios.get(`/api/cupping-events/${event?.id}`);
+                const evt = resp.data;
+                setAssignedQGraderIds(evt.assignedQGraderIds || []);
+                setAssignedHeadJudgeIds(evt.assignedHeadJudgeIds || []);
+            } catch (fetchErr) {
+                console.error('Failed to refresh participants after failed unassign:', fetchErr);
+            }
         }
     };
     
@@ -163,19 +204,24 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
                 <div>
                     <h3 className="text-lg font-bold mb-2">Head Judges</h3>
                     <div>
-                        <Label htmlFor="headJudgeSelect">Add Head Judge</Label>
-                        <Select 
+                        <Label htmlFor="headJudgeSelect">Select Head Judge(s)</Label>
+                        <Select
                             id="headJudgeSelect"
-                            onChange={e => { handleAddParticipant('headJudge', e.target.value); e.target.value = ''; }}
-                            value=""
+                            multiple
+                            size={6}
+                            value={selectedHeadCandidates}
+                            onChange={e => setSelectedHeadCandidates(Array.from(e.target.selectedOptions).map(o => o.value))}
                         >
-                            <option value="" disabled>Select a Head Judge...</option>
                             {allHeadJudges.map(judge => (
-                                <option key={judge.id} value={judge.id} disabled={assignedHeadJudgeIds.includes(judge.id)}>
+                                <option key={judge.id} value={String(judge.id)} disabled={assignedHeadJudgeIds.includes(String(judge.id))}>
                                     {judge.name}
                                 </option>
                             ))}
                         </Select>
+                        <div className="flex gap-2 mt-2">
+                            <Button size="sm" onClick={() => { selectedHeadCandidates.forEach(id => handleAddParticipant('headJudge', id)); setSelectedHeadCandidates([]); }}>Add Selected</Button>
+                            <Button size="sm" variant="secondary" onClick={() => setSelectedHeadCandidates([])}>Clear</Button>
+                        </div>
                     </div>
                     <ParticipantList users={assignedHeadJudges} onRemove={(id) => handleRemoveParticipant('headJudge', id)} />
                 </div>
@@ -184,19 +230,24 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
                 <div>
                     <h3 className="text-lg font-bold mb-2">Q Graders</h3>
                     <div>
-                        <Label htmlFor="qGraderSelect">Add Q Grader</Label>
-                        <Select 
+                        <Label htmlFor="qGraderSelect">Select Q Grader(s)</Label>
+                        <Select
                             id="qGraderSelect"
-                            onChange={e => { handleAddParticipant('qGrader', e.target.value); e.target.value = ''; }}
-                            value=""
+                            multiple
+                            size={6}
+                            value={selectedQCandidates}
+                            onChange={e => setSelectedQCandidates(Array.from(e.target.selectedOptions).map(o => o.value))}
                         >
-                            <option value="" disabled>Select a Q Grader...</option>
                             {allQGraders.map(grader => (
-                                <option key={grader.id} value={grader.id} disabled={assignedQGraderIds.includes(grader.id)}>
+                                <option key={grader.id} value={String(grader.id)} disabled={assignedQGraderIds.includes(String(grader.id))}>
                                     {grader.name}
                                 </option>
                             ))}
                         </Select>
+                        <div className="flex gap-2 mt-2">
+                            <Button size="sm" onClick={() => { selectedQCandidates.forEach(id => handleAddParticipant('qGrader', id)); setSelectedQCandidates([]); }}>Add Selected</Button>
+                            <Button size="sm" variant="secondary" onClick={() => setSelectedQCandidates([])}>Clear</Button>
+                        </div>
                     </div>
                     <ParticipantList users={assignedQGraders} onRemove={(id) => handleRemoveParticipant('qGrader', id)} />
                 </div>

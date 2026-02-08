@@ -86,7 +86,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ appData, onExit }
         )}
         
         <div className="text-center mt-8">
-            <Button onClick={() => navigate(redirectPath)} variant="secondary" className="inline-flex items-center space-x-2">
+            <Button onClick={onExit} variant="secondary" className="inline-flex items-center space-x-2">
                 <ArrowLeft size={16}/>
                 <span>Back</span>
             </Button>

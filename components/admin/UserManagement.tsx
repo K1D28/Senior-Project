@@ -311,28 +311,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
 
                 <div className="flex justify-end mt-4">
                     <Button variant="secondary" onClick={onClose}>Cancel</Button>
-                    {editedStatus !== 'Active' && (
-                        <Button
-                            variant="primary"
-                            onClick={async () => {
-                                try {
-                                    const res = await axios.post(`http://localhost:5001/api/users/${user.id}/confirm`, {}, { withCredentials: true });
-                                    if (res.status === 200) {
-                                        alert('User confirmed successfully.');
-                                        setEditedStatus('Active');
-                                        onSave({ name: editedName, email: editedEmail, roles: editedRoles, status: 'Active' });
-                                    } else {
-                                        alert('Failed to confirm user.');
-                                    }
-                                } catch (err) {
-                                    console.error('Error confirming user:', err);
-                                    alert('Failed to confirm user.');
-                                }
-                            }}
-                        >
-                            Confirm User
-                        </Button>
-                    )}
                     <Button onClick={handleSave}>Save</Button>
                 </div>
             </Modal>

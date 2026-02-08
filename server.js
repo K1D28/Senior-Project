@@ -82,8 +82,13 @@ function serializeEvent(event) {
 
 // Middleware to verify Supabase tokens
 const verifySupabaseToken = async (req, res, next) => {
-  const token = req.cookies.token; // Retrieve token from cookies
-  console.log('Received token from cookies:', token); // Debugging log
+  // Retrieve token from cookie `token`, or fallback to Authorization: Bearer <token>
+  let token = req.cookies && req.cookies.token;
+  if (!token && req.headers && req.headers.authorization) {
+    const auth = req.headers.authorization;
+    if (auth.startsWith('Bearer ')) token = auth.slice('Bearer '.length);
+  }
+  console.log('Auth token provided (present?):', !!token, token ? `masked=${token.slice(0,8)}...(len=${token.length})` : 'no-token');
   if (!token) {
     console.log('No token provided');
     return res.status(401).json({ message: 'Unauthorized: No token provided' });
@@ -91,27 +96,25 @@ const verifySupabaseToken = async (req, res, next) => {
 
   try {
     const { data: supabaseUser, error } = await supabaseAdmin.auth.getUser(token);
+    console.log('Supabase getUser response:', { error: error ? (error.message || error) : null, hasUser: !!(supabaseUser && supabaseUser.user) });
     if (error || !supabaseUser || !supabaseUser.user) {
-      console.log('Invalid token or user not found:', error);
+      console.log('Invalid token or user not found returned from Supabase:', error);
       return res.status(401).json({ message: 'Invalid token' });
     }
 
-    console.log('Supabase user verified:', supabaseUser);
+    console.log('Supabase user verified (partial):', { id: supabaseUser.user.id, email: supabaseUser.user.email });
 
     const supabaseId = supabaseUser.user.id; // Extract the Supabase user ID
-    console.log('Supabase user ID:', supabaseId); // Debugging log
 
     // Fetch the user from Prisma
-    const prismaUser = await prisma.user.findUnique({
-      where: { supabaseId },
-    });
-
+    const prismaUser = await prisma.user.findUnique({ where: { supabaseId } });
+    console.log('Prisma lookup result for supabaseId:', supabaseId, prismaUser ? { id: prismaUser.id, email: prismaUser.email, role: prismaUser.role } : null);
     if (!prismaUser) {
-      console.error('User not found in Prisma database');
+      console.error('User not found in Prisma database for supabaseId:', supabaseId);
       return res.status(404).json({ message: 'User not found' });
     }
 
-    console.log('Prisma user verified:', prismaUser);
+    console.log('Prisma user verified:', { id: prismaUser.id, email: prismaUser.email, role: prismaUser.role });
 
     req.user = prismaUser; // Attach Prisma user info to the request
     next();
@@ -371,18 +374,22 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
     // Auto-generate publicId per role
     let roleModel;
     if (normalizedRole === 'FARMER') {
+      const count = await prisma.farmer.count();
       roleModel = await prisma.farmer.create({
         data: { name, email, password, status: 'Active' },
       });
     } else if (normalizedRole === 'Q_GRADER') {
+      const count = await prisma.qGrader.count();
       roleModel = await prisma.qGrader.create({
         data: { name, email, password, status: 'Active' },
       });
     } else if (normalizedRole === 'HEAD_JUDGE') {
+      const count = await prisma.headJudge.count();
       roleModel = await prisma.headJudge.create({
         data: { name, email, password, status: 'Active' },
       });
     } else if (normalizedRole === 'ADMIN') {
+      const count = await prisma.admin.count();
       roleModel = await prisma.admin.create({
         data: { name, email, password },
       });
@@ -393,44 +400,56 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
 
     console.log('User added to Prisma role model:', roleModel);
 
-    // Replace placeholder with actual email-sending logic
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER, // Your email address
-        pass: process.env.EMAIL_PASS, // Your email password or app-specific password
-      },
-    });
+    // Update Prisma `user` record with provided name and status (if any)
+    try {
+      await prisma.user.update({ where: { id: prismaUser.id }, data: { name: name || prismaUser.name, status: req.body.status || prismaUser.status } });
+    } catch (err) {
+      console.error('Failed to update Prisma user with name/status (continuing):', err);
+    }
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Welcome to the Platform',
-      text: `Hi ${name},
-
-You have been invited to join our platform as a ${role}.
-
-Your login credentials are:
-Email: ${email}
-Password: ${password}
-
-Please confirm your email address by clicking the link below:
-
-${process.env.APP_URL}/confirm-email?email=${email}
-
-Please log in and change your password after your first login.
-
-Best regards,
-The Team`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Error sending email:', error);
-      } else {
-        console.log('Email sent successfully:', info.response);
+    // If the admin created the user with status 'Active', mark their Supabase email as confirmed
+    if (req.body.status === 'Active') {
+      try {
+        const { error: confirmErr } = await supabase.auth.admin.updateUserById(prismaUser.supabaseId, { email_confirm: true });
+        if (confirmErr) {
+          console.error('Failed to auto-confirm email in Supabase (continuing):', confirmErr);
+        } else {
+          console.log('Email auto-confirmed in Supabase for', prismaUser.email);
+        }
+      } catch (err) {
+        console.error('Unexpected error while auto-confirming email (continuing):', err);
       }
-    });
+    }
+
+    // Send an invitation email, but don't let email errors fail the whole request
+    try {
+      console.log('Preparing to send invitation email to', email);
+      const transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      const mailOptions = {
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: email,
+        subject: 'Welcome to the Platform',
+        text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease confirm your email address by clicking the link below:\n\n${process.env.APP_URL}/confirm-email?email=${email}\n\nPlease log in and change your password after your first login.\n\nBest regards,\nThe Team`,
+      };
+
+      // Use Promise wrapper so we can await and catch any errors
+      await new Promise((resolve, reject) => {
+        transporter.sendMail(mailOptions, (err, info) => {
+          if (err) return reject(err);
+          resolve(info);
+        });
+      }).then(info => console.log('Email sent successfully:', info))
+        .catch(err => console.error('Email send failed (continuing):', err));
+    } catch (mailErr) {
+      console.error('Unexpected error while attempting to send invitation email:', mailErr);
+    }
 
     res.status(201).json({
       message: 'User created successfully.',
@@ -522,31 +541,6 @@ app.delete('/api/users/:id', verifySupabaseToken, verifyRole('ADMIN'), async (re
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Error deleting user:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Admin endpoint to confirm a user's email and activate them
-app.post('/api/users/:id/confirm', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
-  const { id } = req.params;
-  try {
-    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Confirm the user in Supabase
-    const { error: supabaseError } = await supabase.auth.admin.updateUserById(user.supabaseId, {
-      email_confirm: true,
-    });
-    if (supabaseError) {
-      console.error('Error confirming user in Supabase:', supabaseError);
-      return res.status(500).json({ message: 'Failed to confirm user in Supabase' });
-    }
-
-    // Update Prisma user status
-    const updated = await prisma.user.update({ where: { id: parseInt(id) }, data: { status: 'Active' } });
-    res.json({ message: 'User confirmed', user: updated });
-  } catch (error) {
-    console.error('Error confirming user:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -872,14 +866,7 @@ app.get('/api/cupping-events', verifySupabaseToken, async (req, res) => {
       include: {
         tags: true,
         processingMethods: true,
-        // Include participant relations to avoid N+1 queries and to fetch the correct role-specific records
-        participants: {
-          include: {
-            headJudge: true,
-            qGrader: true,
-            farmer: true,
-          },
-        },
+        participants: true, // Fetch participants without user details
         samples: true,
       },
     });
@@ -887,15 +874,23 @@ app.get('/api/cupping-events', verifySupabaseToken, async (req, res) => {
     // Refine the events data to include detailed participant information
     const refinedEvents = await Promise.all(
       events.map(async (event) => {
-        // Participant relations were preloaded via `include` above, so use them directly
-        const participants = event.participants.map((participant) => {
-          const userDetails = participant.role === 'HEAD_JUDGE' ? participant.headJudge
-            : participant.role === 'Q_GRADER' ? participant.qGrader
-            : participant.role === 'FARMER' ? participant.farmer
-            : null;
-
-          return { ...participant, userDetails: userDetails || { name: 'N/A' } };
-        });
+        const participants = await Promise.all(
+          event.participants.map(async (participant) => {
+            let userDetails;
+            try {
+              if (participant.role === 'HEAD_JUDGE') {
+                userDetails = await prisma.headJudge.findUnique({ where: { id: participant.headJudgeId } });
+              } else if (participant.role === 'Q_GRADER') {
+                userDetails = await prisma.qGrader.findUnique({ where: { id: participant.qGraderId } });
+              } else if (participant.role === 'FARMER') {
+                userDetails = await prisma.farmer.findUnique({ where: { id: participant.farmerId } });
+              }
+            } catch (error) {
+              console.error(`Error fetching user details for participant ID ${participant.id}:`, error);
+            }
+            return { ...participant, userDetails: userDetails || { name: 'N/A' } }; // Default to 'N/A' if userDetails is null
+          })
+        );
 
         // Compute assignedHeadJudges and assignedQGraders
         const assignedHeadJudges = participants
@@ -929,6 +924,119 @@ app.get('/api/cupping-events', verifySupabaseToken, async (req, res) => {
       console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2));
     }
     res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Endpoint to fetch events assigned to Q Graders
+app.get('/api/cupping-events/qgrader', verifySupabaseToken, async (req, res) => {
+  try {
+    // Map authenticated Prisma user to a QGrader record by email
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.json([]);
+
+    const qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+    if (!qGrader) {
+      return res.json([]);
+    }
+
+    const events = await prisma.cuppingEvent.findMany({
+      where: {
+        participants: {
+          some: {
+            role: 'Q_GRADER',
+            qGraderId: qGrader.id,
+          },
+        },
+      },
+      include: {
+        tags: true,
+        processingMethods: true,
+        participants: { include: { headJudge: true, qGrader: true, farmer: true } },
+        samples: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    const refinedEvents = events.map(event => {
+      const assignedHeadJudges = event.participants
+        .filter(p => p.role === 'HEAD_JUDGE')
+        .map(p => p.headJudge);
+      const assignedQGraders = event.participants
+        .filter(p => p.role === 'Q_GRADER')
+        .map(p => p.qGrader);
+      const sampleObjects = (event.samples || []).map(s => ({ ...s, id: String(s.id) }));
+      return { ...event, assignedHeadJudges, assignedQGraders, sampleObjects };
+    });
+
+    const serialized = refinedEvents.map(e => serializeEvent(e));
+    // Attach sampleObjects to the serialized events so frontend can use full sample data
+    const withSamples = serialized.map((ev, idx) => ({ ...ev, sampleObjects: refinedEvents[idx].sampleObjects }));
+    res.json(withSamples);
+  } catch (error) {
+    console.error('Error fetching Q Grader events:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Endpoint to fetch events assigned to the authenticated Head Judge
+app.get('/api/cupping-events/headjudge', verifySupabaseToken, async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    console.log('Fetching Head Judge events for user email:', userEmail);
+    const { eventId } = req.query;
+    console.log('HeadJudge events query params:', req.query);
+
+    // Validate eventId if provided and non-empty
+    if (typeof eventId === 'string' && eventId.trim() !== '' && isNaN(parseInt(eventId, 10))) {
+      return res.status(400).json({ message: 'Invalid eventId. It must be a valid integer.' });
+    }
+
+    // Find HeadJudge record for the authenticated user
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) {
+      // No head judge record — return empty list
+      return res.json([]);
+    }
+
+    const whereClause = {
+      participants: {
+        some: {
+          role: 'HEAD_JUDGE',
+          headJudgeId: headJudge.id,
+        },
+      },
+    };
+
+    if (eventId) whereClause.id = parseInt(eventId, 10);
+
+    const events = await prisma.cuppingEvent.findMany({
+      where: whereClause,
+      include: {
+        tags: true,
+        processingMethods: true,
+        participants: { include: { headJudge: true, qGrader: true, farmer: true } },
+        samples: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    const refinedEvents = events.map(event => {
+      const assignedHeadJudges = event.participants
+        .filter(p => p.role === 'HEAD_JUDGE')
+        .map(p => p.headJudge);
+      const assignedQGraders = event.participants
+        .filter(p => p.role === 'Q_GRADER')
+        .map(p => p.qGrader);
+      // Include full sample objects as `sampleObjects` so front-end can render samples without separate fetch
+      const sampleObjects = (event.samples || []).map(s => ({ ...s, id: String(s.id) }));
+      return { ...event, assignedHeadJudges, assignedQGraders, sampleObjects };
+    });
+
+    const serialized = refinedEvents.map(e => serializeEvent(e));
+    res.json(serialized);
+  } catch (error) {
+    console.error('Error fetching Head Judge events:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -1031,13 +1139,14 @@ app.put('/api/cupping-events/:id', verifySupabaseToken, async (req, res) => {
 // Update participants for a cupping event
 app.put('/api/cupping-events/:id/participants', verifySupabaseToken, async (req, res) => {
     const { id } = req.params;
-    const { assignedQGraderIds, assignedHeadJudgeIds, assignedFarmerIds } = req.body;
-    console.log('Received request to update participants for event ID:', id); // Debugging log
-    console.log('Request body:', req.body); // Debugging log
+  let { assignedQGraderIds, assignedHeadJudgeIds, assignedFarmerIds } = req.body;
+  console.log('Received request to update participants for event ID:', id); // Debugging log
+  console.log('Request body:', req.body); // Debugging log
 
-    if (!Array.isArray(assignedQGraderIds) || !Array.isArray(assignedHeadJudgeIds) || !Array.isArray(assignedFarmerIds)) {
-        return res.status(400).json({ message: 'Invalid data format. assignedQGraderIds, assignedHeadJudgeIds and assignedFarmerIds must be arrays.' });
-    }
+  // Allow clients to send only a subset of arrays (e.g., only QGraders/headJudges)
+  if (!Array.isArray(assignedQGraderIds)) assignedQGraderIds = [];
+  if (!Array.isArray(assignedHeadJudgeIds)) assignedHeadJudgeIds = [];
+  if (!Array.isArray(assignedFarmerIds)) assignedFarmerIds = [];
 
     try {
         const updatedEvent = await prisma.cuppingEvent.update({
@@ -1074,98 +1183,27 @@ app.put('/api/cupping-events/:id/participants', verifySupabaseToken, async (req,
 // Endpoint to fetch events assigned to Q Graders
 app.get('/api/cupping-events/qgrader', verifySupabaseToken, async (req, res) => {
   try {
-    // Map the authenticated user to a QGrader record using their email
-    const userEmail = req.user.email;
-    const qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
-    if (!qGrader) {
-      return res.json([]); // No QGrader record for this user
-    }
-
+    const userId = req.user.id;
     const events = await prisma.cuppingEvent.findMany({
       where: {
         participants: {
           some: {
             role: 'Q_GRADER',
-            qGraderId: qGrader.id,
+            userId: userId,
           },
         },
       },
       include: {
         tags: true,
         processingMethods: true,
-        participants: {
-          include: { headJudge: true, qGrader: true, farmer: true },
-        },
+        participants: true,
         samples: true,
       },
     });
-
     const serialized = events.map(e => serializeEvent(e));
     res.json(serialized);
   } catch (error) {
     console.error('Error fetching Q Grader events:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Update the `/api/cupping-events/headjudge` endpoint to handle the `eventId` parameter
-app.get('/api/cupping-events/headjudge', verifySupabaseToken, async (req, res) => {
-  try {
-    console.log('Fetching Head Judge events for user email:', req.user.email);
-    const userEmail = req.user.email;
-    const { eventId } = req.query; // Extract eventId from query parameters
-
-    // Find the HeadJudge record for the authenticated user via email
-    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
-    if (!headJudge) {
-      return res.json([]);
-    }
-
-    // Validate eventId if provided
-    if (eventId && isNaN(parseInt(eventId, 10))) {
-      return res.status(400).json({ message: 'Invalid eventId. It must be a valid integer.' });
-    }
-
-    // Build where clause
-    const whereClause = {
-      participants: {
-        some: {
-          role: 'HEAD_JUDGE',
-          headJudgeId: headJudge.id,
-        },
-      },
-    };
-
-    if (eventId) whereClause.id = parseInt(eventId, 10);
-
-    // Fetch events
-    const events = await prisma.cuppingEvent.findMany({
-      where: whereClause,
-      include: {
-        tags: true,
-        processingMethods: true,
-        participants: { include: { headJudge: true, qGrader: true, farmer: true } },
-        samples: true,
-      },
-      orderBy: { date: 'desc' },
-    });
-
-    // Map assigned roles using included relations
-    const refinedEvents = events.map(event => {
-      const assignedHeadJudges = event.participants
-        .filter(participant => participant.role === 'HEAD_JUDGE')
-        .map(participant => participant.headJudge);
-      const assignedQGraders = event.participants
-        .filter(participant => participant.role === 'Q_GRADER')
-        .map(participant => participant.qGrader);
-      return { ...event, assignedHeadJudges, assignedQGraders };
-    });
-
-    console.log('Refined events for Head Judge:', refinedEvents);
-    const serialized = refinedEvents.map(e => serializeEvent(e));
-    res.json(serialized);
-  } catch (error) {
-    console.error('Error fetching Head Judge events:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -1381,10 +1419,10 @@ app.get('/confirm-email', async (req, res) => {
       return res.status(500).json({ message: 'Failed to update email confirmation in Supabase.' });
     }
 
-    // Update the user's status in Prisma to Active
+    // Update the user's email confirmation status in Prisma
     await prisma.user.update({
       where: { email },
-      data: { status: 'Active' },
+      data: { emailConfirmed: true },
     });
 
     res.status(200).send('Email confirmed successfully. You can now log in.');
@@ -1468,7 +1506,7 @@ app.get('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res)
 
 // Endpoint to fetch participants for a specific cupping event
 app.get('/api/cupping-events/:id/participants', verifySupabaseToken, async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
     try {
         const eventId = parseInt(id, 10);
         if (isNaN(eventId)) {
@@ -1478,9 +1516,8 @@ app.get('/api/cupping-events/:id/participants', verifySupabaseToken, async (req,
         const participants = await prisma.participant.findMany({
             where: { eventId: eventId },
             include: {
-        headJudge: true,
-        qGrader: true,
-        farmer: true,
+                headJudge: true,
+                qGrader: true,
             },
         });
 
@@ -1489,6 +1526,361 @@ app.get('/api/cupping-events/:id/participants', verifySupabaseToken, async (req,
         console.error('Error fetching participants:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
+});
+
+// Helper: calculate total from attribute fields and apply defects deduction
+function calculateTotal(attrs, defects = 0) {
+  const keys = [
+    'fragrance',
+    'flavor',
+    'aftertaste',
+    'acidity',
+    'body',
+    'balance',
+    'uniformity',
+    'cleanCup',
+    'sweetness',
+    'overall',
+  ];
+  let sum = 0;
+  for (const k of keys) {
+    const v = Number(attrs?.[k] ?? 0);
+    if (Number.isNaN(v)) return null;
+    sum += v;
+  }
+  return sum - Number(defects || 0);
+}
+
+// Submit or update a Q Grader score for a sample
+app.post('/api/qgrader/scores', verifySupabaseToken, async (req, res) => {
+  try {
+    console.log('POST /api/qgrader/scores called, body:', req.body, 'user:', req.user?.email);
+    const { sampleId, cuppingEventId, attributes, defects, comments, descriptors } = req.body;
+    if (!sampleId || isNaN(parseInt(sampleId))) return res.status(400).json({ message: 'sampleId is required' });
+
+    // Prevent submitting if sample or event is locked/finalized
+    const sampleRecord = await prisma.sample.findUnique({ where: { id: parseInt(sampleId) }, include: { cuppingEvent: true } });
+    if (!sampleRecord) {
+      console.log('Submission blocked: sample not found', { sampleId });
+      return res.status(404).json({ message: 'Sample not found' });
+    }
+    if (sampleRecord.isLocked) {
+      console.log('Submission blocked: sample is locked', { sampleId, sampleRecordId: sampleRecord.id });
+      return res.status(403).json({ message: 'Judgement locked for this sample' });
+    }
+    if (sampleRecord.cuppingEvent && sampleRecord.cuppingEvent.isResultsRevealed) {
+      console.log('Submission blocked: results revealed for event', { cuppingEventId: sampleRecord.cuppingEvent.id });
+      return res.status(403).json({ message: 'Results are revealed for this event; no further submissions allowed' });
+    }
+
+    // Map authenticated Prisma user to a QGrader record by email
+    const userEmail = req.user?.email;
+    if (!userEmail) {
+      console.log('Submission blocked: authenticated req.user missing email', { reqUser: req.user });
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    let qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+    if (!qGrader) {
+      // If the authenticated Prisma `user` exists and has role Q_GRADER, create a qGrader row automatically
+      try {
+        const prismaUser = req.user; // set in verifySupabaseToken
+        if (prismaUser && prismaUser.role === 'Q_GRADER') {
+          qGrader = await prisma.qGrader.create({ data: { email: userEmail, password: '', name: prismaUser.name || userEmail, status: 'Active' } });
+          console.log('Auto-created QGrader record for', userEmail);
+        }
+      } catch (err) {
+        console.error('Error auto-creating QGrader record:', err);
+      }
+    }
+    if (!qGrader) {
+      console.log('Submission blocked: no qGrader record found for user', { userEmail, prismaUserRole: req.user?.role });
+      return res.status(403).json({ message: 'Only Q Graders may submit scores' });
+    }
+
+    const total = calculateTotal(attributes, defects);
+    if (total === null) return res.status(400).json({ message: 'Invalid attribute values' });
+
+    // Upsert behavior: update existing score for this sample by this qGrader, or create a new one.
+    // If an existing score is already finalized (`isSubmitted`), reject further edits.
+    let score = await prisma.qGraderScore.findFirst({ where: { sampleId: parseInt(sampleId), qGraderId: qGrader.id } });
+    if (score) {
+      if (score.isSubmitted) {
+        console.log('Submission blocked: existing score already submitted by this grader', { scoreId: score.id, qGraderId: qGrader.id });
+        return res.status(403).json({ message: 'Score already submitted/finalized by this grader; no further edits allowed' });
+      }
+      score = await prisma.qGraderScore.update({
+        where: { id: score.id },
+        data: {
+          cuppingEventId: cuppingEventId ? parseInt(cuppingEventId) : undefined,
+          fragrance: Number(attributes.fragrance),
+          flavor: Number(attributes.flavor),
+          aftertaste: Number(attributes.aftertaste),
+          acidity: Number(attributes.acidity),
+          body: Number(attributes.body),
+          balance: Number(attributes.balance),
+          uniformity: Number(attributes.uniformity),
+          cleanCup: Number(attributes.cleanCup),
+          sweetness: Number(attributes.sweetness),
+          overall: Number(attributes.overall),
+          defects: Number(defects || 0),
+          comments: comments || null,
+          descriptors: descriptors ? JSON.stringify(descriptors) : null,
+          total,
+        },
+      });
+    } else {
+      score = await prisma.qGraderScore.create({
+        data: {
+          sampleId: parseInt(sampleId),
+          cuppingEventId: cuppingEventId ? parseInt(cuppingEventId) : undefined,
+          qGraderId: qGrader.id,
+          fragrance: Number(attributes.fragrance),
+          flavor: Number(attributes.flavor),
+          aftertaste: Number(attributes.aftertaste),
+          acidity: Number(attributes.acidity),
+          body: Number(attributes.body),
+          balance: Number(attributes.balance),
+          uniformity: Number(attributes.uniformity),
+          cleanCup: Number(attributes.cleanCup),
+          sweetness: Number(attributes.sweetness),
+          overall: Number(attributes.overall),
+          defects: Number(defects || 0),
+          comments: comments || null,
+          descriptors: descriptors ? JSON.stringify(descriptors) : null,
+          total,
+        },
+      });
+    }
+
+    // Recalculate adjudicatedFinalScore for the sample as the average of all QGrader totals
+    const scores = await prisma.qGraderScore.findMany({ where: { sampleId: parseInt(sampleId) } });
+    const avg = scores.length > 0 ? scores.reduce((acc, s) => acc + Number(s.total || 0), 0) / scores.length : null;
+    if (avg !== null) {
+      await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: { adjudicatedFinalScore: avg } });
+    }
+    
+    // Respect per-grader finalization: if the request indicates the grader is finalizing, set isSubmitted
+    const { isSubmitted: submitFlag } = req.body;
+    if (submitFlag) {
+      await prisma.qGraderScore.update({ where: { id: score.id }, data: { isSubmitted: true, submittedAt: new Date() } });
+    }
+
+    res.json({ score, adjudicatedFinalScore: avg });
+  } catch (error) {
+    console.error('Error saving Q Grader score:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Notes: PUT handler removed — POST /api/qgrader/scores performs upsert (create or update)
+
+// Fetch all Q Grader scores for a sample
+app.get('/api/qgrader/scores/sample/:sampleId', verifySupabaseToken, async (req, res) => {
+  try {
+    const { sampleId } = req.params;
+    if (!sampleId || isNaN(parseInt(sampleId))) return res.status(400).json({ message: 'Invalid sampleId' });
+
+    const scores = await prisma.qGraderScore.findMany({ where: { sampleId: parseInt(sampleId) }, include: { qGrader: true } });
+    res.json(scores);
+  } catch (error) {
+    console.error('Error fetching scores for sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Fetch the authenticated Q Grader's score for a sample (if any)
+app.get('/api/qgrader/scores/mine/:sampleId', verifySupabaseToken, async (req, res) => {
+  try {
+    const { sampleId } = req.params;
+    if (!sampleId || isNaN(parseInt(sampleId))) return res.status(400).json({ message: 'Invalid sampleId' });
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+    const qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+    if (!qGrader) return res.status(403).json({ message: 'Only Q Graders may access this resource' });
+
+    const score = await prisma.qGraderScore.findFirst({ where: { sampleId: parseInt(sampleId), qGraderId: qGrader.id } });
+    res.json(score || null);
+  } catch (error) {
+    console.error('Error fetching my score for sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Fetch all scores submitted by the authenticated Q Grader
+app.get('/api/qgrader/scores/mine', verifySupabaseToken, async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+    const qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+    if (!qGrader) return res.status(403).json({ message: 'Only Q Graders may access this resource' });
+
+    const scores = await prisma.qGraderScore.findMany({
+      where: { qGraderId: qGrader.id },
+      include: { sample: true, cuppingEvent: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(scores);
+  } catch (error) {
+    console.error('Error fetching my scores:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: lock judgement for a specific sample in an event
+app.post('/api/headjudge/events/:eventId/samples/:sampleId/lock', verifySupabaseToken, async (req, res) => {
+  try {
+    const { eventId, sampleId } = req.params;
+    console.log('HEADJUDGE LOCK called', { params: req.params, headers: { authorization: req.headers.authorization }, cookieToken: req.cookies && req.cookies.token, body: req.body });
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may lock judgement' });
+
+    // Verify this head judge is assigned to this event
+    const participant = await prisma.participant.findFirst({ where: { eventId: parseInt(eventId), headJudgeId: headJudge.id, role: 'HEAD_JUDGE' } });
+    if (!participant) return res.status(403).json({ message: 'You are not assigned to this event' });
+
+    // Ensure the sample belongs to the event
+    const sample = await prisma.sample.findUnique({ where: { id: parseInt(sampleId) } });
+    if (!sample || sample.cuppingEventId !== parseInt(eventId)) return res.status(404).json({ message: 'Sample not found for this event' });
+
+    // Lock the sample
+    const updatedSample = await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: { isLocked: true, lockedByHeadJudgeId: headJudge.id, lockedAt: new Date() } });
+
+    // Check whether all samples for the event are locked; if so, reveal results for event
+    const totalSamples = await prisma.sample.count({ where: { cuppingEventId: parseInt(eventId) } });
+    const lockedSamples = await prisma.sample.count({ where: { cuppingEventId: parseInt(eventId), isLocked: true } });
+    let revealed = false;
+    if (totalSamples > 0 && lockedSamples >= totalSamples) {
+      // Reveal results
+      await prisma.cuppingEvent.update({ where: { id: parseInt(eventId) }, data: { isResultsRevealed: true } });
+      revealed = true;
+    }
+
+    res.json({ sample: updatedSample, resultsRevealed: revealed });
+  } catch (error) {
+    console.error('Error locking sample judgement:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: create or update adjudication decision for a sample
+app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async (req, res) => {
+  try {
+    const { sampleId } = req.params;
+    const { finalScore, gradeLevel, notes, lock, flagged } = req.body;
+    console.log('HEADJUDGE DECISION called', { params: req.params, headers: { authorization: req.headers.authorization }, cookieToken: req.cookies && req.cookies.token, body: req.body });
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may submit decisions' });
+
+    const sample = await prisma.sample.findUnique({ where: { id: parseInt(sampleId) } });
+    if (!sample) return res.status(404).json({ message: 'Sample not found' });
+
+    if (!sample.cuppingEventId) return res.status(400).json({ message: 'Sample is not assigned to an event' });
+
+    // Verify head judge assignment to the event
+    const participant = await prisma.participant.findFirst({ where: { eventId: sample.cuppingEventId, headJudgeId: headJudge.id, role: 'HEAD_JUDGE' } });
+    if (!participant) return res.status(403).json({ message: 'You are not assigned to this event' });
+
+    // Upsert HeadJudgeDecision for this sample and headJudge
+    let decision = await prisma.headJudgeDecision.findFirst({ where: { sampleId: parseInt(sampleId), headJudgeId: headJudge.id } });
+    if (decision) {
+      decision = await prisma.headJudgeDecision.update({ where: { id: decision.id }, data: { finalScore: finalScore ?? decision.finalScore, gradeLevel: gradeLevel ?? decision.gradeLevel, notes: notes ?? decision.notes, flagged: typeof flagged === 'boolean' ? flagged : decision.flagged } });
+    } else {
+      decision = await prisma.headJudgeDecision.create({ data: { sampleId: parseInt(sampleId), headJudgeId: headJudge.id, finalScore, gradeLevel, notes, flagged: Boolean(flagged) } });
+    }
+
+    // Update the Sample record with adjudication summary fields
+    const sampleUpdateData = {
+      adjudicatedFinalScore: finalScore ?? sample.adjudicatedFinalScore,
+      gradeLevel: gradeLevel ?? sample.gradeLevel,
+      headJudgeNotes: notes ?? sample.headJudgeNotes,
+      adjudicationJustification: notes ?? sample.adjudicationJustification,
+      flaggedForDiscussion: typeof flagged === 'boolean' ? flagged : sample.flaggedForDiscussion,
+    };
+
+    // If requested, lock the sample
+    if (lock) {
+      sampleUpdateData.isLocked = true;
+      sampleUpdateData.lockedByHeadJudgeId = headJudge.id;
+      sampleUpdateData.lockedAt = new Date();
+    }
+
+    const updatedSample = await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: sampleUpdateData });
+
+    // If lock was requested, check whether to reveal event results
+    let revealed = false;
+    if (lock) {
+      const totalSamples = await prisma.sample.count({ where: { cuppingEventId: sample.cuppingEventId } });
+      const lockedSamples = await prisma.sample.count({ where: { cuppingEventId: sample.cuppingEventId, isLocked: true } });
+      if (totalSamples > 0 && lockedSamples >= totalSamples) {
+        await prisma.cuppingEvent.update({ where: { id: sample.cuppingEventId }, data: { isResultsRevealed: true } });
+        revealed = true;
+      }
+    }
+
+    res.json({ decision, sample: updatedSample, resultsRevealed: revealed });
+  } catch (error) {
+    console.error('Error saving head judge decision:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: fetch decisions for an event (all samples)
+app.get('/api/headjudge/events/:eventId/decisions', verifySupabaseToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may fetch decisions' });
+
+    // Verify assignment
+    const participant = await prisma.participant.findFirst({ where: { eventId: parseInt(eventId), headJudgeId: headJudge.id, role: 'HEAD_JUDGE' } });
+    if (!participant) return res.status(403).json({ message: 'You are not assigned to this event' });
+
+    const decisions = await prisma.headJudgeDecision.findMany({ where: { sample: { cuppingEventId: parseInt(eventId) } }, include: { sample: true, headJudge: true } });
+    res.json(decisions);
+  } catch (error) {
+    console.error('Error fetching head judge decisions:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: fetch submitted QGrader scores for an event (for adjudication)
+app.get('/api/headjudge/events/:eventId/scores', verifySupabaseToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    if (!eventId || isNaN(parseInt(eventId))) return res.status(400).json({ message: 'Invalid eventId' });
+
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may fetch event scores' });
+
+    // Verify assignment
+    const participant = await prisma.participant.findFirst({ where: { eventId: parseInt(eventId), headJudgeId: headJudge.id, role: 'HEAD_JUDGE' } });
+    if (!participant) return res.status(403).json({ message: 'You are not assigned to this event' });
+
+    // Fetch submitted QGrader scores for the event, include grader and sample info
+    const scores = await prisma.qGraderScore.findMany({
+      where: { cuppingEventId: parseInt(eventId), isSubmitted: true },
+      include: { qGrader: true, sample: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json(scores);
+  } catch (error) {
+    console.error('Error fetching head judge event scores:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 app.use((err, req, res, next) => {

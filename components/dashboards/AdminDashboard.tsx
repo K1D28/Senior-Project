@@ -11,6 +11,7 @@ import { Select } from '../ui/Select';
 import { Filter, FileText, UserPlus, Users, Coffee, BarChart2, Calendar, Download, Trophy, Edit, MoreHorizontal } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import SampleReport from '../reporting/SampleReport';
+import PublicLeaderboard from '../reporting/PublicLeaderboard';
 import EventCreationWizard from '../admin/EventCreationWizard';
 import UserManagement from '../admin/UserManagement';
 import UserProfile from '../admin/UserProfile';
@@ -21,6 +22,128 @@ import EventParticipantsModal from '../admin/EventParticipantsModal';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Dropdown } from '../ui/DropdownMenu';
+
+// Smooth transition styles
+const transitionStyles = `
+  html, body, #root {
+    background-color: white;
+    margin: 0;
+    padding: 0;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .transition-smooth {
+    animation: fadeIn 0.4s ease-in-out;
+  }
+`;
+
+// Coffee Cup Logo with Continuous Evaporation Animation
+const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
+    return (
+        <div 
+            className="relative"
+            style={{ width: size, height: size }}
+        >
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 100 100"
+                xmlns="http://www.w3.org/2000/svg"
+                className="drop-shadow-lg"
+            >
+                {/* Cup Body */}
+                <rect x="20" y="30" width="50" height="40" rx="4" fill="#6B4423" stroke="#3D2817" strokeWidth="1.5" />
+                
+                {/* Cup Highlight */}
+                <rect x="22" y="32" width="8" height="32" rx="3" fill="#8B5A2B" opacity="0.6" />
+                
+                {/* Handle */}
+                <path
+                    d="M 75 40 Q 90 40 90 50 Q 90 60 75 60"
+                    fill="none"
+                    stroke="#6B4423"
+                    strokeWidth="3"
+                />
+                
+                {/* Handle Highlight */}
+                <path
+                    d="M 76 42 Q 85 42 85 50 Q 85 58 76 58"
+                    fill="none"
+                    stroke="#8B5A2B"
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                />
+                
+                {/* Coffee inside */}
+                <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+                
+                {/* Evaporation Curved Lines - flowing wavy steam */}
+                {/* Line 1 - Left */}
+                <path 
+                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite' }} 
+                />
+                
+                {/* Line 2 - Center */}
+                <path 
+                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
+                />
+                
+                {/* Line 3 - Right */}
+                <path 
+                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
+                />
+                
+                <style>{`
+                    @keyframes float {
+                        0% {
+                            transform: translateY(0) scaleY(1);
+                            opacity: 0.8;
+                        }
+                        50% {
+                            opacity: 0.6;
+                        }
+                        100% {
+                            transform: translateY(-15px) scaleY(0.95);
+                            opacity: 0.4;
+                        }
+                    }
+                `}</style>
+                
+                {/* Saucer */}
+                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
+                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
+            </svg>
+        </div>
+    );
+};
 
 type SampleData = CoffeeSample & { blindCode: string }; // Ensure `blindCode` is included in `SampleData`
 
@@ -39,7 +162,7 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type Tab = 'events' | 'users' | 'samples' | 'results';
+type Tab = 'events' | 'users' | 'samples' | 'results' | 'leaderboard';
 type SortableSampleKeys = keyof CoffeeSample | 'farmerName';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
@@ -202,6 +325,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     // User Management State
     const [viewingUserId, setViewingUserId] = useState<string | null>(null);
 
+    // Event Expansion State
+    const [expandedEventIds, setExpandedEventIds] = useState<Set<string>>(new Set());
 
     // Sorting & Filtering State
     const [sortConfig, setSortConfig] = useState<{ key: SortableSampleKeys; direction: 'ascending' | 'descending' } | null>({ key: 'blindCode', direction: 'ascending' });
@@ -219,20 +344,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const [eventFilter, setEventFilter] = useState<string>('all');
 
+    const toggleEventExpansion = (eventId: string) => {
+        setExpandedEventIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(eventId)) {
+                newSet.delete(eventId);
+            } else {
+                newSet.add(eventId);
+            }
+            return newSet;
+        });
+    };
+
 
     const reportData = useMemo(() => {
         let samplesToConsider: CoffeeSample[] = [];
         if (eventFilter === 'all') {
-            samplesToConsider = appData.samples.filter(s => s.adjudicatedFinalScore !== undefined && s.adjudicatedFinalScore > 0);
+            // Only include samples from events where results have been revealed
+            const revealedEventIds = new Set((appData.events || []).filter(e => e.isResultsRevealed).map(e => String(e.id)));
+            const samplesInRevealedEvents = new Set<string>();
+            (appData.events || []).filter(e => e.isResultsRevealed).forEach(e => {
+                (e.sampleIds || []).forEach(sampleId => samplesInRevealedEvents.add(String(sampleId)));
+            });
+            samplesToConsider = (appData.samples || []).filter(s => {
+                return samplesInRevealedEvents.has(String(s.id)) && (s.adjudicatedFinalScore !== undefined && s.adjudicatedFinalScore > 0);
+            });
         } else {
             const selectedEvent = appData.events.find(e => e.id === eventFilter);
+            // If event not found or not revealed, return no samples
+            if (!selectedEvent || !selectedEvent.isResultsRevealed) {
+                return [] as CoffeeSample[];
+            }
             if (selectedEvent && Array.isArray(selectedEvent.sampleIds)) {
-                samplesToConsider = appData.samples.filter(s => 
-                    selectedEvent.sampleIds?.includes(s.id)
-                );
+                samplesToConsider = appData.samples.filter(s => selectedEvent.sampleIds?.includes(s.id) && (s.adjudicatedFinalScore !== undefined && s.adjudicatedFinalScore > 0));
             } else {
                 console.warn('Selected event does not have valid sampleIds or sampleIds is undefined:', selectedEvent);
-                samplesToConsider = []; // Default to an empty array if sampleIds is invalid
+                samplesToConsider = [];
             }
         }
         const filteredByProcess = samplesToConsider.filter(s => processFilter === 'All' || s.processingMethod === processFilter);
@@ -517,9 +664,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const TabButton = ({ tab, label, icon: Icon }: { tab: Tab, label: string, icon: React.ElementType }) => (
         <button
             onClick={() => { setActiveTab(tab); setViewingUserId(null); }}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 flex items-center space-x-2 ${activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-text-light hover:text-text-dark border-b-2 border-transparent'}`}
+            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${activeTab === tab ? 'bg-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}
         >
-            <Icon size={16} />
+            <Icon size={18} />
             <span>{label}</span>
         </button>
     );
@@ -665,19 +812,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     };
 
   return (
-    <div>
-        <h2 className="text-3xl font-bold mb-6">Administrator Dashboard</h2>
-        <div className="border-b border-border mb-6">
-            <nav className="-mb-px flex space-x-4">
-                <TabButton tab="events" label="Cupping Events" icon={Coffee} />
-                <TabButton tab="users" label="Manage Users" icon={Users} />
-                <TabButton tab="samples" label="All Samples" icon={FileText} />
-                <TabButton tab="results" label="Results & Reporting" icon={BarChart2} />
-            </nav>
-        </div>
+    <>
+    <style>{transitionStyles}</style>
+    <div className="fixed inset-0 bg-white flex flex-col">
+        {/* Main Layout with Sidebar */}
+        <div className="flex flex-1 overflow-hidden">
+            {/* Left Sidebar Menu */}
+            <div className="w-64 bg-white border-r border-gray-100 shadow-sm overflow-y-auto flex flex-col">
+                {/* Logo Section */}
+                <div className="p-6 border-b border-gray-100 flex flex-col items-center gap-2">
+                    <CoffeeCupLogo size={56} />
+                    <div className="text-center">
+                        <h1 className="text-xl font-bold text-gray-900">Cupping Lab</h1>
+                        <p className="text-xs text-gray-500">Coffee Quality</p>
+                    </div>
+                </div>
+
+                {/* Navigation Menu */}
+                <nav className="flex flex-col p-4 gap-2 flex-1">
+                    <TabButton tab="events" label="Cupping Events" icon={Coffee} />
+                    <TabButton tab="users" label="Manage Users" icon={Users} />
+                    <TabButton tab="samples" label="All Samples" icon={FileText} />
+                    <TabButton tab="results" label="Results & Reporting" icon={BarChart2} />
+                    <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} />
+                </nav>
+
+                {/* Admin Profile Section at Bottom */}
+                <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+                    {/* Admin Profile Card */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 w-full">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                            {currentUser?.name?.[0]?.toUpperCase() || 'A'}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-semibold text-gray-600">Admin</span>
+                            <span className="text-xs font-bold text-gray-800 truncate">{currentUser?.name || 'Admin'}</span>
+                        </div>
+                    </div>
+
+                    {/* Logout Button */}
+                    <button
+                        onClick={onLogout}
+                        className="w-full bg-red-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white via-white to-blue-50/30">
+                <div className="p-6">
 
         {activeTab === 'events' && (
-            <Card>
+            <Card className="transition-smooth">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-2xl font-extrabold text-primary">Cupping Events</h3>
                     <Button onClick={handleOpenWizard} className="flex items-center space-x-2 bg-primary text-white hover:bg-primary-dark">
@@ -714,54 +902,182 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     )}
                 </div>
 
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="border-b border-border">
-                            <th className="p-2">Name</th>
-                            <th className="p-2">Date</th>
-                            <th className="p-2">Time Added</th>
-                            <th className="p-2">Tags</th>
-                            <th className="p-2">Samples</th>
-                            <th className="p-2">Assigned Role/Person</th>
-                            <th className="p-2">Status</th>
-                            <th className="p-2 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredEvents.map(event => (
-                            <tr key={event.id} className="border-b border-border hover:bg-background">
-                                <td className="p-2">{event.name}</td>
-                                <td className="p-2">{formatDate(event.date)}</td>
-                                <td className="p-2">{new Date(event.date).toLocaleTimeString()}</td>
-                                <td className="p-2">
-                                    <div className="flex flex-wrap gap-1">
-                                        {renderTags(event.tags, event.id)}
-                                    </div>
-                                </td>
-                                <td className="p-2">
-                                    {event.sampleCount && event.sampleCount > 0 ? `${event.sampleCount} Samples` : 'No Samples'}
-                                </td>
-                                <td className="p-2">
-                                    {renderParticipants(event.participants)}
-                                </td>
-                                <td className="p-2">
-                                    {/* Temporarily removed the isResultsRevealed condition */}
-                                    {/* <span className={`px-2 py-1 text-xs font-semibold rounded-full ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}> */}
-                                    {/*     {event.isResultsRevealed ? 'Revealed' : 'In Progress'} */}
-                                    {/* </span> */}
-                                </td>
-                                <td className="p-2 text-right">
-                                    {renderActions(event)}
-                                </td>
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b-2 border-primary bg-gradient-to-r from-gray-50 to-gray-100">
+                                <th className="p-4 font-bold text-center text-gray-700 w-8"></th>
+                                <th className="p-4 font-bold text-left text-gray-700">Event Name</th>
+                                <th className="p-4 font-bold text-left text-gray-700">Date</th>
+                                <th className="p-4 font-bold text-left text-gray-700">Tags</th>
+                                <th className="p-4 font-bold text-center text-gray-700">Samples</th>
+                                <th className="p-4 font-bold text-left text-gray-700">Roles</th>
+                                <th className="p-4 font-bold text-center text-gray-700">Status</th>
+                                <th className="p-4 font-bold text-right text-gray-700">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-                 {filteredEvents.length === 0 && <p className="text-center p-8 text-text-light">No events match the current filter.</p>}
+                        </thead>
+                        <tbody>
+                            {filteredEvents.map((event, idx) => {
+                                const isExpanded = expandedEventIds.has(event.id);
+                                return (
+                                    <>
+                                        <tr key={event.id} className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                            <td className="p-4 text-center">
+                                                <button
+                                                    onClick={() => toggleEventExpansion(event.id)}
+                                                    className="inline-flex items-center justify-center w-6 h-6 text-gray-600 hover:text-primary hover:bg-gray-200 rounded transition-colors"
+                                                    title={isExpanded ? "Collapse" : "Expand"}
+                                                >
+                                                    <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                                </button>
+                                            </td>
+                                            <td className="p-4 font-semibold text-primary">{event.name}</td>
+                                            <td className="p-4 text-gray-600">{formatDate(event.date)}</td>
+                                            <td className="p-4">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {renderTags(event.tags, event.id)}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold">
+                                                    {event.sampleCount || 0}
+                                                </span>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                                    {event.participants && event.participants.slice(0, 2).map((p, i) => (
+                                                        <span key={i} className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full font-semibold whitespace-nowrap">
+                                                            {p.role === 'HEAD_JUDGE' ? '👨‍⚖️ HJ' : p.role === 'Q_GRADER' ? '☕ QG' : p.role === 'FARMER' ? '🚜 F' : p.role}
+                                                        </span>
+                                                    ))}
+                                                    {event.participants && event.participants.length > 2 && (
+                                                        <span className="text-xs text-gray-500 px-2 py-1 font-semibold">+{event.participants.length - 2}</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {event.isResultsRevealed ? '✓ Revealed' : '⏳ In Progress'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                {renderActions(event)}
+                                            </td>
+                                        </tr>
+                                        {isExpanded && (
+                                            <tr className={`border-b border-gray-200 ${idx % 2 === 0 ? 'bg-blue-50' : 'bg-blue-100'}`}>
+                                                <td colSpan={8} className="p-6">
+                                                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+                                                        <h4 className="font-bold text-lg text-primary mb-4">📋 Assigned Roles & Personnel</h4>
+                                                        {renderParticipants(event.participants)}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-4">
+                    {filteredEvents.map(event => {
+                        const isExpanded = expandedEventIds.has(event.id);
+                        return (
+                            <div key={event.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all hover:border-primary">
+                                <div className="space-y-3">
+                                    {/* Header with Name and Status */}
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div className="flex-1 flex items-start gap-2">
+                                            <button
+                                                onClick={() => toggleEventExpansion(event.id)}
+                                                className="mt-0.5 inline-flex items-center justify-center w-6 h-6 text-gray-600 hover:text-primary hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                                                title={isExpanded ? "Collapse details" : "Expand details"}
+                                            >
+                                                <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                            </button>
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-lg text-primary leading-tight">{event.name}</h3>
+                                                <p className="text-sm text-gray-500 mt-1">📅 {formatDate(event.date)}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`flex-shrink-0 inline-block px-3 py-1 text-xs font-bold rounded-full whitespace-nowrap ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                            {event.isResultsRevealed ? '✓ Revealed' : '⏳ Progress'}
+                                        </span>
+                                    </div>
+
+                                    {/* Tags */}
+                                    {event.tags && event.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {renderTags(event.tags, event.id)}
+                                        </div>
+                                    )}
+
+                                    {/* Quick Stats */}
+                                    <div className="grid grid-cols-3 gap-2 py-3 px-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
+                                        <div className="text-center">
+                                            <p className="text-xs font-semibold text-gray-600">Samples</p>
+                                            <p className="font-bold text-lg text-primary">{event.sampleCount || 0}</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs font-semibold text-gray-600">Participants</p>
+                                            <p className="font-bold text-lg text-primary">{event.participants?.length || 0}</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs font-semibold text-gray-600">Roles</p>
+                                            <p className="font-bold text-lg text-primary">{new Set(event.participants?.map(p => p.role)).size || 0}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Expandable Participants Details */}
+                                    {isExpanded && event.participants && event.participants.length > 0 && (
+                                        <div className="border-t border-gray-200 pt-3 bg-gradient-to-b from-blue-50 to-indigo-50 -mx-4 -mb-4 px-4 py-3 rounded-b-lg">
+                                            <p className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wide">👥 Full Personnel Details</p>
+                                            <div className="space-y-3">
+                                                {renderParticipants(event.participants)}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Participants Summary (when not expanded) */}
+                                    {!isExpanded && event.participants && event.participants.length > 0 && (
+                                        <div className="border-t border-gray-200 pt-3">
+                                            <p className="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">👥 Assigned Roles</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {event.participants.map((p, i) => (
+                                                    <span key={i} className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-900 text-xs px-3 py-1.5 rounded-full font-semibold border border-purple-200">
+                                                        {p.role === 'HEAD_JUDGE' ? '⚖️ Head Judge' : p.role === 'Q_GRADER' ? '☕ Q Grader' : p.role === 'FARMER' ? '🚜 Farmer' : p.role}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Actions */}
+                                    <div className="border-t border-gray-200 pt-3 flex gap-2">
+                                        {renderActions(event)}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {filteredEvents.length === 0 && (
+                        <div className="text-center py-12">
+                            <p className="text-lg text-gray-400 font-semibold">No events match the current filter</p>
+                        </div>
+                    )}
+                </div>
+
+                {filteredEvents.length === 0 && <p className="hidden md:block text-center p-8 text-text-light">No events match the current filter.</p>}
             </Card>
         )}
 
         {activeTab === 'users' && (
+            <div className="transition-smooth">
+            {
             viewingUserId ? (
                 <UserProfile
                     user={appData.users.find(u => u.id === viewingUserId) || null} // Changed fallback to null explicitly
@@ -787,10 +1103,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     }}
                 />
             )
+            }
+            </div>
         )}
 
         {activeTab === 'samples' && (
-            <Card>
+            <Card className="transition-smooth">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-bold">All Coffee Samples</h3>
                 </div>
@@ -833,7 +1151,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         )}
 
         {activeTab === 'results' && (
-            <Card>
+            <Card className="transition-smooth">
                 <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                     <h3 className="text-xl font-bold">Results & Analysis</h3>
                     <div className="flex items-center space-x-2">
@@ -941,6 +1259,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             </Card>
         )}
 
+        {activeTab === 'leaderboard' && (
+            <PublicLeaderboard
+                appData={appData}
+                onExit={() => setActiveTab('events')}
+            />
+        )}
+
         {/* Modals */}
         <EventCreationWizard 
             isOpen={isWizardOpen} 
@@ -1011,22 +1336,82 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                 />
             )}
         </Modal>
-
-        <div className="fixed bottom-4 right-4">
-            <button
-                onClick={onLogout}
-                className="bg-red-500 text-white px-4 py-2 rounded shadow hover:bg-red-600"
-            >
-                Logout
-            </button>
+                </div>
+            </div>
         </div>
 
-        <div className="fixed bottom-4 left-4">
-            <Button onClick={() => navigate('/leaderboard?redirect=/admin-dashboard')} className="bg-primary text-white px-4 py-2 rounded shadow hover:bg-primary-dark">
-                View Leaderboard Results
-            </Button>
-        </div>
+        {/* Modals - Outside of Main Layout */}
+        <EventCreationWizard 
+            isOpen={isWizardOpen} 
+            onClose={handleCloseWizard} 
+            onSubmit={handleWizardSubmit}
+            appData={appData}
+        />
+        
+        <EventManagementModal
+            isOpen={isManageEventModalOpen}
+            onClose={() => setIsManageEventModalOpen(false)}
+            event={eventToManage}
+            appData={appData}
+            onUpdate={onUpdateEventSamples}
+        />
+
+        <EventEditModal
+            isOpen={isEditEventModalOpen}
+            onClose={() => setIsEditEventModalOpen(false)}
+            event={eventToEdit}
+            onUpdate={onUpdateEventDetails}
+        />
+        
+        <EventParticipantsModal
+            isOpen={isParticipantsModalOpen}
+            onClose={() => setIsParticipantsModalOpen(false)}
+            event={eventToManageParticipants}
+            appData={appData}
+            onUpdate={onUpdateEventParticipants}
+        />
+
+        <UserInvitationModal
+            isOpen={isInviteModalOpen}
+            onClose={() => setIsInviteModalOpen(false)}
+            onSubmit={handleInviteSubmit}
+            events={appData.events}
+        />
+
+        <Modal isOpen={isSampleDetailModalOpen} onClose={() => setIsSampleDetailModalOpen(false)} title={`Sample Details: ${selectedSample?.blindCode}`}>
+            {selectedSample && (
+                <div className="space-y-4">
+                    <div>
+                        <h4 className="font-bold">Sample Information</h4>
+                        <div className="text-sm grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
+                            <span className="text-text-light">Farmer:</span><span>{getFarmerName(selectedSample)}</span>
+                            <span className="text-text-light">Farm Name:</span><span>{selectedSample.farmName}</span>
+                            <span className="text-text-light">Region:</span><span>{selectedSample.region}</span>
+                            <span className="text-text-light">Altitude (m):</span><span>{selectedSample.altitude}</span>
+                            <span className="text-text-light">Processing:</span><span>{selectedSample.processingMethod}</span>
+                            <span className="text-text-light">Variety:</span><span>{selectedSample.variety}</span>
+                            <span className="text-text-light">Moisture:</span><span>{selectedSample.moisture ? `${selectedSample.moisture}%` : 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-border pt-4">
+                         <h4 className="font-bold">Q Grader Scores</h4>
+                         {renderSampleDetails(selectedSample)}
+                    </div>
+                </div>
+            )}
+        </Modal>
+
+        <Modal isOpen={!!viewingReportForSample} onClose={() => setViewingReportForSample(null)} title="Official Cupping Report" size="xl">
+            {viewingReportForSample && (
+                <SampleReport
+                    sample={viewingReportForSample}
+                    appData={appData}
+                />
+            )}
+        </Modal>
     </div>
+    </>
   );
 };
 

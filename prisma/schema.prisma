@@ -18,7 +18,6 @@ model Admin {
   email    String @unique
   password String
   name     String
-  // publicId removed
 }
 
 model HeadJudge {
@@ -28,7 +27,7 @@ model HeadJudge {
   name         String
   status       String        @default("Active")
   participants Participant[] // Relation to Participant
-  // publicId removed
+  headJudgeDecisions HeadJudgeDecision[]
 }
 
 model Farmer {
@@ -39,7 +38,6 @@ model Farmer {
   status       String
   lastLogin    DateTime?
   participants Participant[]
-  // publicId removed
 }
 
 model QGrader {
@@ -50,7 +48,25 @@ model QGrader {
   status       String
   lastLogin    DateTime?
   participants Participant[] // Relation to Participant
-  // publicId removed
+  qGraderScores QGraderScore[]
+}
+
+model HeadJudgeDecision {
+  id            Int       @id @default(autoincrement())
+  sampleId      Int
+  sample        Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  headJudgeId   Int
+  headJudge     HeadJudge @relation(fields: [headJudgeId], references: [id])
+
+  finalScore    Float?
+  gradeLevel    String?
+  notes         String?
+  flagged       Boolean   @default(false)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([sampleId, headJudgeId])
 }
 
 model CuppingEvent {
@@ -61,6 +77,7 @@ model CuppingEvent {
   isResultsRevealed Boolean                        @default(false)
   participants      Participant[]
   samples           Sample[]
+  qGraderScores     QGraderScore[]
   tags              CuppingEventTag[]
   processingMethods CuppingEventProcessingMethod[]
   createdAt         DateTime                       @default(now())
@@ -91,8 +108,58 @@ model Sample {
   altitude              Float // Added altitude field
   moisture              Float // Added moisture field
   adjudicatedFinalScore Float?
+  gradeLevel            String?
+  headJudgeNotes        String?
+  adjudicationJustification String?
+  flaggedForDiscussion  Boolean?     
   cuppingEventId        Int?
   cuppingEvent          CuppingEvent? @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  qGraderScores         QGraderScore[]
+  // Head Judge can lock judgement for this sample; once locked QGraders cannot modify scores
+  isLocked              Boolean       @default(false)
+  lockedByHeadJudgeId   Int?
+  lockedAt              DateTime?
+  headJudgeDecisions    HeadJudgeDecision[]
+}
+
+// QGraderScore: stores per-Q grader scoring for a sample within an event
+model QGraderScore {
+  id              Int           @id @default(autoincrement())
+  sampleId        Int
+  sample          Sample        @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  cuppingEventId  Int?
+  cuppingEvent    CuppingEvent? @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  qGraderId       Int
+  qGrader         QGrader       @relation(fields: [qGraderId], references: [id])
+
+  // Attribute fields (0-10 scale expected)
+  fragrance       Float
+  flavor          Float
+  aftertaste      Float
+  acidity         Float
+  body            Float
+  balance         Float
+  uniformity      Float
+  cleanCup        Float
+  sweetness       Float
+  overall         Float
+
+  // Deductions / comments
+  defects         Int     @default(0)
+  comments        String?
+  descriptors     String? // JSON array of {name: string, intensity: number}
+
+  // Whether this grader has finalized/submitted their score (prevents further edits by that grader)
+  isSubmitted     Boolean @default(false)
+  submittedAt     DateTime?
+
+  // Cached total for quick aggregates
+  total           Float
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sampleId, qGraderId])
 }
 
 model CuppingEventTag {
