@@ -424,19 +424,23 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
     // Send an invitation email, but don't let email errors fail the whole request
     try {
       console.log('Preparing to send invitation email to', email);
+      console.log('Email env vars - NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? 'set' : 'NOT SET');
+      console.log('Email env vars - NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? 'set' : 'NOT SET');
+      console.log('Email env vars - APP_URL:', process.env.APP_URL || 'NOT SET');
+      
       const transporter = nodemailer.createTransport({
         service: process.env.EMAIL_SERVICE || 'gmail',
         auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
+          user: process.env.NODEMAILER_EMAIL,
+          pass: process.env.NODEMAILER_EMAIL_PASSWORD,
         },
       });
 
       const mailOptions = {
-        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
         to: email,
         subject: 'Welcome to the Platform',
-        text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease confirm your email address by clicking the link below:\n\n${process.env.APP_URL}/confirm-email?email=${email}\n\nPlease log in and change your password after your first login.\n\nBest regards,\nThe Team`,
+        text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease confirm your email address by clicking the link below:\n\n${process.env.APP_URL || 'http://localhost:3000'}/confirm-email?email=${email}\n\nPlease log in and change your password after your first login.\n\nBest regards,\nThe Team`,
       };
 
       // Use Promise wrapper so we can await and catch any errors
@@ -1348,17 +1352,21 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
     });
 
     // Step 3: Send an email invitation with the confirmation link
-    const confirmationLink = `${process.env.APP_URL}/confirm-email?email=${email}`;
+    const confirmationLink = `${process.env.APP_URL || 'http://localhost:3000'}/confirm-email?email=${email}`;
+    console.log('Preparing to send invitation email to', email);
+    console.log('Email env vars - NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? 'set' : 'NOT SET');
+    console.log('Email env vars - NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? 'set' : 'NOT SET');
+    
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: process.env.EMAIL_USER, // Your email address
-        pass: process.env.EMAIL_PASS, // Your email password or app-specific password
+        user: process.env.NODEMAILER_EMAIL, // Your email address
+        pass: process.env.NODEMAILER_EMAIL_PASSWORD, // Your email password or app-specific password
       },
     });
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: process.env.NODEMAILER_EMAIL,
       to: email,
       subject: 'Welcome to the Platform',
       text: `Hi ${prismaUser.name || 'User'},
