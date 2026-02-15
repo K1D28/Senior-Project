@@ -26,6 +26,7 @@ const PublicLeaderboard: React.FC<PublicLeaderboardProps> = ({ appData, onExit }
         return (
           sample.adjudicatedFinalScore !== undefined &&
           sample.adjudicatedFinalScore > 0 &&
+          sample.sampleType !== 'CALIBRATION' && // Exclude calibration samples from leaderboard
           farmer?.roles.includes(Role.FARMER) // Ensure only farmers' samples are displayed
         );
       })

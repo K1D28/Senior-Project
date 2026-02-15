@@ -105,18 +105,59 @@ const verifySupabaseToken = async (req, res, next) => {
     console.log('Supabase user verified (partial):', { id: supabaseUser.user.id, email: supabaseUser.user.email });
 
     const supabaseId = supabaseUser.user.id; // Extract the Supabase user ID
+    const userEmail = supabaseUser.user.email;
 
-    // Fetch the user from Prisma
-    const prismaUser = await prisma.user.findUnique({ where: { supabaseId } });
+    // Step 1: Fetch the user from Prisma User table
+    let prismaUser = await prisma.user.findUnique({ where: { supabaseId } });
     console.log('Prisma lookup result for supabaseId:', supabaseId, prismaUser ? { id: prismaUser.id, email: prismaUser.email, role: prismaUser.role } : null);
+    
     if (!prismaUser) {
-      console.error('User not found in Prisma database for supabaseId:', supabaseId);
-      return res.status(404).json({ message: 'User not found' });
+      console.error('User not found in Prisma User table for supabaseId:', supabaseId);
+      return res.status(404).json({ message: 'User not found in database' });
     }
 
-    console.log('Prisma user verified:', { id: prismaUser.id, email: prismaUser.email, role: prismaUser.role });
+    // Step 2: Verify user exists in role-specific table
+    let roleData = null;
+    const role = prismaUser.role;
 
-    req.user = prismaUser; // Attach Prisma user info to the request
+    if (role === 'ADMIN') {
+      roleData = await prisma.admin.findUnique({ where: { email: userEmail } });
+      if (!roleData) {
+        console.error('User email not found in Admin table:', userEmail);
+        return res.status(403).json({ message: 'User does not have Admin role in database' });
+      }
+    } else if (role === 'HEAD_JUDGE') {
+      roleData = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+      if (!roleData) {
+        console.error('User email not found in HeadJudge table:', userEmail);
+        return res.status(403).json({ message: 'User does not have HeadJudge role in database' });
+      }
+    } else if (role === 'FARMER') {
+      roleData = await prisma.farmer.findUnique({ where: { email: userEmail } });
+      if (!roleData) {
+        console.error('User email not found in Farmer table:', userEmail);
+        return res.status(403).json({ message: 'User does not have Farmer role in database' });
+      }
+    } else if (role === 'Q_GRADER') {
+      roleData = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+      if (!roleData) {
+        console.error('User email not found in QGrader table:', userEmail);
+        return res.status(403).json({ message: 'User does not have QGrader role in database' });
+      }
+    } else {
+      console.error('Unknown role:', role);
+      return res.status(403).json({ message: 'Unknown user role' });
+    }
+
+    // Merge Supabase user data with role-specific data
+    const enrichedUser = {
+      ...prismaUser,
+      roleData: roleData, // Contains role-specific fields like farmName, status, etc.
+    };
+
+    console.log('✓ Authentication successful:', { id: enrichedUser.id, email: enrichedUser.email, role: enrichedUser.role, roleTableExists: !!roleData });
+
+    req.user = enrichedUser; // Attach enriched user info to the request
     next();
   } catch (error) {
     console.error('Error verifying token:', error);
@@ -631,15 +672,24 @@ app.get('/api/samples', verifySupabaseToken, async (req, res) => {
 });
 
 app.post('/api/samples', verifySupabaseToken, async (req, res) => {
-  const { farmName, farmerId, region, variety, processingMethod, altitude, moisture, cuppingEventId } = req.body;
+  const { farmName, farmerId, region, variety, processingMethod, altitude, moisture, cuppingEventId, sampleType } = req.body;
 
   // Validation
   if (!farmName || typeof farmName !== 'string') {
     return res.status(400).json({ message: 'Invalid or missing farmName' });
   }
-  if (!farmerId || typeof farmerId !== 'number') {
+
+  // Validate sampleType if provided (FARMER_REGISTERED, PROXY_SUBMISSION, or CALIBRATION)
+  const validSampleTypes = ['FARMER_REGISTERED', 'PROXY_SUBMISSION', 'CALIBRATION'];
+  const finalSampleType = sampleType && validSampleTypes.includes(sampleType) ? sampleType : 'FARMER_REGISTERED';
+
+  // farmerId is required for FARMER_REGISTERED and PROXY_SUBMISSION, but optional for CALIBRATION
+  const isCalibrationType = finalSampleType === 'CALIBRATION';
+  
+  if (!isCalibrationType && (!farmerId || typeof farmerId !== 'number')) {
     return res.status(400).json({ message: 'Invalid or missing farmerId' });
   }
+
   const normalizedRegion = region && region.trim() !== '' ? region : null;
 
   if (normalizedRegion === null) {
@@ -663,12 +713,13 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
       data: {
         blindCode: crypto.randomUUID(), // Auto-generate unique blindCode
         farmName,
-        farmerId,
+        farmerId: isCalibrationType ? null : farmerId, // Use null for calibration samples
         region: normalizedRegion,
         variety,
         processingMethod,
         altitude,
         moisture,
+        sampleType: finalSampleType,
         cuppingEventId,
       },
     });
@@ -686,6 +737,51 @@ app.delete('/api/samples/:id', verifySupabaseToken, async (req, res) => {
     res.json({ message: 'Sample deleted successfully' });
   } catch (error) {
     console.error('Error deleting sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Endpoint for farmer to register for an event
+app.post('/api/farmers/register-event', verifySupabaseToken, async (req, res) => {
+  const { eventId } = req.body;
+  const userEmail = req.user?.email;
+
+  if (!eventId) {
+    return res.status(400).json({ message: 'Missing eventId' });
+  }
+
+  try {
+    // Get the farmer record
+    const farmer = await prisma.farmer.findUnique({ where: { email: userEmail } });
+    if (!farmer) {
+      return res.status(404).json({ message: 'Farmer not found' });
+    }
+
+    // Check if farmer is already registered as participant
+    const existingParticipant = await prisma.participant.findFirst({
+      where: {
+        eventId: parseInt(eventId),
+        role: 'FARMER',
+        farmerId: farmer.id,
+      },
+    });
+
+    if (existingParticipant) {
+      return res.status(400).json({ message: 'Farmer is already registered for this event' });
+    }
+
+    // Create participant entry
+    const participant = await prisma.participant.create({
+      data: {
+        role: 'FARMER',
+        eventId: parseInt(eventId),
+        farmerId: farmer.id,
+      },
+    });
+
+    res.status(201).json(participant);
+  } catch (error) {
+    console.error('Error registering farmer for event:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -803,8 +899,31 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
   }
 
   try {
-    console.log('Received request to create cupping event with data:', JSON.stringify(req.body, null, 2)); // Log the incoming request data
+    console.log('Received request to create cupping event with data:', JSON.stringify(req.body, null, 2));
 
+    // All samples are now proxy submissions with required farmer IDs
+    const transformedSamples = [];
+
+    // Process all samples - farmer ID required for all
+    (samples || []).forEach(sample => {
+      const farmerId = sample.farmerId ? parseInt(sample.farmerId, 10) : null;
+      if (!farmerId || isNaN(farmerId) || farmerId <= 0) {
+        throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
+      }
+      transformedSamples.push({
+        blindCode: sample.blindCode || crypto.randomUUID(),
+        farmerId: farmerId,
+        processingMethod: sample.processingMethod,
+        farmName: sample.farmName,
+        variety: sample.variety,
+        region: sample.region,
+        altitude: sample.altitude,
+        moisture: sample.moisture,
+        sampleType: 'PROXY_SUBMISSION',
+      });
+    });
+
+    // Create event with all samples
     const newEvent = await prisma.cuppingEvent.create({
       data: {
         name,
@@ -813,16 +932,7 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         tags: { create: tags.map(tag => ({ tag })) },
         processingMethods: { create: processingMethods.map(method => ({ method })) },
         samples: {
-          create: samples.map(sample => ({
-            blindCode: sample.blindCode || crypto.randomUUID(),
-            farmerId: parseInt(sample.farmerId),
-            processingMethod: sample.processingMethod,
-            farmName: sample.farmName,
-            variety: sample.variety,
-            region: sample.region,
-            altitude: sample.altitude,
-            moisture: sample.moisture,
-          })),
+          create: transformedSamples,
         },
       },
     });
@@ -836,14 +946,14 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
       await prisma.participant.createMany({ data: participantPayload });
     }
 
-    console.log('Cupping event created successfully:', newEvent); // Log the created event
+    console.log('Cupping event created successfully:', newEvent);
     res.status(201).json(serializeEvent(newEvent));
   } catch (error) {
-    console.error('Error creating cupping event:', error.message); // Log the error message
+    console.error('Error creating cupping event:', error.message);
     if (error.meta) {
-      console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2)); // Log Prisma-specific error metadata
+      console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2));
     }
-    res.status(500).json({ message: 'Internal server error', error: error.message });
+    res.status(500).json({ message: error.message || 'Internal server error' });
   }
 });
 
@@ -1040,6 +1150,52 @@ app.get('/api/cupping-events/headjudge', verifySupabaseToken, async (req, res) =
     res.json(serialized);
   } catch (error) {
     console.error('Error fetching Head Judge events:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Endpoint to fetch events assigned to the authenticated Farmer
+app.get('/api/cupping-events/farmer', verifySupabaseToken, async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    console.log('Fetching Farmer events for user email:', userEmail);
+    
+    if (!userEmail) return res.json([]);
+
+    const farmer = await prisma.farmer.findUnique({ where: { email: userEmail } });
+    if (!farmer) {
+      return res.json([]);
+    }
+
+    // Fetch ALL cupping events (farmers can see all upcoming events)
+    // They don't need to be explicitly assigned as participants
+    const events = await prisma.cuppingEvent.findMany({
+      include: {
+        tags: true,
+        processingMethods: true,
+        participants: { include: { headJudge: true, qGrader: true, farmer: true } },
+        samples: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    const refinedEvents = events.map(event => {
+      const assignedHeadJudges = event.participants
+        .filter(p => p.role === 'HEAD_JUDGE')
+        .map(p => p.headJudge);
+      const assignedQGraders = event.participants
+        .filter(p => p.role === 'Q_GRADER')
+        .map(p => p.qGrader);
+      const sampleObjects = (event.samples || []).map(s => ({ ...s, id: String(s.id) }));
+      return { ...event, assignedHeadJudges, assignedQGraders, sampleObjects };
+    });
+
+    const serialized = refinedEvents.map(e => serializeEvent(e));
+    // Attach sampleObjects to the serialized events so frontend can use full sample data
+    const withSamples = serialized.map((ev, idx) => ({ ...ev, sampleObjects: refinedEvents[idx].sampleObjects }));
+    res.json(withSamples);
+  } catch (error) {
+    console.error('Error fetching Farmer events:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -1454,7 +1610,13 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
     samples.forEach((sample, index) => {
         const missingFields = [];
         if (!sample.farmName) missingFields.push('farmName');
-        if (!sample.farmerId || isNaN(parseInt(sample.farmerId))) missingFields.push('farmerId');
+        
+        // farmerId is optional for CALIBRATION samples, required for others
+        const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
+        if (sampleType !== 'CALIBRATION' && (!sample.farmerId || isNaN(parseInt(sample.farmerId)))) {
+            missingFields.push('farmerId');
+        }
+        
         if (!sample.region) missingFields.push('region');
         if (!sample.variety) missingFields.push('variety');
         if (!sample.processingMethod) missingFields.push('processingMethod');
@@ -1475,15 +1637,19 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
 
         // Add samples to the event
         const createdSamples = await Promise.all(
-            samples.map(sample =>
-                prisma.sample.create({
+            samples.map(sample => {
+                const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
+                const finalFarmerId = sampleType === 'CALIBRATION' ? null : parseInt(sample.farmerId);
+                
+                return prisma.sample.create({
                     data: {
                         ...sample,
-                        farmerId: parseInt(sample.farmerId), // Ensure farmerId is an integer
+                        farmerId: finalFarmerId,
+                        sampleType: sampleType,
                         cuppingEventId: parseInt(id),
                     },
-                })
-            )
+                });
+            })
         );
         res.status(201).json(createdSamples);
     } catch (error) {

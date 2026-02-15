@@ -31,13 +31,19 @@ model HeadJudge {
 }
 
 model Farmer {
-  id           Int           @id @default(autoincrement())
-  email        String        @unique
-  password     String
-  name         String
-  status       String
-  lastLogin    DateTime?
-  participants Participant[]
+  id               Int           @id @default(autoincrement())
+  email            String        @unique
+  password         String
+  name             String
+  status           String
+  lastLogin        DateTime?
+  farmName         String?
+  variety          String?
+  region           String?
+  processingMethod String?
+  altitude         Float?
+  moisture         Float?
+  participants     Participant[]
 }
 
 model QGrader {
@@ -101,12 +107,13 @@ model Sample {
   id                    Int           @id @default(autoincrement())
   blindCode             String        @unique @default(uuid()) // Auto-generate unique blindCode
   farmName              String
-  farmerId              Int
+  farmerId              Int?          // Optional for CALIBRATION samples, required for others
   region                String?
   variety               String
   processingMethod      String
   altitude              Float // Added altitude field
   moisture              Float // Added moisture field
+  sampleType            String        @default("FARMER_REGISTERED") // FARMER_REGISTERED, PROXY_SUBMISSION, or CALIBRATION
   adjudicatedFinalScore Float?
   gradeLevel            String?
   headJudgeNotes        String?

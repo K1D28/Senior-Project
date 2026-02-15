@@ -1128,9 +1128,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                         <tbody>
                             {sortedSamples.map(sample => {
                                 const farmerName = getFarmerName(sample);
+                                const isCalibration = sample.sampleType === 'CALIBRATION';
                                 return (
                                     <tr key={sample.id} className="border-b border-border hover:bg-background">
-                                        <td className="p-2 font-mono">{sample.blindCode}</td>
+                                        <td className={`p-2 font-mono font-bold ${isCalibration ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</td>
                                         <td className="p-2">{sample.region}</td>
                                         <td className="p-2">{sample.processingMethod}</td>
                                         <td className="p-2">{sample.variety}</td>
@@ -1229,10 +1230,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                 <tbody>
                                     {reportData.map((sample, index) => {
                                         const farmerName = getFarmerName(sample);
+                                        const isCalibration = sample.sampleType === 'CALIBRATION';
                                         return(
                                             <tr key={sample.id} className="border-b border-border hover:bg-background">
                                                 <td className="p-2 font-bold text-lg">{index + 1}</td>
-                                                <td className="p-2 font-mono">{sample.blindCode}</td>
+                                                <td className={`p-2 font-mono font-bold ${isCalibration ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</td>
                                                 <td className="p-2">{sample.farmName}</td>
                                                 <td className="p-2">{farmerName}</td>
                                                 <td className="p-2">{sample.processingMethod}</td>

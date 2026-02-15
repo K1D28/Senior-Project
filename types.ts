@@ -61,6 +61,7 @@ export interface CoffeeSample {
   processingMethod: string;
   variety: string;
   moisture?: number;
+  sampleType?: 'FARMER_REGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION'; // Type of sample
   adjudicatedFinalScore?: number;
   gradeLevel?: string;
   headJudgeNotes?: string;
@@ -133,7 +134,7 @@ export interface CuppingEvent {
   name: string;
   date: string; // Consider changing to { startDate: string, endDate: string }
   description?: string;
-  processingMethods?: string[];
+  processingMethods?: (string | { id: number; method: string; eventId: number })[];
   assignedQGraderIds: string[];
   assignedHeadJudgeIds: string[];
   sampleIds: string[];

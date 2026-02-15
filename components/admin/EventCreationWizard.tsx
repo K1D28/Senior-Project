@@ -177,17 +177,21 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                 alert('At least one valid processing method is required.');
                 return;
             }
-
             // Validate samples
             for (const sample of samples) {
                 if (!sample.farmName?.trim()) {
                     alert('Each sample must have a valid farm name.');
                     return;
                 }
-                if (!sample.farmerId) {
-                    alert('Each sample must have a valid farmer ID.');
+                
+                // All samples require a farmer ID
+                const farmerIdStr = String(sample.farmerId || '').trim();
+                const farmerId = parseInt(farmerIdStr, 10);
+                if (!farmerIdStr || isNaN(farmerId) || farmerId <= 0) {
+                    alert('Each sample must have a valid farmer selected. Please select a farmer from the dropdown.');
                     return;
                 }
+
                 if (!sample.region?.trim()) {
                     alert('Each sample must have a valid region.');
                     return;
@@ -211,7 +215,14 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
             }
 
             // Construct the new event payload
-            const uniqueFarmerIds = Array.from(new Set(samples.map(s => String(s.farmerId)).filter(id => id && id.trim() !== ''))).map(id => parseInt(id, 10));
+            // Collect all farmer IDs from samples and assigned participants
+            const uniqueFarmerIds = Array.from(new Set(samples
+                .filter(s => s.farmerId)
+                .map(s => String(s.farmerId).trim())
+                .filter(id => id && id !== '0')
+                .concat(participants.assignedFarmerIds || [])
+            )).map(id => parseInt(id, 10));
+            
             const newEvent = {
                 name: eventDetails.name.trim(),
                 date: eventDetails.date,
@@ -223,9 +234,10 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                 assignedFarmerIds: uniqueFarmerIds,
                 samples: samples.map(sample => ({
                     ...sample,
-                    farmerId: parseInt(sample.farmerId, 10), // Ensure farmerId is an integer
-                    region: sample.region?.trim(), // Ensure region is sent as a string
-                    blindCode: `${eventDetails.name.slice(0, 2).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
+                    farmerId: sample.farmerId,
+                    region: sample.region?.trim(),
+                    blindCode: `${eventDetails.name.slice(0, 2).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+                    sampleType: 'PROXY_SUBMISSION', // All samples are now proxy submissions
                 })).map(({ id, ...rest }) => rest), // Remove the id field
             };
 

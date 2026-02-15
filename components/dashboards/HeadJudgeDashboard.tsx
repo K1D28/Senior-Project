@@ -235,7 +235,7 @@ const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appDa
     return (
         <div>
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Adjudication Cockpit: <span className="text-primary font-mono">{sample.blindCode}</span></h2>
+                <h2 className="text-2xl font-bold">Adjudication Cockpit: <span className={`font-mono ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h2>
                 <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1"><ChevronLeft size={16}/><span>Back to Samples</span></Button>
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

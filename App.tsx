@@ -745,25 +745,74 @@ function App() {
         ...sampleData,
         id: `sample-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         farmerId: currentUser.id,
-        blindCode: 'PENDING', // Admin will assign this later
+        blindCode: 'PENDING', // Backend will assign this
+        sampleType: 'FARMER_REGISTERED', // Mark as farmer-registered sample
     };
 
-    setAppData(prevData => {
-        const updatedEvents = prevData.events.map(event => {
+    // First, register farmer as participant in the event
+    fetch('http://localhost:5001/api/farmers/register-event', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ eventId: parseInt(eventId) }),
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Farmer registered as participant:', data);
+      
+      // Then submit the sample
+      return fetch('http://localhost:5001/api/samples', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          farmName: sampleData.farmName,
+          farmerId: currentUser.id,
+          region: sampleData.region,
+          variety: sampleData.variety,
+          processingMethod: sampleData.processingMethod,
+          altitude: sampleData.altitude,
+          moisture: sampleData.moisture,
+          cuppingEventId: parseInt(eventId),
+          sampleType: 'FARMER_REGISTERED',
+        }),
+      });
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log('Sample registered successfully');
+        // Update local state
+        setAppData(prevData => {
+          const updatedEvents = prevData.events.map(event => {
             if (event.id === eventId) {
-                return {
-                    ...event,
-                    sampleIds: [...event.sampleIds, newSample.id],
-                };
+              return {
+                ...event,
+                sampleIds: [...event.sampleIds, newSample.id],
+              };
             }
             return event;
-        });
+          });
 
-        return {
+          return {
             ...prevData,
             samples: [...prevData.samples, newSample],
             events: updatedEvents,
-        };
+          };
+        });
+        alert('Sample registered successfully!');
+      } else {
+        alert('Failed to register sample');
+      }
+    })
+    .catch(error => {
+      console.error('Error registering sample:', error);
+      alert('Error registering sample');
     });
   }, [currentUser]);
 

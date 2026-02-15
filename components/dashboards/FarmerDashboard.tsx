@@ -11,6 +11,7 @@ import Certificate from '../reporting/Certificate';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Select } from '../ui/Select';
+import Header from '../ui/Header';
 import { Download, Award, TrendingUp, Star, ShieldCheck, DownloadCloud, Calendar, PlusCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -45,11 +46,17 @@ const RegistrationModal: React.FC<{
     event: CuppingEvent;
     lastSample?: CoffeeSample;
 }> = ({ isOpen, onClose, onSubmit, event, lastSample }) => {
+    const getMethodString = (method: any): string => {
+        if (typeof method === 'string') return method;
+        if (method && typeof method === 'object' && 'method' in method) return method.method;
+        return '';
+    };
+
     const [sampleData, setSampleData] = useState<NewSampleRegistrationData>({
         farmName: lastSample?.farmName || '',
         region: lastSample?.region || '',
         altitude: lastSample?.altitude || 0,
-        processingMethod: event.processingMethods?.[0] || '',
+        processingMethod: event.processingMethods?.[0] ? getMethodString(event.processingMethods[0]) : '',
         variety: lastSample?.variety || '',
         moisture: lastSample?.moisture || undefined,
     });
@@ -87,7 +94,10 @@ const RegistrationModal: React.FC<{
                     <Label htmlFor="processingMethod">Processing Method</Label>
                     <Select id="processingMethod" value={sampleData.processingMethod} onChange={e => handleChange('processingMethod', e.target.value)} required>
                         <option value="" disabled>Select a method...</option>
-                        {event.processingMethods?.map(p => <option key={p} value={p}>{p}</option>)}
+                        {event.processingMethods?.map((p, index) => {
+                            const method = typeof p === 'string' ? p : (p && 'method' in p ? p.method : '');
+                            return <option key={`${method}-${index}`} value={method}>{method}</option>;
+                        })}
                     </Select>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
@@ -117,24 +127,51 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedEventForRegistration, setSelectedEventForRegistration] = useState<CuppingEvent | null>(null);
-
-  const setAppData = (updateFn: (prev: AppData) => AppData) => {
-    // Mock implementation for updating appData
-    console.log('Updating appData:', updateFn(appData));
-  };
+  const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const navigate = useNavigate();
 
-  const farmerSamples = useMemo(() => appData.samples.filter(s => s.farmerId === currentUser.id).sort((a,b) => b.id.localeCompare(a.id)), [appData.samples, currentUser.id]);
+  // Fetch events assigned by admin to this farmer
+  const fetchAssignedEvents = async () => {
+    try {
+      setLoadingEvents(true);
+      const response = await fetch(`http://localhost:5001/api/cupping-events/farmer`, { 
+        credentials: 'include',
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        }
+      });
+      if (response.ok) {
+        const events = await response.json();
+        console.log('Fetched farmer events:', events);
+        setAssignedEvents(events);
+      } else {
+        console.error('Failed to fetch assigned events:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching assigned events:', error);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
-  const allEventsWithFarmerSamples = useMemo(() => appData.events
+  useEffect(() => {
+    fetchAssignedEvents();
+  }, [currentUser.id, refreshKey]);
+
+  const farmerSamples = useMemo(() => appData.samples.filter(s => s.farmerId === currentUser.id && s.sampleType !== 'CALIBRATION').sort((a,b) => b.id.localeCompare(a.id)), [appData.samples, currentUser.id]);
+
+  const allEventsWithFarmerSamples = useMemo(() => assignedEvents
     .map(event => {
       const samplesInEvent = farmerSamples.filter(s => event.sampleIds.includes(s.id));
       if (samplesInEvent.length === 0) return null;
       
+      // For rankings, exclude calibration samples (only count competitive samples)
       const rankedEventSamples = event.isResultsRevealed
         ? appData.samples
-            .filter(s => event.sampleIds.includes(s.id) && s.adjudicatedFinalScore)
+            .filter(s => event.sampleIds.includes(s.id) && s.adjudicatedFinalScore && s.sampleType !== 'CALIBRATION')
             .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0))
         : [];
       
@@ -146,12 +183,21 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     })
     .filter((event): event is CuppingEvent & { samples: CoffeeSample[], rankedEventSamples: CoffeeSample[] } => event !== null)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), 
-    [appData.events, appData.samples, farmerSamples]);
+    [assignedEvents, appData.samples, farmerSamples]);
 
-  const upcomingEvents = useMemo(() => 
-    appData.events.filter(e => e.registrationOpen).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), 
-    [appData.events]
-  );
+  const upcomingEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return assignedEvents
+      .filter(e => {
+        // Show events that haven't happened yet or are happening today
+        const eventDate = new Date(e.date);
+        eventDate.setHours(0, 0, 0, 0);
+        return eventDate >= today && !e.isResultsRevealed;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [assignedEvents]);
   
   const handleOpenRegisterModal = (event: CuppingEvent) => {
     setSelectedEventForRegistration(event);
@@ -166,6 +212,10 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const handleRegisterSubmit = (sampleData: NewSampleRegistrationData) => {
       if(selectedEventForRegistration) {
           onRegisterForEvent(selectedEventForRegistration.id, sampleData);
+          // Trigger a refresh of events to show the newly submitted sample
+          setTimeout(() => {
+            setRefreshKey(prev => prev + 1);
+          }, 500);
       }
       handleCloseRegisterModal();
   };
@@ -180,7 +230,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
   const performanceData = useMemo(() => {
     return farmerSamples
-      .filter(s => s.adjudicatedFinalScore)
+      .filter(s => s.adjudicatedFinalScore && s.sampleType !== 'CALIBRATION')
       .map(s => {
         const event = appData.events.find(e => e.sampleIds.includes(s.id));
         return {
@@ -243,7 +293,11 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
   const DashboardView = () => (
     <div className="space-y-8">
-        {allEventsWithFarmerSamples.length === 0 ? (
+        {loadingEvents ? (
+            <Card>
+                <p className="text-center text-text-light">Loading your assigned events...</p>
+            </Card>
+        ) : allEventsWithFarmerSamples.length === 0 ? (
             <Card>
                 <p className="text-center text-text-light">You have not submitted any coffee samples yet. Check the "Upcoming Events" tab to register for a competition.</p>
             </Card>
@@ -358,50 +412,21 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     </div>
   );
 
-  useEffect(() => {
-    const verifyAuthentication = async () => {
-        try {
-            const response = await fetch('http://localhost:5001/api/auth/verify', { credentials: 'include' });
-            if (!response.ok) {
-                console.error('Authentication failed, redirecting to login.');
-                navigate('/login');
-            }
-        } catch (error) {
-            console.error('Error verifying authentication:', error);
-            navigate('/login');
-        }
-    };
-
-    verifyAuthentication();
-}, [navigate]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-        try {
-            const response = await fetch('http://localhost:5001/api/events', { credentials: 'include' });
-            if (response.ok) {
-                const events = await response.json();
-                setAppData(prev => ({ ...prev, events }));
-            }
-        } catch (error) {
-            console.error('Error fetching events:', error);
-        }
-    };
-    fetchData();
-}, []);
-
   return (
-    <div className="space-y-8">
-      <h2 className="text-3xl font-bold">Farmer Dashboard</h2>
-       <div className="border-b border-border">
+    <div className="min-h-screen bg-background">
+      <Header user={currentUser} onLogout={onLogout} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
+          <h2 className="text-3xl font-bold">Farmer Dashboard</h2>
+          <div className="border-b border-border">
             <nav className="-mb-px flex space-x-6">
-                 <TabButton tab="dashboard" label="My Dashboard" />
-                 <TabButton tab="events" label="Upcoming Events" />
+              <TabButton tab="dashboard" label="My Dashboard" />
+              <TabButton tab="events" label="Upcoming Events" />
             </nav>
-        </div>
+          </div>
 
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'events' && (
+          {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'events' && (
             <div className="space-y-6">
                 <h3 className="text-2xl font-bold">Register for an Event</h3>
                 {upcomingEvents.length > 0 ? (
@@ -412,7 +437,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                 <Card key={event.id} title={event.name}>
                                     <div className="space-y-3">
                                         <p className="text-sm text-text-light">{event.description}</p>
-                                        <p className="text-sm font-medium"><strong className="text-text-dark">Date:</strong> {new Date(event.date + 'T00:00:00').toLocaleDateString()}</p>
+                                        <p className="text-sm font-medium"><strong className="text-text-dark">Date:</strong> {event.date ? new Date(event.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'TBD'}</p>
                                         {farmerSamplesInEvent.length > 0 && (
                                             <div className="pt-3 mt-3 border-t border-border">
                                                 <h4 className="font-semibold text-sm">Your Submissions:</h4>
@@ -483,6 +508,8 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
         <Button onClick={() => navigate('/leaderboard?redirect=/farmer-dashboard')} className="bg-primary text-white px-4 py-2 rounded shadow hover:bg-primary-dark">
           View Leaderboard Results
         </Button>
+      </div>
+        </div>
       </div>
     </div>
   );

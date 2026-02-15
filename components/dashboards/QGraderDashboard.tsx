@@ -112,7 +112,7 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
         <div className="pb-24">
             <Card>
                 <div className="p-4 bg-background border-b border-border -m-6 mb-6">
-                    <h3 className="text-lg font-bold text-text-dark">Scoring Sample: <span className="font-mono text-primary">{sample.blindCode}</span></h3>
+                    <h3 className="text-lg font-bold text-text-dark">Scoring Sample: <span className={`font-mono ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                     {/* Scores Column */}
