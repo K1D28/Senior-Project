@@ -7,7 +7,6 @@ import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 
 type EventDetailsData = Omit<CuppingEvent, 'id' | 'sampleIds' | 'isResultsRevealed' | 'assignedQGraderIds' | 'assignedHeadJudgeIds'>;
-
 interface Step1DetailsProps {
   data: EventDetailsData;
   onUpdate: (data: EventDetailsData) => void;
@@ -15,6 +14,14 @@ interface Step1DetailsProps {
 
 const processingMethodOptions = ['Washed', 'Natural', 'Honey', 'Anaerobic', 'Other'];
 const suggestedTags = ['Regional', 'Championship', 'Experimental', 'Private QC'];
+
+const getTodayDateString = (): string => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 const Step1Details: React.FC<Step1DetailsProps> = ({ data, onUpdate }) => {
     const [tagInput, setTagInput] = useState('');
@@ -88,7 +95,8 @@ const Step1Details: React.FC<Step1DetailsProps> = ({ data, onUpdate }) => {
                             id="eventDate" 
                             type="date" 
                             value={data.date} 
-                            onChange={(e) => onUpdate({ ...data, date: e.target.value })} 
+                            onChange={(e) => onUpdate({ ...data, date: e.target.value })}
+                            min={getTodayDateString()}
                         />
                     </div>
                     <div>

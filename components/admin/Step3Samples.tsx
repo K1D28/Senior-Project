@@ -34,7 +34,7 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
     }, [farmers]);
 
     const handleAddRow = () => {
-        const newSample = { ...newSampleTemplate, id: `temp-${Date.now()}`, blindCode: `BC-${Date.now()}`, processingMethod: processingMethods[0] || '', sampleType: 'PROXY_SUBMISSION' };
+        const newSample: CoffeeSample = { ...newSampleTemplate, id: `temp-${Date.now()}`, blindCode: `BC-${Date.now()}`, processingMethod: processingMethods[0] || '', sampleType: 'PROXY_SUBMISSION' };
         onUpdate([...data, newSample]);
     };
 
@@ -90,8 +90,8 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
                                                 {processingMethods.map(p => <option key={p} value={p}>{p}</option>)}
                                             </Select>
                                         </td>
-                                        <td className="p-1"><Input type="number" value={sample.altitude} onChange={e => handleUpdateRow(index, 'altitude', Number(e.target.value))} placeholder="e.g., 1750" /></td>
-                                        <td className="p-1"><Input type="number" step="0.1" value={sample.moisture || ''} onChange={e => handleUpdateRow(index, 'moisture', Number(e.target.value))} placeholder="e.g., 10.8" /></td>
+                                        <td className="p-1"><Input type="number" value={sample.altitude || ''} onChange={e => handleUpdateRow(index, 'altitude', e.target.value ? Number(e.target.value) : 0)} placeholder="e.g., 1750" /></td>
+                                        <td className="p-1"><Input type="number" step="0.1" value={sample.moisture || ''} onChange={e => handleUpdateRow(index, 'moisture', e.target.value ? Number(e.target.value) : 0)} placeholder="e.g., 10.8" /></td>
                                         <td className="p-1 text-center">
                                             <button onClick={() => handleRemoveRow(index)} className="text-text-light hover:text-red-600 p-2">
                                                 <Trash2 size={16} />
