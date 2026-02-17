@@ -113,43 +113,54 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleLogin();
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <h1 className="text-2xl font-bold mb-8">Welcome to Cupping Hub</h1>
       <div className="w-full max-w-md bg-surface p-6 rounded-lg shadow-md">
         <h1 className="text-2xl font-bold mb-4">Login</h1>
         {error && <p className="text-red-500 mb-4">{error}</p>}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-2 border border-border rounded"
-          />
-        </div>
-        <div className="relative mb-4">
-          <label className="block text-sm font-medium mb-2">Password</label>
-          <input
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border border-border rounded"
-          />
+        <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className="w-full p-2 border border-border rounded"
+            />
+          </div>
+          <div className="relative mb-4">
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className="w-full p-2 border border-border rounded"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-2 text-gray-500 hover:text-primary focus:outline-none"
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
           <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-2 top-2 text-gray-500 hover:text-primary focus:outline-none"
+            type="submit"
+            className="w-full bg-primary text-white py-2 rounded hover:bg-primary-dark"
           >
-            {showPassword ? 'Hide' : 'Show'}
+            Login
           </button>
-        </div>
-        <button
-          onClick={handleLogin}
-          className="w-full bg-primary text-white py-2 rounded hover:bg-primary-dark"
-        >
-          Login
-        </button>
+        </form>
       </div>
     </div>
   );
