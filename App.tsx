@@ -828,7 +828,7 @@ function App() {
   };
 
   if (isPublicView) {
-    return <PublicLeaderboard appData={appData} onExit={handleExitLeaderboard} />;
+    return <PublicLeaderboard appData={appData} currentUser={currentUser || undefined} onExit={handleExitLeaderboard} onLogout={handleLogout} />;
   }
 
   return (
@@ -908,8 +908,10 @@ function App() {
           path="/leaderboard"
           element={
             <PublicLeaderboard 
-              appData={appData} 
+              appData={appData}
+              currentUser={currentUser || undefined}
               onExit={() => navigate(-1)} // Navigate back to the previous page
+              onLogout={handleLogout}
             />
           }
         />
