@@ -11,9 +11,130 @@ import Certificate from '../reporting/Certificate';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Select } from '../ui/Select';
-import Header from '../ui/Header';
-import { Download, Award, TrendingUp, Star, ShieldCheck, DownloadCloud, Calendar, PlusCircle } from 'lucide-react';
+import { Download, Award, TrendingUp, Star, ShieldCheck, DownloadCloud, Calendar, PlusCircle, Coffee, LogOut, Trophy } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+// Smooth transition styles
+const transitionStyles = `
+  html, body, #root {
+    background-color: white;
+    margin: 0;
+    padding: 0;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .transition-smooth {
+    animation: fadeIn 0.4s ease-in-out;
+  }
+`;
+
+// Coffee Cup Logo with Continuous Evaporation Animation
+const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
+    return (
+        <div 
+            className="relative"
+            style={{ width: size, height: size }}
+        >
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 100 100"
+                xmlns="http://www.w3.org/2000/svg"
+                className="drop-shadow-lg"
+            >
+                {/* Cup Body */}
+                <rect x="20" y="30" width="50" height="40" rx="4" fill="#6B4423" stroke="#3D2817" strokeWidth="1.5" />
+                
+                {/* Cup Highlight */}
+                <rect x="22" y="32" width="8" height="32" rx="3" fill="#8B5A2B" opacity="0.6" />
+                
+                {/* Handle */}
+                <path
+                    d="M 75 40 Q 90 40 90 50 Q 90 60 75 60"
+                    fill="none"
+                    stroke="#6B4423"
+                    strokeWidth="3"
+                />
+                
+                {/* Handle Highlight */}
+                <path
+                    d="M 76 42 Q 85 42 85 50 Q 85 58 76 58"
+                    fill="none"
+                    stroke="#8B5A2B"
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                />
+                
+                {/* Coffee inside */}
+                <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+                
+                {/* Evaporation Curved Lines - flowing wavy steam */}
+                {/* Line 1 - Left */}
+                <path 
+                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite' }} 
+                />
+                
+                {/* Line 2 - Center */}
+                <path 
+                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
+                />
+                
+                {/* Line 3 - Right */}
+                <path 
+                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
+                />
+                
+                <style>{`
+                    @keyframes float {
+                        0% {
+                            transform: translateY(0) scaleY(1);
+                            opacity: 0.8;
+                        }
+                        50% {
+                            opacity: 0.6;
+                        }
+                        100% {
+                            transform: translateY(-15px) scaleY(0.95);
+                            opacity: 0.4;
+                        }
+                    }
+                `}</style>
+                
+                {/* Saucer */}
+                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
+                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
+            </svg>
+        </div>
+    );
+};
 
 interface FarmerDashboardProps {
   currentUser: User;
@@ -21,6 +142,30 @@ interface FarmerDashboardProps {
   onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
   onLogout: () => void;
 }
+
+type Tab = 'dashboard' | 'events';
+
+interface TabButtonProps {
+  tab: Tab;
+  label: string;
+  icon: React.ElementType;
+  activeTab: Tab;
+  setActiveTab: (tab: Tab) => void;
+}
+
+const TabButton: React.FC<TabButtonProps> = ({ tab, label, icon: Icon, activeTab, setActiveTab }) => (
+  <button
+    onClick={() => setActiveTab(tab)}
+    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full ${
+      activeTab === tab
+        ? 'bg-primary text-white'
+        : 'text-text-dark hover:bg-gray-100'
+    }`}
+  >
+    <Icon size={18} />
+    <span className="font-medium">{label}</span>
+  </button>
+);
 
 const getRankSuffix = (rank: number) => {
     if (rank % 100 >= 11 && rank % 100 <= 13) return 'th';
@@ -359,15 +504,6 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     return Object.values(badges).sort((a,b) => b.count - a.count);
   }, [allEventsWithFarmerSamples, performanceData]);
 
-  const TabButton = ({ tab, label }: { tab: 'dashboard' | 'events', label: string }) => (
-    <button
-        onClick={() => setActiveTab(tab)}
-        className={`px-3 py-2 text-sm font-medium rounded-t-md transition-colors duration-200 ${activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-text-light hover:text-text-dark border-b-2 border-transparent'}`}
-    >
-        {label}
-    </button>
-  );
-
   const DashboardView = () => (
     <div className="space-y-8">
         {loadingEvents ? (
@@ -490,105 +626,132 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header user={currentUser} onLogout={onLogout} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
-          <h2 className="text-3xl font-bold">Farmer Dashboard</h2>
-          <div className="border-b border-border">
-            <nav className="-mb-px flex space-x-6">
-              <TabButton tab="dashboard" label="My Dashboard" />
-              <TabButton tab="events" label="Upcoming Events" />
-            </nav>
-          </div>
+    <>
+    <style>{transitionStyles}</style>
+    <div className="fixed inset-0 bg-white flex flex-col">
+        {/* Main Layout with Sidebar */}
+        <div className="flex flex-1 overflow-hidden">
+            {/* Left Sidebar Menu */}
+            <div className="w-64 bg-white border-r border-gray-100 shadow-sm overflow-y-auto flex flex-col">
+                {/* Logo Section */}
+                <div className="p-6 border-b border-gray-100 flex flex-col items-center gap-2">
+                    <CoffeeCupLogo size={56} />
+                    <div className="text-center">
+                        <h1 className="text-xl font-bold text-gray-900">Farmer Hub</h1>
+                        <p className="text-xs text-gray-500">Coffee Quality</p>
+                    </div>
+                </div>
 
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'events' && (
-            <div className="space-y-6">
-                <h3 className="text-2xl font-bold">Register for an Event</h3>
-                {upcomingEvents.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {upcomingEvents.map(event => {
-                            const farmerSamplesInEvent = farmerSamples.filter(s => event.sampleIds.includes(s.id));
-                            return (
-                                <Card key={event.id} title={event.name}>
-                                    <div className="space-y-3">
-                                        <p className="text-sm text-text-light">{event.description}</p>
-                                        <p className="text-sm font-medium"><strong className="text-text-dark">Date:</strong> {event.date ? new Date(event.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'TBD'}</p>
-                                        {farmerSamplesInEvent.length > 0 && (
-                                            <div className="pt-3 mt-3 border-t border-border">
-                                                <h4 className="font-semibold text-sm">Your Submissions:</h4>
-                                                <ul className="list-disc pl-5 text-sm text-text-light">
-                                                    {farmerSamplesInEvent.map(s => <li key={s.id}>{s.variety} ({s.processingMethod})</li>)}
-                                                </ul>
-                                            </div>
-                                        )}
-                                        <div className="pt-3">
-                                            <Button onClick={() => handleOpenRegisterModal(event)} className="w-full flex justify-center items-center space-x-2">
-                                                <PlusCircle size={16} />
-                                                <span>Register New Sample</span>
-                                            </Button>
-                                        </div>
+                {/* Navigation Menu */}
+                <nav className="flex flex-col p-4 gap-2 flex-1">
+                    <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <div className="mt-auto">
+                        <TabButton tab="dashboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={setActiveTab} />
+                    </div>
+                </nav>
+
+                {/* Farmer Profile Section at Bottom */}
+                <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+                    {/* Farmer Profile Card */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200 w-full">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                            {currentUser?.name?.[0]?.toUpperCase() || 'F'}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-semibold text-gray-600">Farmer</span>
+                            <span className="text-xs font-bold text-gray-800 truncate">{currentUser?.name || 'Farmer'}</span>
+                        </div>
+                    </div>
+
+                    {/* Logout Button */}
+                    <button
+                        onClick={onLogout}
+                        className="w-full flex items-center gap-2 justify-center bg-red-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                    >
+                        <LogOut size={16} />
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white via-white to-amber-50/30">
+                <div className="p-6">
+                    {activeTab === 'dashboard' && <DashboardView />}
+                    {activeTab === 'events' && (
+                        <div className="space-y-6">
+                            <h3 className="text-2xl font-bold text-primary">Register for an Event</h3>
+                            {upcomingEvents.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {upcomingEvents.map(event => {
+                                        const farmerSamplesInEvent = farmerSamples.filter(s => event.sampleIds.includes(s.id));
+                                        return (
+                                            <Card key={event.id} title={event.name}>
+                                                <div className="space-y-3">
+                                                    <p className="text-sm text-text-light">{event.description}</p>
+                                                    <p className="text-sm font-medium"><strong className="text-text-dark">Date:</strong> {event.date ? new Date(event.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'TBD'}</p>
+                                                    {farmerSamplesInEvent.length > 0 && (
+                                                        <div className="pt-3 mt-3 border-t border-border">
+                                                            <h4 className="font-semibold text-sm">Your Submissions:</h4>
+                                                            <ul className="list-disc pl-5 text-sm text-text-light">
+                                                                {farmerSamplesInEvent.map(s => <li key={s.id}>{s.variety} ({s.processingMethod})</li>)}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    <div className="pt-3">
+                                                        <Button onClick={() => handleOpenRegisterModal(event)} className="w-full flex justify-center items-center space-x-2 bg-primary text-white hover:bg-primary/90">
+                                                            <PlusCircle size={16} />
+                                                            <span>Register New Sample</span>
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <Card>
+                                    <div className="text-center p-8">
+                                        <Calendar size={40} className="mx-auto text-text-light mb-4"/>
+                                        <p className="text-text-light">There are no events open for registration at this time. Please check back later!</p>
                                     </div>
                                 </Card>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <Card>
-                        <div className="text-center p-8">
-                            <Calendar size={40} className="mx-auto text-text-light mb-4"/>
-                            <p className="text-text-light">There are no events open for registration at this time. Please check back later!</p>
+                            )}
                         </div>
-                    </Card>
-                )}
+                    )}
+
+                    <Modal isOpen={!!viewingReportForSample} onClose={() => setViewingReportForSample(null)} title="Official Cupping Report" size="xl">
+                        {viewingReportForSample && <SampleReport sample={viewingReportForSample} appData={appData} />}
+                    </Modal>
+
+                    <Modal isOpen={!!viewingCertificateFor} onClose={() => setViewingCertificateFor(null)} title="Official Certificate" size="xl">
+                        {viewingCertificateFor && (
+                            <div className="certificate-print-area -m-6">
+                                <Certificate
+                                    sample={viewingCertificateFor.sample}
+                                    event={viewingCertificateFor.event}
+                                    farmer={currentUser}
+                                    rank={viewingCertificateFor.rank}
+                                />
+                            </div>
+                        )}
+                    </Modal>
+
+                    {selectedEventForRegistration && (
+                        <RegistrationModal 
+                            isOpen={isRegisterModalOpen}
+                            onClose={handleCloseRegisterModal}
+                            onSubmit={handleRegisterSubmit}
+                            event={selectedEventForRegistration}
+                            lastSample={farmerSamples[0]}
+                        />
+                    )}
+                </div>
             </div>
-        )}
-
-      <Modal isOpen={!!viewingReportForSample} onClose={() => setViewingReportForSample(null)} title="Official Cupping Report" size="xl">
-        {viewingReportForSample && <SampleReport sample={viewingReportForSample} appData={appData} />}
-      </Modal>
-
-      <Modal isOpen={!!viewingCertificateFor} onClose={() => setViewingCertificateFor(null)} title="Official Certificate" size="xl">
-        {viewingCertificateFor && (
-            <div className="certificate-print-area -m-6">
-                <Certificate
-                    sample={viewingCertificateFor.sample}
-                    event={viewingCertificateFor.event}
-                    farmer={currentUser}
-                    rank={viewingCertificateFor.rank}
-                />
-            </div>
-        )}
-      </Modal>
-
-      {selectedEventForRegistration && (
-            <RegistrationModal 
-                isOpen={isRegisterModalOpen}
-                onClose={handleCloseRegisterModal}
-                onSubmit={handleRegisterSubmit}
-                event={selectedEventForRegistration}
-                lastSample={farmerSamples[0]}
-            />
-        )}
-
-      <div className="fixed bottom-4 right-4">
-        <button
-          onClick={onLogout}
-          className="bg-red-500 text-white px-4 py-2 rounded shadow hover:bg-red-600"
-        >
-          Logout
-        </button>
-      </div>
-
-      <div className="fixed bottom-4 left-4">
-        <Button onClick={() => navigate('/leaderboard?redirect=/farmer-dashboard')} className="bg-primary text-white px-4 py-2 rounded shadow hover:bg-primary-dark">
-          View Leaderboard Results
-        </Button>
-      </div>
         </div>
-      </div>
     </div>
+    </>
   );
 };
 
