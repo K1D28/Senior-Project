@@ -8,8 +8,52 @@ import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Modal } from '../ui/Modal';
-import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles } from 'lucide-react';
+import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+// Coffee Cup Logo with Continuous Evaporation Animation
+const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
+    return (
+        <div 
+            className="relative"
+            style={{ width: size, height: size }}
+        >
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 100 100"
+                xmlns="http://www.w3.org/2000/svg"
+                className="drop-shadow-lg"
+            >
+                {/* Cup Body */}
+                <rect x="20" y="30" width="50" height="40" rx="4" fill="#6B4423" stroke="#3D2817" strokeWidth="1.5" />
+                
+                {/* Cup Highlight */}
+                <rect x="22" y="32" width="8" height="32" rx="3" fill="#8B5A2B" opacity="0.6" />
+                
+                {/* Handle */}
+                <path
+                    d="M 75 40 Q 90 40 90 50 Q 90 60 75 60"
+                    fill="none"
+                    stroke="#6B4423"
+                    strokeWidth="3"
+                />
+                
+                {/* Handle Highlight */}
+                <path
+                    d="M 76 42 Q 85 42 85 50 Q 85 58 76 58"
+                    fill="none"
+                    stroke="#8B5A2B"
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                />
+                
+                {/* Coffee inside */}
+                <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+            </svg>
+        </div>
+    );
+};
 
 const HIGH_VARIANCE_THRESHOLD = 0.75; // For overall attribute stdDev (in Variance column)
 const MEDIUM_VARIANCE_THRESHOLD = 0.4; // For overall attribute stdDev (in Variance column)
@@ -303,6 +347,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'adjudicate' | 'leaderboard'>('adjudicate');
     const navigate = useNavigate();
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
@@ -667,15 +712,23 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         {/* Navigation */}
                         <nav className="flex flex-col p-4 gap-2 flex-1">
                             <button
-                                onClick={() => setSelectedEvent(null)}
-                                className="w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg bg-primary text-white shadow-md"
+                                onClick={() => setActiveTab('adjudicate')}
+                                className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                                  activeTab === 'adjudicate' 
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                                }`}
                             >
                                 <Coffee size={18} />
                                 <span>Adjudicate</span>
                             </button>
                             <button
-                                onClick={() => navigate('/leaderboard?redirect=/headjudge-dashboard')}
-                                className="w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg text-gray-700 hover:bg-gray-100"
+                                onClick={() => setActiveTab('leaderboard')}
+                                className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                                  activeTab === 'leaderboard' 
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                                }`}
                             >
                                 <Trophy size={18} />
                                 <span>Leaderboard</span>
@@ -769,18 +822,26 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     <nav className="flex flex-col p-4 gap-2 flex-1">
                         <button
                             onClick={() => {
-                                // Already on adjudicate list, just clear selection
+                                setActiveTab('adjudicate');
                                 setSelectedEvent(null);
                                 setSelectedSample(null);
                             }}
-                            className="w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg bg-primary text-white shadow-md"
+                            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                              activeTab === 'adjudicate' 
+                                ? 'bg-primary text-white shadow-md'
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
                         >
                             <Coffee size={18} />
                             <span>Adjudicate</span>
                         </button>
                         <button
-                            onClick={() => navigate('/leaderboard?redirect=/headjudge-dashboard')}
-                            className="w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg text-gray-700 hover:bg-gray-100"
+                            onClick={() => setActiveTab('leaderboard')}
+                            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                              activeTab === 'leaderboard' 
+                                ? 'bg-primary text-white shadow-md'
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
                         >
                             <Trophy size={18} />
                             <span>Leaderboard</span>
@@ -814,6 +875,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 {/* Main Content Area */}
                 <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white via-white to-blue-50/30">
                     <div className="p-6">
+                        {activeTab === 'adjudicate' && (
                         <Card className="transition-smooth">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-2xl font-extrabold text-primary">Adjudication Events</h3>
@@ -931,108 +993,78 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 )}
                             </div>
                         </Card>
+                        )}
+                        {activeTab === 'leaderboard' && (
+                        <div className="space-y-6">
+                                <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
+                                {appData.events.length > 0 && appData.events.some(e => e.isResultsRevealed && e.sampleIds.length > 0) ? (
+                                    appData.events
+                                      .filter(e => e.isResultsRevealed && e.sampleIds.length > 0)
+                                      .map(event => {
+                                        const eventSamples = appData.samples.filter(s => event.sampleIds.includes(s.id) && s.sampleType !== 'CALIBRATION');
+                                        const rankedSamples = eventSamples
+                                          .filter(s => s.adjudicatedFinalScore !== undefined)
+                                          .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0));
+                                        
+                                        const getRankSuffix = (rank: number) => {
+                                          if (rank % 100 >= 11 && rank % 100 <= 13) return 'th';
+                                          switch (rank % 10) {
+                                            case 1: return 'st';
+                                            case 2: return 'nd';
+                                            case 3: return 'rd';
+                                            default: return 'th';
+                                          }
+                                        };
+                                        
+                                        const getGradeFromScore = (score: number) => {
+                                          if (score >= 90) return 'Outstanding';
+                                          if (score >= 85) return 'Excellent';
+                                          if (score >= 80) return 'Specialty';
+                                          return 'Below Specialty';
+                                        };
+
+                                        return (
+                                          <Card key={event.id} title={event.name}>
+                                            <div className="overflow-x-auto">
+                                              <table className="w-full text-sm">
+                                                <thead>
+                                                  <tr className="border-b border-border bg-background">
+                                                    <th className="text-left py-2 px-3 font-semibold">Rank</th>
+                                                    <th className="text-left py-2 px-3 font-semibold">Farm Name</th>
+                                                    <th className="text-left py-2 px-3 font-semibold">Variety</th>
+                                                    <th className="text-left py-2 px-3 font-semibold">Region</th>
+                                                    <th className="text-left py-2 px-3 font-semibold">Score</th>
+                                                    <th className="text-left py-2 px-3 font-semibold">Grade</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {rankedSamples.map((sample, index) => (
+                                                    <tr key={sample.id} className="border-b border-border hover:bg-gray-50">
+                                                      <td className="py-2 px-3 font-bold text-primary">{index + 1}{getRankSuffix(index + 1)}</td>
+                                                      <td className="py-2 px-3 font-semibold">{sample.farmName}</td>
+                                                      <td className="py-2 px-3">{sample.variety}</td>
+                                                      <td className="py-2 px-3">{sample.region || '--'}</td>
+                                                      <td className="py-2 px-3 font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</td>
+                                                      <td className="py-2 px-3 text-sm">{getGradeFromScore(sample.adjudicatedFinalScore ?? 0)}</td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </Card>
+                                        );
+                                      })
+                                ) : (
+                                    <Card>
+                                        <p className="text-center text-text-light">No leaderboard data available yet. Check back once competition results are revealed.</p>
+                                    </Card>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
 
-        </div>
-    );
-};
-
-// Coffee Cup Logo with Continuous Evaporation Animation
-const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
-    return (
-        <div 
-            className="relative"
-            style={{ width: size, height: size }}
-        >
-            <svg
-                width={size}
-                height={size}
-                viewBox="0 0 100 100"
-                xmlns="http://www.w3.org/2000/svg"
-                className="drop-shadow-lg"
-            >
-                {/* Cup Body */}
-                <rect x="20" y="30" width="50" height="40" rx="4" fill="#6B4423" stroke="#3D2817" strokeWidth="1.5" />
-                
-                {/* Cup Highlight */}
-                <rect x="22" y="32" width="8" height="32" rx="3" fill="#8B5A2B" opacity="0.6" />
-                
-                {/* Handle */}
-                <path
-                    d="M 75 40 Q 90 40 90 50 Q 90 60 75 60"
-                    fill="none"
-                    stroke="#6B4423"
-                    strokeWidth="3"
-                />
-                
-                {/* Handle Highlight */}
-                <path
-                    d="M 76 42 Q 85 42 85 50 Q 85 58 76 58"
-                    fill="none"
-                    stroke="#8B5A2B"
-                    strokeWidth="1.5"
-                    opacity="0.5"
-                />
-                
-                {/* Coffee inside */}
-                <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
-                
-                {/* Evaporation Curved Lines - flowing wavy steam */}
-                {/* Line 1 - Left */}
-                <path 
-                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
-                    stroke="#B8860B" 
-                    strokeWidth="3" 
-                    fill="none" 
-                    strokeLinecap="round"
-                    opacity="0.8"
-                    style={{ animation: 'float 2s ease-in-out infinite' }} 
-                />
-                
-                {/* Line 2 - Center */}
-                <path 
-                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
-                    stroke="#B8860B" 
-                    strokeWidth="3" 
-                    fill="none" 
-                    strokeLinecap="round"
-                    opacity="0.8"
-                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
-                />
-                
-                {/* Line 3 - Right */}
-                <path 
-                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
-                    stroke="#B8860B" 
-                    strokeWidth="3" 
-                    fill="none" 
-                    strokeLinecap="round"
-                    opacity="0.8"
-                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
-                />
-                
-                <style>{`
-                    @keyframes float {
-                        0% {
-                            transform: translateY(0) scaleY(1);
-                            opacity: 0.8;
-                        }
-                        50% {
-                            opacity: 0.6;
-                        }
-                        100% {
-                            transform: translateY(-15px) scaleY(0.95);
-                            opacity: 0.4;
-                        }
-                    }
-                `}</style>
-                
-                {/* Saucer */}
-                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
-                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
-            </svg>
         </div>
     );
 };

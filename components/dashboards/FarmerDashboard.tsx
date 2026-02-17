@@ -143,7 +143,7 @@ interface FarmerDashboardProps {
   onLogout: () => void;
 }
 
-type Tab = 'dashboard' | 'events';
+type Tab = 'dashboard' | 'events' | 'leaderboard';
 
 interface TabButtonProps {
   tab: Tab;
@@ -268,7 +268,7 @@ const RegistrationModal: React.FC<{
 const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData, onRegisterForEvent, onLogout }) => {
   const [viewingReportForSample, setViewingReportForSample] = useState<CoffeeSample | null>(null);
   const [viewingCertificateFor, setViewingCertificateFor] = useState<{ sample: CoffeeSample, event: CuppingEvent, rank: number } | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'events'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'events' | 'leaderboard'>('dashboard');
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedEventForRegistration, setSelectedEventForRegistration] = useState<CuppingEvent | null>(null);
@@ -647,7 +647,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                     <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={setActiveTab} />
                     <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={setActiveTab} />
                     <div className="mt-auto">
-                        <TabButton tab="dashboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={setActiveTab} />
+                        <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={setActiveTab} />
                     </div>
                 </nav>
 
@@ -716,6 +716,49 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                         <Calendar size={40} className="mx-auto text-text-light mb-4"/>
                                         <p className="text-text-light">There are no events open for registration at this time. Please check back later!</p>
                                     </div>
+                                </Card>
+                            )}
+                        </div>
+                    )}
+                    {activeTab === 'leaderboard' && (
+                        <div className="space-y-6">
+                            <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
+                            {allEventsWithFarmerSamples.length > 0 && allEventsWithFarmerSamples.some(e => e.rankedEventSamples.length > 0) ? (
+                                allEventsWithFarmerSamples
+                                  .filter(e => e.isResultsRevealed && e.rankedEventSamples.length > 0)
+                                  .map(event => (
+                                    <Card key={event.id} title={event.name}>
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                          <thead>
+                                            <tr className="border-b border-border bg-background">
+                                              <th className="text-left py-2 px-3 font-semibold">Rank</th>
+                                              <th className="text-left py-2 px-3 font-semibold">Farm Name</th>
+                                              <th className="text-left py-2 px-3 font-semibold">Variety</th>
+                                              <th className="text-left py-2 px-3 font-semibold">Region</th>
+                                              <th className="text-left py-2 px-3 font-semibold">Score</th>
+                                              <th className="text-left py-2 px-3 font-semibold">Grade</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {event.rankedEventSamples.map((sample, index) => (
+                                              <tr key={sample.id} className="border-b border-border hover:bg-gray-50">
+                                                <td className="py-2 px-3 font-bold text-primary">{index + 1}{getRankSuffix(index + 1)}</td>
+                                                <td className="py-2 px-3 font-semibold">{sample.farmName}</td>
+                                                <td className="py-2 px-3">{sample.variety}</td>
+                                                <td className="py-2 px-3">{sample.region || '--'}</td>
+                                                <td className="py-2 px-3 font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</td>
+                                                <td className="py-2 px-3 text-sm">{getGradeFromScore(sample.adjudicatedFinalScore ?? 0)}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </Card>
+                                  ))
+                            ) : (
+                                <Card>
+                                    <p className="text-center text-text-light">No leaderboard data available yet. Check back once competition results are revealed.</p>
                                 </Card>
                             )}
                         </div>

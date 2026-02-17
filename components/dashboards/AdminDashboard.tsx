@@ -1365,10 +1365,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         )}
 
         {activeTab === 'leaderboard' && (
-            <PublicLeaderboard
-                appData={appData}
-                onExit={() => setActiveTab('events')}
-            />
+            <Card>
+                <div className="space-y-6">
+                    <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
+                    {appData.events.length > 0 && appData.events.some(e => e.isResultsRevealed && e.sampleIds.length > 0) ? (
+                        appData.events
+                          .filter(e => e.isResultsRevealed && e.sampleIds.length > 0)
+                          .map(event => {
+                            const eventSamples = appData.samples.filter(s => event.sampleIds.includes(s.id) && s.sampleType !== 'CALIBRATION');
+                            const rankedSamples = eventSamples
+                              .filter(s => s.adjudicatedFinalScore !== undefined)
+                              .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0));
+                            
+                            const getRankSuffix = (rank: number) => {
+                              if (rank % 100 >= 11 && rank % 100 <= 13) return 'th';
+                              switch (rank % 10) {
+                                case 1: return 'st';
+                                case 2: return 'nd';
+                                case 3: return 'rd';
+                                default: return 'th';
+                              }
+                            };
+                            
+                            const getGradeFromScore = (score: number) => {
+                              if (score >= 90) return 'Outstanding';
+                              if (score >= 85) return 'Excellent';
+                              if (score >= 80) return 'Specialty';
+                              return 'Below Specialty';
+                            };
+
+                            return (
+                              <Card key={event.id} title={event.name}>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-border bg-background">
+                                        <th className="text-left py-2 px-3 font-semibold">Rank</th>
+                                        <th className="text-left py-2 px-3 font-semibold">Farm Name</th>
+                                        <th className="text-left py-2 px-3 font-semibold">Variety</th>
+                                        <th className="text-left py-2 px-3 font-semibold">Region</th>
+                                        <th className="text-left py-2 px-3 font-semibold">Score</th>
+                                        <th className="text-left py-2 px-3 font-semibold">Grade</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rankedSamples.map((sample, index) => (
+                                        <tr key={sample.id} className="border-b border-border hover:bg-gray-50">
+                                          <td className="py-2 px-3 font-bold text-primary">{index + 1}{getRankSuffix(index + 1)}</td>
+                                          <td className="py-2 px-3 font-semibold">{sample.farmName}</td>
+                                          <td className="py-2 px-3">{sample.variety}</td>
+                                          <td className="py-2 px-3">{sample.region || '--'}</td>
+                                          <td className="py-2 px-3 font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</td>
+                                          <td className="py-2 px-3 text-sm">{getGradeFromScore(sample.adjudicatedFinalScore ?? 0)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </Card>
+                            );
+                          })
+                    ) : (
+                        <div className="text-center py-12">
+                            <p className="text-lg text-gray-400 font-semibold">No leaderboard data available</p>
+                            <p className="text-sm text-gray-500 mt-2">Check back once competition results are revealed.</p>
+                        </div>
+                    )}
+                </div>
+            </Card>
         )}
 
         {/* Modals */}
