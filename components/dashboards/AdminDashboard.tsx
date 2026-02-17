@@ -1195,7 +1195,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                 <SortableHeader label="Processing Method" sortKey="processingMethod" />
                                 <SortableHeader label="Variety" sortKey="variety" />
                                 <SortableHeader label="Farmer" sortKey="farmerName" />
-                                <SortableHeader label="Type" sortKey="sampleType" />
+                                <SortableHeader label="Submitted By" sortKey="sampleType" />
                                 <SortableHeader label="Status" sortKey="approvalStatus" />
                                 <SortableHeader label="Moisture %" sortKey="moisture" />
                                 <th className="p-2">Actions</th>
@@ -1218,9 +1218,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${
                                                 sample.sampleType === 'CALIBRATION' ? 'bg-purple-100 text-purple-800' :
                                                 sample.sampleType === 'FARMER_REGISTERED' ? 'bg-blue-100 text-blue-800' :
-                                                'bg-gray-100 text-gray-800'
+                                                'bg-orange-100 text-orange-800'
                                             }`}>
-                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : 'Other'}
+                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : '👤 Admin'}
                                             </span>
                                         </td>
                                         <td className="p-2">

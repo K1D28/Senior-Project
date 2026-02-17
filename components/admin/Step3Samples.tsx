@@ -4,7 +4,7 @@ import { CoffeeSample, User } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Upload } from 'lucide-react';
 import { Card } from '../ui/Card';
 
 interface Step3SamplesProps {
@@ -48,11 +48,79 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
         onUpdate(newData);
     };
 
+    const handleCSVImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const csv = e.target?.result as string;
+                const lines = csv.split('\n').filter(line => line.trim());
+                
+                // Skip header row (assumed to be: farmName,variety,region,processingMethod,altitude,moisture,farmerId)
+                const importedSamples: CoffeeSample[] = [];
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim());
+                    
+                    if (values.length < 7) continue; // Skip incomplete rows
+                    
+                    const newSample: CoffeeSample = {
+                        id: `temp-${Date.now()}-${i}`,
+                        blindCode: `CSV-${Date.now()}-${i}`,
+                        farmName: values[0],
+                        variety: values[1],
+                        region: values[2],
+                        processingMethod: values[3] || processingMethods[0] || '',
+                        altitude: parseFloat(values[4]) || 0,
+                        moisture: parseFloat(values[5]) || 0,
+                        farmerId: values[6],
+                        sampleType: 'PROXY_SUBMISSION',
+                    };
+                    
+                    importedSamples.push(newSample);
+                }
+                
+                if (importedSamples.length > 0) {
+                    onUpdate([...data, ...importedSamples]);
+                    alert(`Successfully imported ${importedSamples.length} samples from CSV`);
+                } else {
+                    alert('No valid samples found in CSV file');
+                }
+            } catch (error) {
+                alert('Error parsing CSV file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            }
+        };
+        reader.readAsText(file);
+        
+        // Reset input
+        event.target.value = '';
+    };
+
     return (
         <div className="space-y-6">
             {/* Proxy Submissions Section */}
             <Card title="Coffee Samples">
                 <p className="text-sm text-text-light mb-4">Add coffee samples submitted by farmers or via admin submission.</p>
+                
+                {/* CSV Import Section */}
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-sm mb-2">Import from CSV</h4>
+                            <p className="text-xs text-text-light mb-3">Format: farmName, variety, region, processingMethod, altitude, moisture, farmerId (one sample per line)</p>
+                            <input
+                                type="file"
+                                accept=".csv"
+                                onChange={handleCSVImport}
+                                className="text-sm"
+                            />
+                        </div>
+                        <Upload size={24} className="text-blue-600" />
+                    </div>
+                </div>
+
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left table-auto">
                         <thead>

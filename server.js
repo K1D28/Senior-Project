@@ -80,6 +80,25 @@ function serializeEvent(event) {
   return normalized;
 }
 
+// Helper: Generate blind code from event name and random digits
+// Format: First letters of event name words + random 4 digits
+// Example: "Championship Coffee Cup" -> "CCC-8472"
+function generateBlindCode(eventName) {
+  if (!eventName) {
+    // Fallback if no event name
+    return `BC-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+  }
+  
+  // Extract first letter of each word and uppercase
+  const words = eventName.trim().split(/\s+/);
+  const acronym = words.map(word => word.charAt(0).toUpperCase()).join('');
+  
+  // Generate random 4 digits
+  const randomDigits = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  
+  return `${acronym}-${randomDigits}`;
+}
+
 // Middleware to verify Supabase tokens
 const verifySupabaseToken = async (req, res, next) => {
   // Retrieve token from cookie `token`, or fallback to Authorization: Bearer <token>
@@ -766,8 +785,11 @@ app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
       return res.status(403).json({ message: 'Only admins can approve samples' });
     }
 
-    // Get the sample
-    const sample = await prisma.sample.findUnique({ where: { id: parseInt(id) } });
+    // Get the sample with its event
+    const sample = await prisma.sample.findUnique({
+      where: { id: parseInt(id) },
+      include: { cuppingEvent: true }
+    });
     if (!sample) {
       return res.status(404).json({ message: 'Sample not found' });
     }
@@ -777,12 +799,12 @@ app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
       return res.status(400).json({ message: 'Only pending farmer-registered samples can be approved' });
     }
 
-    // Approve and generate blind code
+    // Approve and generate blind code from event name
     const approvedSample = await prisma.sample.update({
       where: { id: parseInt(id) },
       data: {
         approvalStatus: 'APPROVED',
-        blindCode: crypto.randomUUID(), // Generate unique blind code
+        blindCode: generateBlindCode(sample.cuppingEvent?.name || 'Sample'), // Generate blind code from event name
         approvedByAdminId: admin.id,
         approvalDate: new Date(),
       },
@@ -1014,7 +1036,7 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
       }
       transformedSamples.push({
-        blindCode: crypto.randomUUID(), // Always generate UUID for admin-created samples
+        blindCode: generateBlindCode(name), // Generate blind code from event name + random digits
         farmerId: farmerId,
         processingMethod: sample.processingMethod,
         farmName: sample.farmName,
@@ -1747,7 +1769,7 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
                 const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
                 const finalFarmerId = sampleType === 'CALIBRATION' ? null : parseInt(sample.farmerId);
                 // Admin-added samples are automatically approved with generated blind codes
-                const blindCode = crypto.randomUUID();
+                const blindCode = generateBlindCode(event.name);
                 const approvalStatus = 'APPROVED';
                 
                 console.log(`Creating sample: sampleType=${sampleType}, blindCode=${blindCode}, approvalStatus=${approvalStatus}`);
