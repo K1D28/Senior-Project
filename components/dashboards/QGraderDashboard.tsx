@@ -129,9 +129,9 @@ const DescriptorItem: React.FC<{ descriptor: Descriptor; onIntensityChange: (nam
 );
 
 // --- Cupping Form Component ---
-interface CuppingFormProps { scoreSheet: ScoreSheet; sample: CoffeeSample; onSave: (updatedSheet: ScoreSheet) => void; onBack: () => void; }
+interface CuppingFormProps { scoreSheet: ScoreSheet; sample: CoffeeSample; onSave: (updatedSheet: ScoreSheet) => void; onBack: () => void; onAIAnalyze?: () => void; isAILoading?: boolean; isAIModalOpen?: boolean; aiAnalysis?: string; onCloseAIModal?: () => void; }
 
-const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, onBack }) => {
+const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, onBack, onAIAnalyze, isAILoading, isAIModalOpen, aiAnalysis, onCloseAIModal }) => {
     const [scores, setScores] = useState<CuppingScore>(scoreSheet.scores);
     const [notes, setNotes] = useState(scoreSheet.notes);
     const [descriptors, setDescriptors] = useState<Descriptor[]>(scoreSheet.descriptors);
@@ -147,6 +147,12 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
     }, [scores]);
 
     const debouncedSave = useCallback(debounce((sheetToSave: ScoreSheet) => { onSave(sheetToSave); setSaveStatus('saved'); }, 1500), [onSave]);
+
+    useEffect(() => {
+        if (aiAnalysis) {
+            setNotes(prev => prev ? `${prev}\n\n${aiAnalysis}` : aiAnalysis);
+        }
+    }, [aiAnalysis]);
 
     useEffect(() => {
         if (isInitialMount.current) { isInitialMount.current = false; return; }
@@ -183,8 +189,19 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
     return (
         <div className="pb-24">
             <Card>
-                <div className="p-4 bg-background border-b border-border -m-6 mb-6">
+                <div className="p-4 bg-background border-b border-border -m-6 mb-6 flex justify-between items-center">
                     <h3 className="text-lg font-bold text-text-dark">Scoring Sample: <span className={`font-mono ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h3>
+                    {onAIAnalyze && (
+                        <Button 
+                            size="sm"
+                            onClick={onAIAnalyze} 
+                            disabled={isAILoading}
+                            className="flex items-center space-x-1"
+                        >
+                            <Sparkles size={16} />
+                            <span>AI Analyze</span>
+                        </Button>
+                    )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                     {/* Scores Column */}
@@ -257,6 +274,31 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                     </div>
                 </div>
             </div>
+            
+            {/* AI Analysis Modal */}
+            {isAIModalOpen && (
+                <Modal isOpen={isAIModalOpen} onClose={onCloseAIModal} title="🤖 AI Sample Analysis" size="xl">
+                    <div className="space-y-4">
+                        {isAILoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin">
+                                    <Sparkles size={32} className="text-primary" />
+                                </div>
+                                <span className="ml-3 text-primary font-semibold">Analyzing sample...</span>
+                            </div>
+                        ) : (
+                            <div className="prose prose-sm max-w-none">
+                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 whitespace-pre-wrap text-sm text-gray-700">
+                                    {aiAnalysis}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-2 border-t border-border pt-4">
+                        <Button variant="secondary" onClick={onCloseAIModal}>Close</Button>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };
@@ -268,7 +310,15 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
     const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<string>('');
+    const [aiLoading, setAiLoading] = useState(false);
     const navigate = useNavigate();
+
+    // Clear AI analysis when switching samples to keep analysis isolated per sample
+    useEffect(() => {
+        setAiAnalysis('');
+    }, [selectedSample?.id, selectedSample?.blindCode]);
 
     useEffect(() => {
         const fetchAssignedEvents = async () => {
@@ -328,8 +378,52 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         'Finalized': { icon: <Lock className="text-blue-600" />, text: 'Finalized', className: 'text-blue-700', borderColor: 'border-blue-500' }
     };
 
+    const handleAIAnalysis = async () => {
+        if (!selectedSample || !selectedEvent) return;
+        
+        try {
+            setAiLoading(true);
+            const scoreSheet = getOrCreateScoreSheet(String(selectedSample.id));
+            
+            const response = await fetch('http://localhost:5001/api/analyze-sample', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    sampleId: selectedSample.id,
+                    sampleName: `${selectedSample.blindCode}`,
+                    farmName: selectedSample.farmName,
+                    region: selectedSample.region,
+                    variety: selectedSample.variety,
+                    processingMethod: selectedSample.processingMethod,
+                    qGraderScores: scoreSheet.scores,
+                    headJudgeNotes: scoreSheet.notes,
+                    analysisType: 'qgrader',
+                }),
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('AI Analysis data received:', data);
+                setAiAnalysis(data.analysis);
+                console.log('Setting isAIModalOpen to true');
+                setIsAIModalOpen(true);
+            } else {
+                alert('Error analyzing sample. Make sure CLAUDE_API_KEY is set.');
+            }
+        } catch (error) {
+            console.error('AI Analysis error:', error);
+            alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     if (selectedSample && selectedEvent) {
-        return <CuppingForm scoreSheet={getOrCreateScoreSheet(selectedSample.id)} sample={selectedSample} onSave={onUpdateScoreSheet} onBack={() => setSelectedSample(null)} />
+        return <CuppingForm scoreSheet={getOrCreateScoreSheet(selectedSample.id)} sample={selectedSample} onSave={onUpdateScoreSheet} onBack={() => setSelectedSample(null)} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} isAIModalOpen={isAIModalOpen} aiAnalysis={aiAnalysis} onCloseAIModal={() => setIsAIModalOpen(false)} />
     }
 
     if (selectedEvent) {
