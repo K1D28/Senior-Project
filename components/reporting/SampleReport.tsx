@@ -178,7 +178,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                     <div className="p-4 border border-border rounded-lg bg-background">
                         <h3 className="font-bold text-lg mb-2 border-b border-border pb-2">Sample Information</h3>
                         <div className="text-sm space-y-1">
-                            <p><strong className="w-28 inline-block">Farmer:</strong> {farmer?.name}</p>
+                            <p><strong className="w-28 inline-block">Farmer:</strong> {sample.farmerName || farmer?.name || 'Unknown Farmer'}</p>
                             <p><strong className="w-28 inline-block">Farm Name:</strong> {sample.farmName}</p>
                             <p><strong className="w-28 inline-block">Region:</strong> {sample.region}</p>
                             <p><strong className="w-28 inline-block">Variety:</strong> {sample.variety}</p>
@@ -283,6 +283,85 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                 </section>
                 <section>
                     <ScoreAnalysisSection />
+                </section>
+                
+                {/* Q Grader Individual Scores Section */}
+                <section className="p-4 border border-border rounded-lg">
+                    <h3 className="font-bold text-lg mb-4">Q Grader Individual Scores</h3>
+                    {scoresForSample.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-primary/10 border-b-2 border-primary">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left font-semibold">Q Grader</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Fragrance</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Flavor</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Aftertaste</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Acidity</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Body</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Balance</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Uniformity</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Clean Cup</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Sweetness</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Overall</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Final</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {scoresForSample.map((score, idx) => {
+                                        const qGrader = appData.users.find(u => u.id === score.qGraderId);
+                                        return (
+                                            <tr key={score.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-background'}>
+                                                <td className="px-3 py-2 font-semibold text-text-dark">{qGrader?.name || 'Unknown Q Grader'}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.fragrance.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.flavor.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.aftertaste.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.acidity.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.body.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.balance.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.uniformity.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.cleanCup.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center">{score.scores.sweetness.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center font-semibold">{score.scores.overall.toFixed(1)}</td>
+                                                <td className="px-3 py-2 text-center font-bold text-primary">{score.scores.finalScore.toFixed(2)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-text-light">No Q Grader scores available yet.</p>
+                    )}
+                </section>
+
+                {/* Head Judge Adjudication Details */}
+                <section className="p-4 border border-border rounded-lg">
+                    <h3 className="font-bold text-lg mb-4">Head Judge Adjudication</h3>
+                    <div className="space-y-4">
+                        <div>
+                            <p className="font-semibold mb-2">Final Adjudicated Score</p>
+                            <p className="text-3xl font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</p>
+                        </div>
+                        {sample.adjudicationJustification && (
+                            <div>
+                                <p className="font-semibold mb-2">Adjudication Justification</p>
+                                <p className="text-sm text-text-dark pl-3 border-l-4 border-primary bg-primary/5 py-2">{sample.adjudicationJustification}</p>
+                            </div>
+                        )}
+                        {sample.headJudgeNotes && (
+                            <div>
+                                <p className="font-semibold mb-2">Head Judge Notes</p>
+                                <p className="text-sm text-text-dark pl-3 border-l-4 border-primary bg-primary/5 py-2">{sample.headJudgeNotes}</p>
+                            </div>
+                        )}
+                        {sample.flaggedForDiscussion && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                                <p className="font-semibold text-yellow-900 mb-1">⚠️ Flagged for Discussion</p>
+                                <p className="text-sm text-yellow-800">This sample was flagged by the head judge for further discussion or review.</p>
+                            </div>
+                        )}
+                    </div>
                 </section>
             </main>
         </div>

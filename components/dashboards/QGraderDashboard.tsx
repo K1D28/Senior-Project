@@ -286,6 +286,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'cupping' | 'leaderboard'>('cupping');
+    const [leaderboardEvents, setLeaderboardEvents] = useState<CuppingEvent[]>([]);
+    const [leaderboardSamples, setLeaderboardSamples] = useState<CoffeeSample[]>([]);
     const navigate = useNavigate();
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
@@ -316,6 +318,32 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
             }
         };
         fetchAssignedEvents();
+    }, []);
+
+    // Fetch all events and samples for leaderboard display
+    useEffect(() => {
+        const fetchLeaderboardData = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                
+                const [eventsResponse, samplesResponse] = await Promise.all([
+                    fetch('/api/cupping-events', { method: 'GET', credentials: 'include', headers }),
+                    fetch('/api/samples', { method: 'GET', credentials: 'include', headers })
+                ]);
+
+                if (eventsResponse.ok && samplesResponse.ok) {
+                    const events = await eventsResponse.json();
+                    const samples = await samplesResponse.json();
+                    
+                    setLeaderboardEvents(events.map((e: any) => ({ ...e, id: String(e.id), sampleIds: (e.sampleIds || []).map((id: any) => String(id)) })));
+                    setLeaderboardSamples((samples || []).map((s: any) => ({ ...s, id: String(s.id) })));
+                }
+            } catch (error) {
+                console.error('Error fetching leaderboard data:', error);
+            }
+        };
+        fetchLeaderboardData();
     }, []);
 
     // Samples come from the server as `sampleObjects` on each event. Do not use appData.samples.
@@ -665,11 +693,13 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                         {activeTab === 'leaderboard' && (
                             <div className="space-y-6">
                                 <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
-                                {appData.events.length > 0 && appData.events.some(e => e.isResultsRevealed && e.sampleIds.length > 0) ? (
-                                    appData.events
-                                      .filter(e => e.isResultsRevealed && e.sampleIds.length > 0)
+                                {console.log('QGrader Leaderboard Debug:', { eventsCount: leaderboardEvents.length, revealedCount: leaderboardEvents.filter(e => e.isResultsRevealed).length, revealedWithSamples: leaderboardEvents.filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0).length, events: leaderboardEvents.map(e => ({ name: e.name, revealed: e.isResultsRevealed, sampleCount: e.sampleIds?.length ?? 0 })) })}
+                                {leaderboardEvents.length > 0 && leaderboardEvents.some(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0) ? (
+                                    leaderboardEvents
+                                      .filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0)
                                       .map(event => {
-                                        const eventSamples = appData.samples.filter(s => event.sampleIds.includes(s.id) && s.sampleType !== 'CALIBRATION');
+                                        const eventSampleIds = event.sampleIds?.map(id => String(id)) || [];
+                                        const eventSamples = leaderboardSamples.filter(s => eventSampleIds.includes(String(s.id)) && s.sampleType !== 'CALIBRATION');
                                         const rankedSamples = eventSamples
                                           .filter(s => s.adjudicatedFinalScore !== undefined)
                                           .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0));
@@ -724,7 +754,22 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                       })
                                 ) : (
                                     <Card>
-                                        <p className="text-center text-text-light">No leaderboard data available yet. Check back once competition results are revealed.</p>
+                                        <div className="text-center py-12">
+                                            <p className="text-lg text-gray-400 font-semibold">No leaderboard data available</p>
+                                            <p className="text-sm text-gray-500 mt-2">Check back once competition results are revealed.</p>
+                                            {leaderboardEvents.length > 0 && (
+                                                <div className="mt-4 p-3 bg-blue-50 rounded text-xs text-left max-w-md mx-auto">
+                                                    <p className="font-semibold mb-1">📊 Available events ({leaderboardEvents.length}):</p>
+                                                    <ul className="space-y-1">
+                                                        {leaderboardEvents.map(e => (
+                                                            <li key={e.id} className="text-gray-600">
+                                                                • {e.name}: {e.isResultsRevealed ? '✓ Revealed' : '⏳ In Progress'} ({e.sampleIds?.length ?? 0} samples)
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
                                     </Card>
                                 )}
                             </div>

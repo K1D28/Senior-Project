@@ -776,6 +776,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                     event={viewingCertificateFor.event}
                                     farmer={currentUser}
                                     rank={viewingCertificateFor.rank}
+                                    appData={appData}
                                 />
                             </div>
                         )}
