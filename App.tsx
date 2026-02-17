@@ -738,7 +738,7 @@ function App() {
     })();
   }, [currentUser]);
   
-  const registerForEvent = useCallback((eventId: string, sampleData: NewSampleRegistrationData) => {
+  const registerForEvent = useCallback((eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => {
     if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;
 
     const newSample: CoffeeSample = {
@@ -749,40 +749,25 @@ function App() {
         sampleType: 'FARMER_REGISTERED', // Mark as farmer-registered sample
     };
 
-    // First, register farmer as participant in the event
-    fetch('http://localhost:5001/api/farmers/register-event', {
+    // Submit the sample directly (no need to register as participant first)
+    fetch('http://localhost:5001/api/samples', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
       },
       credentials: 'include',
-      body: JSON.stringify({ eventId: parseInt(eventId) }),
-    })
-    .then(response => response.json())
-    .then(data => {
-      console.log('Farmer registered as participant:', data);
-      
-      // Then submit the sample
-      return fetch('http://localhost:5001/api/samples', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          farmName: sampleData.farmName,
-          farmerId: currentUser.id,
-          region: sampleData.region,
-          variety: sampleData.variety,
-          processingMethod: sampleData.processingMethod,
-          altitude: sampleData.altitude,
-          moisture: sampleData.moisture,
-          cuppingEventId: parseInt(eventId),
-          sampleType: 'FARMER_REGISTERED',
-        }),
-      });
+      body: JSON.stringify({
+        farmName: sampleData.farmName,
+        farmerId: farmerDatabaseId,
+        region: sampleData.region,
+        variety: sampleData.variety,
+        processingMethod: sampleData.processingMethod,
+        altitude: sampleData.altitude,
+        moisture: sampleData.moisture,
+        cuppingEventId: parseInt(eventId),
+        sampleType: 'FARMER_REGISTERED',
+      }),
     })
     .then(response => {
       if (response.ok) {

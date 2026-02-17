@@ -54,7 +54,7 @@ export interface CoffeeSample {
   farmerId: string;
   // Optional name included by the /api/samples endpoint to avoid repeated lookups
   farmerName?: string | null;
-  blindCode: string;
+  blindCode?: string | null;
   farmName: string;
   region: string;
   altitude: number;
@@ -62,6 +62,10 @@ export interface CoffeeSample {
   variety: string;
   moisture?: number;
   sampleType?: 'FARMER_REGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION'; // Type of sample
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Approval status for farmer samples
+  approvedByAdminId?: string | null;
+  approvalDate?: string | null;
+  approvalNotes?: string | null;
   adjudicatedFinalScore?: number;
   gradeLevel?: string;
   headJudgeNotes?: string;

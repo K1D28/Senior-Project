@@ -320,6 +320,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const [eventToEdit, setEventToEdit] = useState<CuppingEvent | null>(null);
     const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
     const [eventToManageParticipants, setEventToManageParticipants] = useState<CuppingEvent | null>(null);
+    const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
+    const [sampleForApproval, setSampleForApproval] = useState<CoffeeSample | null>(null);
 
 
     // User Management State
@@ -538,6 +540,78 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
      const handleViewSampleDetails = (sample: CoffeeSample) => {
         setSelectedSample(sample);
         setIsSampleDetailModalOpen(true);
+    };
+
+    const handleOpenApprovalModal = (sample: CoffeeSample) => {
+        setSampleForApproval(sample);
+        setIsApprovalModalOpen(true);
+    };
+
+    const handleApproveSample = async (sampleId: string | number) => {
+        try {
+            const response = await fetch(`http://localhost:5001/api/samples/${sampleId}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const approvedSample = await response.json();
+                console.log('Sample approved:', approvedSample);
+                alert('Sample approved! Blind code assigned: ' + approvedSample.blindCode);
+                // Update local appData
+                setAppData(prevData => ({
+                    ...prevData,
+                    samples: prevData.samples.map(s => 
+                        s.id === String(sampleId) 
+                            ? { ...s, approvalStatus: 'APPROVED', blindCode: approvedSample.blindCode }
+                            : s
+                    )
+                }));
+                setIsApprovalModalOpen(false);
+                setSampleForApproval(null);
+            } else {
+                const error = await response.json();
+                alert('Failed to approve sample: ' + error.message);
+            }
+        } catch (error) {
+            console.error('Error approving sample:', error);
+            alert('Error approving sample');
+        }
+    };
+
+    const handleDeclineSample = async (sampleId: string | number) => {
+        try {
+            const response = await fetch(`http://localhost:5001/api/samples/${sampleId}/decline`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                console.log('Sample declined and deleted');
+                alert('Sample declined and removed');
+                // Update local appData
+                setAppData(prevData => ({
+                    ...prevData,
+                    samples: prevData.samples.filter(s => s.id !== String(sampleId))
+                }));
+                setIsApprovalModalOpen(false);
+                setSampleForApproval(null);
+            } else {
+                const error = await response.json();
+                alert('Failed to decline sample: ' + error.message);
+            }
+        } catch (error) {
+            console.error('Error declining sample:', error);
+            alert('Error declining sample');
+        }
     };
 
     const renderSampleDetails = (sample: CoffeeSample) => {
@@ -1121,6 +1195,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                 <SortableHeader label="Processing Method" sortKey="processingMethod" />
                                 <SortableHeader label="Variety" sortKey="variety" />
                                 <SortableHeader label="Farmer" sortKey="farmerName" />
+                                <SortableHeader label="Type" sortKey="sampleType" />
+                                <SortableHeader label="Status" sortKey="approvalStatus" />
                                 <SortableHeader label="Moisture %" sortKey="moisture" />
                                 <th className="p-2">Actions</th>
                             </tr>
@@ -1129,13 +1205,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                             {sortedSamples.map(sample => {
                                 const farmerName = getFarmerName(sample);
                                 const isCalibration = sample.sampleType === 'CALIBRATION';
+                                const isPending = sample.approvalStatus === 'PENDING';
+                                const isRejected = sample.approvalStatus === 'REJECTED';
                                 return (
                                     <tr key={sample.id} className="border-b border-border hover:bg-background">
-                                        <td className={`p-2 font-mono font-bold ${isCalibration ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</td>
+                                        <td className={`p-2 font-mono font-bold ${isCalibration ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode || '⏳ PENDING'}</td>
                                         <td className="p-2">{sample.region}</td>
                                         <td className="p-2">{sample.processingMethod}</td>
                                         <td className="p-2">{sample.variety}</td>
                                         <td className="p-2">{farmerName}</td>
+                                        <td className="p-2">
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                sample.sampleType === 'CALIBRATION' ? 'bg-purple-100 text-purple-800' :
+                                                sample.sampleType === 'FARMER_REGISTERED' ? 'bg-blue-100 text-blue-800' :
+                                                'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : 'Other'}
+                                            </span>
+                                        </td>
+                                        <td className="p-2">
+                                            <span 
+                                                onClick={() => {
+                                                    if (isPending && sample.sampleType === 'FARMER_REGISTERED') {
+                                                        handleOpenApprovalModal(sample);
+                                                    }
+                                                }}
+                                                className={`px-2 py-1 rounded text-xs font-semibold transition-all ${
+                                                    isPending && sample.sampleType === 'FARMER_REGISTERED' ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer' :
+                                                    sample.approvalStatus === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                                                    isRejected ? 'bg-red-100 text-red-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                {sample.approvalStatus}
+                                            </span>
+                                        </td>
                                         <td className="p-2">{sample.moisture ? `${sample.moisture}` : 'N/A'}</td>
                                         <td className="p-2">
                                             <Button onClick={() => handleViewSampleDetails(sample)} size="sm" variant="secondary">
@@ -1410,6 +1513,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     sample={viewingReportForSample}
                     appData={appData}
                 />
+            )}
+        </Modal>
+
+        <Modal isOpen={isApprovalModalOpen} onClose={() => {
+            setIsApprovalModalOpen(false);
+            setSampleForApproval(null);
+        }} title="Approve or Decline Sample">
+            {sampleForApproval && (
+                <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-2"><strong>Farm Name:</strong> {sampleForApproval.farmName}</p>
+                        <p className="text-sm text-gray-600 mb-2"><strong>Variety:</strong> {sampleForApproval.variety}</p>
+                        <p className="text-sm text-gray-600 mb-2"><strong>Region:</strong> {sampleForApproval.region}</p>
+                        <p className="text-sm text-gray-600 mb-2"><strong>Processing Method:</strong> {sampleForApproval.processingMethod}</p>
+                        <p className="text-sm text-gray-600"><strong>Altitude:</strong> {sampleForApproval.altitude}m</p>
+                    </div>
+                    <div className="flex gap-3 justify-end pt-4 border-t border-border">
+                        <Button 
+                            onClick={() => {
+                                setIsApprovalModalOpen(false);
+                                setSampleForApproval(null);
+                            }}
+                            variant="secondary"
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            onClick={() => handleDeclineSample(sampleForApproval.id)}
+                            className="bg-red-500 text-white hover:bg-red-600"
+                        >
+                            Decline
+                        </Button>
+                        <Button 
+                            onClick={() => handleApproveSample(sampleForApproval.id)}
+                            className="bg-green-500 text-white hover:bg-green-600"
+                        >
+                            Approve
+                        </Button>
+                    </div>
+                </div>
             )}
         </Modal>
     </div>

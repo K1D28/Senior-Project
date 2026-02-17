@@ -105,7 +105,7 @@ model Participant {
 
 model Sample {
   id                    Int           @id @default(autoincrement())
-  blindCode             String        @unique @default(uuid()) // Auto-generate unique blindCode
+  blindCode             String? // Optional - null for pending farmer samples, UUID when approved
   farmName              String
   farmerId              Int?          // Optional for CALIBRATION samples, required for others
   region                String?
@@ -114,6 +114,10 @@ model Sample {
   altitude              Float // Added altitude field
   moisture              Float // Added moisture field
   sampleType            String        @default("FARMER_REGISTERED") // FARMER_REGISTERED, PROXY_SUBMISSION, or CALIBRATION
+  approvalStatus        String        @default("PENDING") // PENDING, APPROVED, REJECTED - for farmer-registered samples
+  approvedByAdminId     Int?
+  approvalDate          DateTime?
+  approvalNotes         String?
   adjudicatedFinalScore Float?
   gradeLevel            String?
   headJudgeNotes        String?

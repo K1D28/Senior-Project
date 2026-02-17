@@ -18,7 +18,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface FarmerDashboardProps {
   currentUser: User;
   appData: AppData;
-  onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData) => void;
+  onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
   onLogout: () => void;
 }
 
@@ -128,10 +128,39 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedEventForRegistration, setSelectedEventForRegistration] = useState<CuppingEvent | null>(null);
   const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+  const [farmerSamplesFromBackend, setFarmerSamplesFromBackend] = useState<CoffeeSample[]>([]);
+  const [farmerDatabaseId, setFarmerDatabaseId] = useState<number | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const navigate = useNavigate();
+
+  // First, fetch the farmer's database ID
+  useEffect(() => {
+    const fetchFarmerDatabaseId = async () => {
+      try {
+        const response = await fetch(`http://localhost:5001/api/farmer-profile`, {
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (response.ok) {
+          const farmerData = await response.json();
+          console.log('Fetched farmer profile:', farmerData);
+          setFarmerDatabaseId(farmerData.id);
+        } else {
+          console.error('Failed to fetch farmer profile:', response.status);
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+        }
+      } catch (error) {
+        console.error('Error fetching farmer profile:', error);
+      }
+    };
+
+    fetchFarmerDatabaseId();
+  }, []);
 
   // Fetch events assigned by admin to this farmer
   const fetchAssignedEvents = async () => {
@@ -157,33 +186,81 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     }
   };
 
+  // Fetch farmer's samples from backend
+  const fetchFarmerSamples = async () => {
+    if (!farmerDatabaseId) {
+      console.log('Cannot fetch samples: farmerDatabaseId is not set yet');
+      return;
+    }
+    try {
+      console.log(`Fetching samples for farmer ID: ${farmerDatabaseId}`);
+      const response = await fetch(`http://localhost:5001/api/samples?farmerId=${farmerDatabaseId}`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const samples = await response.json();
+        console.log(`Fetched ${samples.length} samples:`, samples);
+        setFarmerSamplesFromBackend(samples);
+      } else {
+        console.error('Failed to fetch farmer samples:', response.status);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      }
+    } catch (error) {
+      console.error('Error fetching farmer samples:', error);
+    }
+  };
+
   useEffect(() => {
     fetchAssignedEvents();
-  }, [currentUser.id, refreshKey]);
+    if (farmerDatabaseId) {
+      fetchFarmerSamples();
+    }
+  }, [currentUser.id, refreshKey, farmerDatabaseId]);
 
-  const farmerSamples = useMemo(() => appData.samples.filter(s => s.farmerId === currentUser.id && s.sampleType !== 'CALIBRATION').sort((a,b) => b.id.localeCompare(a.id)), [appData.samples, currentUser.id]);
+  const farmerSamples = useMemo(() => farmerSamplesFromBackend.filter(s => s.sampleType !== 'CALIBRATION').sort((a,b) => {
+    // Handle both string and numeric IDs
+    if (typeof b.id === 'string' && typeof a.id === 'string') {
+      return b.id.localeCompare(a.id);
+    }
+    // For numeric IDs, convert to numbers and compare
+    const bNum = typeof b.id === 'number' ? b.id : parseInt(String(b.id), 10);
+    const aNum = typeof a.id === 'number' ? a.id : parseInt(String(a.id), 10);
+    return bNum - aNum;
+  }), [farmerSamplesFromBackend]);
 
-  const allEventsWithFarmerSamples = useMemo(() => assignedEvents
-    .map(event => {
-      const samplesInEvent = farmerSamples.filter(s => event.sampleIds.includes(s.id));
-      if (samplesInEvent.length === 0) return null;
-      
-      // For rankings, exclude calibration samples (only count competitive samples)
-      const rankedEventSamples = event.isResultsRevealed
-        ? appData.samples
-            .filter(s => event.sampleIds.includes(s.id) && s.adjudicatedFinalScore && s.sampleType !== 'CALIBRATION')
-            .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0))
-        : [];
-      
-      return {
-        ...event,
-        samples: samplesInEvent,
-        rankedEventSamples,
-      };
-    })
-    .filter((event): event is CuppingEvent & { samples: CoffeeSample[], rankedEventSamples: CoffeeSample[] } => event !== null)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), 
-    [assignedEvents, appData.samples, farmerSamples]);
+  const allEventsWithFarmerSamples = useMemo(() => {
+    console.log('allEventsWithFarmerSamples building with:', { assignedEventsCount: assignedEvents.length, farmerSamplesCount: farmerSamples.length });
+    
+    return assignedEvents
+      .map(event => {
+        // Ensure we're comparing string IDs
+        const eventSampleIds = event.sampleIds?.map(id => String(id)) || [];
+        
+        // Show samples that belong to this farmer in this event
+        const samplesInEvent = farmerSamples.filter(s => eventSampleIds.includes(String(s.id)));
+        
+        console.log(`Event ${event.name} has ${samplesInEvent.length} samples for farmer`, { eventSampleIds, farmerSampleIds: farmerSamples.map(s => s.id) });
+        
+        // For rankings, exclude calibration samples (only count competitive samples)
+        const rankedEventSamples = event.isResultsRevealed
+          ? farmerSamplesFromBackend
+              .filter(s => eventSampleIds.includes(String(s.id)) && s.adjudicatedFinalScore && s.sampleType !== 'CALIBRATION')
+              .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0))
+          : [];
+        
+        // Always return the event, even if no samples yet (farmer can register)
+        return {
+          ...event,
+          samples: samplesInEvent,
+          rankedEventSamples,
+        };
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [assignedEvents, farmerSamplesFromBackend, farmerSamples]);
 
   const upcomingEvents = useMemo(() => {
     const today = new Date();
@@ -210,8 +287,8 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   };
 
   const handleRegisterSubmit = (sampleData: NewSampleRegistrationData) => {
-      if(selectedEventForRegistration) {
-          onRegisterForEvent(selectedEventForRegistration.id, sampleData);
+      if(selectedEventForRegistration && farmerDatabaseId) {
+          onRegisterForEvent(selectedEventForRegistration.id, sampleData, farmerDatabaseId);
           // Trigger a refresh of events to show the newly submitted sample
           setTimeout(() => {
             setRefreshKey(prev => prev + 1);
@@ -297,7 +374,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
             <Card>
                 <p className="text-center text-text-light">Loading your assigned events...</p>
             </Card>
-        ) : allEventsWithFarmerSamples.length === 0 ? (
+        ) : farmerSamples.length === 0 ? (
             <Card>
                 <p className="text-center text-text-light">You have not submitted any coffee samples yet. Check the "Upcoming Events" tab to register for a competition.</p>
             </Card>
@@ -377,7 +454,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                         <h4 className="font-bold text-lg">{sample.farmName} - {sample.variety}</h4>
                                         <p className="text-sm text-text-light">{sample.region} - {sample.processingMethod} Process</p>
                                         <div className="mt-2">
-                                        {sample.blindCode === 'PENDING' ? (
+                                        {sample.approvalStatus === 'PENDING' ? (
                                             <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Registered</span>
                                         ) : !isFinalizedAndRevealed ? (
                                             <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Cupping in Progress</span>

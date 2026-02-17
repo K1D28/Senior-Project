@@ -647,8 +647,16 @@ app.delete('/api/users/:role/:id', verifySupabaseToken, async (req, res) => {
 // Add endpoints for managing samples
 app.get('/api/samples', verifySupabaseToken, async (req, res) => {
   try {
-    // Fetch samples
-    const samples = await prisma.sample.findMany();
+    const { farmerId } = req.query;
+    
+    console.log(`Getting samples with farmerId filter:`, farmerId);
+    
+    // Fetch samples with optional farmerId filter
+    const where = farmerId ? { farmerId: parseInt(farmerId) } : {};
+    const samples = await prisma.sample.findMany({ where });
+    
+    console.log(`Found ${samples.length} samples matching farmerId ${farmerId}`, samples.map(s => ({ id: s.id, farmerId: s.farmerId, farmName: s.farmName })));
+    
     // Collect unique farmer ids
     const farmerIds = Array.from(new Set(samples.map(s => s.farmerId).filter(id => typeof id === 'number')));
     // Fetch farmers in one query
@@ -709,9 +717,15 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
   }
 
   try {
+    // For farmer-registered samples, set blindCode to null and status to PENDING (will be generated when approved)
+    // For calibration and proxy samples (admin-added), auto-generate blindCode and set to APPROVED
+    const isAdminAdded = finalSampleType !== 'FARMER_REGISTERED';
+    const blindCode = isAdminAdded ? crypto.randomUUID() : null;
+    const approvalStatus = isAdminAdded ? 'APPROVED' : 'PENDING';
+
     const sample = await prisma.sample.create({
       data: {
-        blindCode: crypto.randomUUID(), // Auto-generate unique blindCode
+        blindCode,
         farmName,
         farmerId: isCalibrationType ? null : farmerId, // Use null for calibration samples
         region: normalizedRegion,
@@ -721,6 +735,7 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
         moisture,
         sampleType: finalSampleType,
         cuppingEventId,
+        approvalStatus,
       },
     });
     res.status(201).json(sample);
@@ -737,6 +752,76 @@ app.delete('/api/samples/:id', verifySupabaseToken, async (req, res) => {
     res.json({ message: 'Sample deleted successfully' });
   } catch (error) {
     console.error('Error deleting sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Approve farmer-registered sample - generates blind code
+app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Check if user is admin
+    const admin = await prisma.admin.findUnique({ where: { email: req.user?.email } });
+    if (!admin) {
+      return res.status(403).json({ message: 'Only admins can approve samples' });
+    }
+
+    // Get the sample
+    const sample = await prisma.sample.findUnique({ where: { id: parseInt(id) } });
+    if (!sample) {
+      return res.status(404).json({ message: 'Sample not found' });
+    }
+
+    // Only approve PENDING farmer-registered samples
+    if (sample.approvalStatus !== 'PENDING' || sample.sampleType !== 'FARMER_REGISTERED') {
+      return res.status(400).json({ message: 'Only pending farmer-registered samples can be approved' });
+    }
+
+    // Approve and generate blind code
+    const approvedSample = await prisma.sample.update({
+      where: { id: parseInt(id) },
+      data: {
+        approvalStatus: 'APPROVED',
+        blindCode: crypto.randomUUID(), // Generate unique blind code
+        approvedByAdminId: admin.id,
+        approvalDate: new Date(),
+      },
+    });
+
+    res.json(approvedSample);
+  } catch (error) {
+    console.error('Error approving sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Decline farmer-registered sample - deletes it
+app.post('/api/samples/:id/decline', verifySupabaseToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Check if user is admin
+    const admin = await prisma.admin.findUnique({ where: { email: req.user?.email } });
+    if (!admin) {
+      return res.status(403).json({ message: 'Only admins can decline samples' });
+    }
+
+    // Get the sample
+    const sample = await prisma.sample.findUnique({ where: { id: parseInt(id) } });
+    if (!sample) {
+      return res.status(404).json({ message: 'Sample not found' });
+    }
+
+    // Only decline PENDING farmer-registered samples
+    if (sample.approvalStatus !== 'PENDING' || sample.sampleType !== 'FARMER_REGISTERED') {
+      return res.status(400).json({ message: 'Only pending farmer-registered samples can be declined' });
+    }
+
+    // Delete the sample
+    await prisma.sample.delete({ where: { id: parseInt(id) } });
+
+    res.json({ message: 'Sample declined and deleted successfully' });
+  } catch (error) {
+    console.error('Error declining sample:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -782,6 +867,24 @@ app.post('/api/farmers/register-event', verifySupabaseToken, async (req, res) =>
     res.status(201).json(participant);
   } catch (error) {
     console.error('Error registering farmer for event:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get farmer profile by email (from Supabase token)
+app.get('/api/farmer-profile', verifySupabaseToken, verifyRole('FARMER'), async (req, res) => {
+  try {
+    const farmer = await prisma.farmer.findUnique({
+      where: { email: req.user.email }
+    });
+    
+    if (!farmer) {
+      return res.status(404).json({ message: 'Farmer profile not found' });
+    }
+    
+    res.json(farmer);
+  } catch (error) {
+    console.error('Error fetching farmer profile:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -911,7 +1014,7 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
       }
       transformedSamples.push({
-        blindCode: sample.blindCode || crypto.randomUUID(),
+        blindCode: crypto.randomUUID(), // Always generate UUID for admin-created samples
         farmerId: farmerId,
         processingMethod: sample.processingMethod,
         farmName: sample.farmName,
@@ -920,6 +1023,7 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         altitude: sample.altitude,
         moisture: sample.moisture,
         sampleType: 'PROXY_SUBMISSION',
+        approvalStatus: 'APPROVED', // Admin-created samples are automatically approved
       });
     });
 
@@ -1186,7 +1290,9 @@ app.get('/api/cupping-events/farmer', verifySupabaseToken, async (req, res) => {
       const assignedQGraders = event.participants
         .filter(p => p.role === 'Q_GRADER')
         .map(p => p.qGrader);
-      const sampleObjects = (event.samples || []).map(s => ({ ...s, id: String(s.id) }));
+      // Filter samples to only include ones belonging to this farmer
+      const farmerSamples = (event.samples || []).filter(s => s.farmerId === farmer.id);
+      const sampleObjects = farmerSamples.map(s => ({ ...s, id: String(s.id) }));
       return { ...event, assignedHeadJudges, assignedQGraders, sampleObjects };
     });
 
@@ -1640,17 +1746,55 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
             samples.map(sample => {
                 const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
                 const finalFarmerId = sampleType === 'CALIBRATION' ? null : parseInt(sample.farmerId);
+                // Admin-added samples are automatically approved with generated blind codes
+                const blindCode = crypto.randomUUID();
+                const approvalStatus = 'APPROVED';
+                
+                console.log(`Creating sample: sampleType=${sampleType}, blindCode=${blindCode}, approvalStatus=${approvalStatus}`);
                 
                 return prisma.sample.create({
                     data: {
-                        ...sample,
+                        farmName: sample.farmName,
+                        region: sample.region,
+                        variety: sample.variety,
+                        processingMethod: sample.processingMethod,
+                        altitude: sample.altitude,
+                        moisture: sample.moisture,
                         farmerId: finalFarmerId,
                         sampleType: sampleType,
                         cuppingEventId: parseInt(id),
+                        blindCode,
+                        approvalStatus,
+                    },
+                    select: {
+                        id: true,
+                        blindCode: true,
+                        farmName: true,
+                        farmerId: true,
+                        region: true,
+                        variety: true,
+                        processingMethod: true,
+                        altitude: true,
+                        moisture: true,
+                        sampleType: true,
+                        cuppingEventId: true,
+                        approvalStatus: true,
+                        approvedByAdminId: true,
+                        approvalDate: true,
+                        approvalNotes: true,
+                        adjudicatedFinalScore: true,
+                        gradeLevel: true,
+                        headJudgeNotes: true,
+                        adjudicationJustification: true,
+                        flaggedForDiscussion: true,
+                        isLocked: true,
+                        lockedByHeadJudgeId: true,
+                        lockedAt: true,
                     },
                 });
             })
         );
+        console.log('Created samples:', JSON.stringify(createdSamples, null, 2));
         res.status(201).json(createdSamples);
     } catch (error) {
         console.error('Error adding samples to event:', error);
