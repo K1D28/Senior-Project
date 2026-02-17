@@ -5,7 +5,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Modal } from '../ui/Modal';
-import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock } from 'lucide-react';
+import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock, LogOut, BarChart2, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // FIX: Add type definitions for SpeechRecognition API to the global window object to resolve TypeScript errors.
@@ -292,45 +292,343 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         )
     }
 
+
     return (
-        <div className="min-h-screen w-full bg-background p-4 flex flex-col space-y-6">
-            <header className="w-full bg-white shadow p-4 mb-6">
-                <h2 className="text-3xl font-bold text-left">Q Grader Dashboard</h2>
-            </header>
-            <div className="flex flex-col items-start space-y-4 w-full">
-                {assignedEvents.length > 0 ? (
-                    assignedEvents.map(event => (
-                        <Card key={event.id} title={event.name} className="w-3/4">
-                            <p className="text-text-light">Date: {event.date}</p>
-                            <p className="text-text-light">Samples to cup: {event.sampleIds.length}</p>
-                            {event.isResultsRevealed ? (
-                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-blue-800 font-semibold text-center">
-                                    Event ended
+        <div className="fixed inset-0 bg-white flex flex-col">
+            {/* Main Layout with Sidebar */}
+            <div className="flex flex-1 overflow-hidden">
+                {/* Left Sidebar Menu */}
+                <div className="w-64 bg-white border-r border-gray-100 shadow-sm overflow-y-auto flex flex-col">
+                    {/* Logo Section */}
+                    <div className="p-6 border-b border-gray-100 flex flex-col items-center gap-2">
+                        <CoffeeCupLogo size={56} />
+                        <div className="text-center">
+                            <h1 className="text-xl font-bold text-gray-900">Cupping Lab</h1>
+                            <p className="text-xs text-gray-500">Coffee Quality</p>
+                        </div>
+                    </div>
+
+                    {/* Navigation Menu */}
+                    <nav className="flex flex-col p-4 gap-2 flex-1">
+                        <button
+                            onClick={() => {
+                                // Already on events list, just clear selection
+                                setSelectedEvent(null);
+                                setSelectedSample(null);
+                            }}
+                            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${!selectedEvent && !selectedSample ? 'bg-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}
+                        >
+                            <Coffee size={18} />
+                            <span>My Events</span>
+                        </button>
+                        <button
+                            onClick={() => navigate('/leaderboard?redirect=/qgrader-dashboard')}
+                            className="w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg text-gray-700 hover:bg-gray-100"
+                        >
+                            <Trophy size={18} />
+                            <span>Leaderboard</span>
+                        </button>
+                    </nav>
+
+                    {/* Q Grader Profile Section at Bottom */}
+                    <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+                        {/* Profile Card */}
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 w-full">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                                {currentUser?.name?.[0]?.toUpperCase() || 'Q'}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-semibold text-gray-600">Q Grader</span>
+                                <span className="text-xs font-bold text-gray-800 truncate">{currentUser?.name || 'Q Grader'}</span>
+                            </div>
+                        </div>
+
+                        {/* Logout Button */}
+                        <button
+                            onClick={onLogout}
+                            className="w-full bg-red-500 text-white px-3 py-2 rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm flex items-center justify-center gap-2"
+                        >
+                            <LogOut size={16} />
+                            <span>Logout</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white via-white to-blue-50/30">
+                    <div className="p-6">
+                        {selectedSample && selectedEvent ? (
+                            // Cupping Form View
+                            <CuppingForm 
+                                scoreSheet={getOrCreateScoreSheet(selectedSample.id)} 
+                                sample={selectedSample} 
+                                onSave={onUpdateScoreSheet} 
+                                onBack={() => setSelectedSample(null)} 
+                            />
+                        ) : selectedEvent ? (
+                            // Sample Tray View
+                            <Card className="transition-smooth">
+                                <div className="flex items-center gap-4 mb-6">
+                                    <Button 
+                                        onClick={() => setSelectedEvent(null)} 
+                                        className="flex items-center space-x-1" 
+                                        variant="secondary"
+                                    >
+                                        <ChevronLeft size={16}/> 
+                                        <span>Back to Events</span>
+                                    </Button>
+                                    <h3 className="text-2xl font-extrabold text-primary">Sample Tray: {(selectedEvent as CuppingEvent | null)?.name}</h3>
                                 </div>
-                            ) : (
-                                <Button onClick={() => setSelectedEvent(event)} className="mt-4">Start Cupping</Button>
-                            )}
-                        </Card>
-                    ))
-                ) : (
-                    <Card className="w-3/4">
-                        <p className="text-center text-text-light">You have no cupping events assigned to you at the moment.</p>
-                    </Card>
-                )}
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                    {samplesForEvent.map(sample => {
+                                        const scoreSheet = getOrCreateScoreSheet(sample.id);
+                                        const status = getSampleStatus(scoreSheet, selectedEvent);
+                                        const config = statusConfig[status];
+                                        const isInteractive = status !== 'Finalized';
+
+                                        return (
+                                            <div 
+                                                key={sample.id} 
+                                                onClick={() => isInteractive && setSelectedSample(sample)} 
+                                                className={`relative p-4 border-2 ${config.borderColor} rounded-lg ${isInteractive ? 'cursor-pointer hover:bg-blue-50 hover:shadow-md' : 'cursor-not-allowed opacity-75 bg-gray-50'} transition-all duration-200 aspect-square flex flex-col justify-center items-center text-center shadow-sm`}
+                                            >
+                                                <div className="absolute top-2 right-2">{config.icon}</div>
+                                                <p className="font-mono text-2xl md:text-3xl font-bold text-gray-800">{sample.blindCode}</p>
+                                                <p className={`text-sm font-semibold mt-2 ${config.className}`}>
+                                                    {(status === 'Submitted' || status === 'Finalized') ? `Score: ${scoreSheet.scores.finalScore.toFixed(2)}` : config.text}
+                                                </p>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </Card>
+                        ) : (
+                            // Events List View
+                            <Card className="transition-smooth">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-2xl font-extrabold text-primary">My Cupping Events</h3>
+                                    <div className="text-sm text-gray-600 bg-blue-50 px-3 py-1 rounded-full font-semibold">
+                                        {assignedEvents.length} event{assignedEvents.length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+
+                                {/* Desktop Table View */}
+                                <div className="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b-2 border-primary bg-gradient-to-r from-gray-50 to-gray-100">
+                                                <th className="p-4 font-bold text-left text-gray-700">Event Name</th>
+                                                <th className="p-4 font-bold text-left text-gray-700">Date</th>
+                                                <th className="p-4 font-bold text-center text-gray-700">Samples</th>
+                                                <th className="p-4 font-bold text-center text-gray-700">Status</th>
+                                                <th className="p-4 font-bold text-right text-gray-700">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {assignedEvents.length > 0 ? (
+                                                assignedEvents.map((event, idx) => (
+                                                    <tr key={event.id} className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                                        <td className="p-4 font-semibold text-primary">{event.name}</td>
+                                                        <td className="p-4 text-gray-600">{new Date(event.date).toISOString().split('T')[0]}</td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold">
+                                                                {event.sampleIds?.length || 0}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                                {event.isResultsRevealed ? '✓ Ended' : '⏳ Active'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                                {event.isResultsRevealed ? '✓ Ended' : '⏳ Active'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-right">
+                                                            {event.isResultsRevealed ? (
+                                                                <div className="text-xs font-semibold text-gray-500">Event Complete</div>
+                                                            ) : (
+                                                                <Button 
+                                                                    onClick={() => setSelectedEvent(event)} 
+                                                                    size="sm"
+                                                                    className="bg-primary text-white hover:bg-primary/90"
+                                                                >
+                                                                    Start Cupping
+                                                                </Button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan={5} className="p-8 text-center text-gray-500 font-semibold">
+                                                        You have no cupping events assigned to you at the moment.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Mobile Card View */}
+                                <div className="md:hidden space-y-4">
+                                    {assignedEvents.length > 0 ? (
+                                        assignedEvents.map(event => (
+                                            <div key={event.id} className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all hover:border-blue-500">
+                                                <div className="space-y-3">
+                                                    {/* Header with Name and Status */}
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <div className="flex-1">
+                                                            <h3 className="font-bold text-lg text-primary leading-tight">{event.name}</h3>
+                                                            <p className="text-sm text-gray-500 mt-1">📅 {new Date(event.date).toISOString().split('T')[0]}</p>
+                                                        </div>
+                                                        <span className={`flex-shrink-0 inline-block px-3 py-1 text-xs font-bold rounded-full whitespace-nowrap ${event.isResultsRevealed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                            {event.isResultsRevealed ? '✓ Ended' : '⏳ Active'}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Quick Stats */}
+                                                    <div className="grid grid-cols-2 gap-2 py-3 px-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
+                                                        <div className="text-center">
+                                                            <p className="text-xs font-semibold text-gray-600">Samples</p>
+                                                            <p className="font-bold text-lg text-primary">{event.sampleIds?.length || 0}</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-xs font-semibold text-gray-600">Status</p>
+                                                            <p className="font-bold text-lg text-gray-700">{event.isResultsRevealed ? 'Complete' : 'In Progress'}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Action Button */}
+                                                    <div className="border-t border-gray-200 pt-3">
+                                                        {event.isResultsRevealed ? (
+                                                            <div className="text-center text-sm font-semibold text-gray-500 py-2 bg-gray-50 rounded-lg">
+                                                                Event Complete
+                                                            </div>
+                                                        ) : (
+                                                            <Button 
+                                                                onClick={() => setSelectedEvent(event)}
+                                                                className="w-full bg-primary text-white hover:bg-primary/90"
+                                                            >
+                                                                Start Cupping
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-12">
+                                            <p className="text-lg text-gray-400 font-semibold">No events assigned</p>
+                                            <p className="text-sm text-gray-500 mt-2">You have no cupping events assigned to you at the moment.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </Card>
+                        )}
+                    </div>
+                </div>
             </div>
-            <div className="fixed bottom-4 right-4">
-                <button
-                    onClick={onLogout}
-                    className="bg-red-500 text-white px-4 py-2 rounded shadow hover:bg-red-600"
-                >
-                    Logout
-                </button>
-            </div>
-            <div className="fixed bottom-4 left-4">
-                <Button onClick={() => navigate('/leaderboard?redirect=/qgrader-dashboard')} className="bg-primary text-white px-4 py-2 rounded shadow hover:bg-primary-dark">
-                    View Leaderboard Results
-                </Button>
-            </div>
+        </div>
+    );
+};
+
+// Coffee Cup Logo with Continuous Evaporation Animation
+const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
+    return (
+        <div 
+            className="relative"
+            style={{ width: size, height: size }}
+        >
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 100 100"
+                xmlns="http://www.w3.org/2000/svg"
+                className="drop-shadow-lg"
+            >
+                {/* Cup Body */}
+                <rect x="20" y="30" width="50" height="40" rx="4" fill="#6B4423" stroke="#3D2817" strokeWidth="1.5" />
+                
+                {/* Cup Highlight */}
+                <rect x="22" y="32" width="8" height="32" rx="3" fill="#8B5A2B" opacity="0.6" />
+                
+                {/* Handle */}
+                <path
+                    d="M 75 40 Q 90 40 90 50 Q 90 60 75 60"
+                    fill="none"
+                    stroke="#6B4423"
+                    strokeWidth="3"
+                />
+                
+                {/* Handle Highlight */}
+                <path
+                    d="M 76 42 Q 85 42 85 50 Q 85 58 76 58"
+                    fill="none"
+                    stroke="#8B5A2B"
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                />
+                
+                {/* Coffee inside */}
+                <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+                
+                {/* Evaporation Curved Lines - flowing wavy steam */}
+                {/* Line 1 - Left */}
+                <path 
+                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite' }} 
+                />
+                
+                {/* Line 2 - Center */}
+                <path 
+                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
+                />
+                
+                {/* Line 3 - Right */}
+                <path 
+                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
+                />
+                
+                <style>{`
+                    @keyframes float {
+                        0% {
+                            transform: translateY(0) scaleY(1);
+                            opacity: 0.8;
+                        }
+                        50% {
+                            opacity: 0.6;
+                        }
+                        100% {
+                            transform: translateY(-15px) scaleY(0.95);
+                            opacity: 0.4;
+                        }
+                    }
+                `}</style>
+                
+                {/* Saucer */}
+                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
+                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
+            </svg>
         </div>
     );
 };

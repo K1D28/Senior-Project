@@ -161,14 +161,17 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                 alert('Event date is required.');
                 return;
             }
-            if (!eventDetails.description?.trim()) {
-                alert('Event description is required.');
-                return;
-            }
 
             // Validate tags and processing methods
             const validatedTags = (eventDetails.tags || []).map(tagObj => tagObj?.tag?.trim() || '').filter(tag => tag !== '');
-            const validatedProcessingMethods = (eventDetails.processingMethods || []).map(method => method?.trim() || '').filter(method => method !== '');
+            const validatedProcessingMethods = (eventDetails.processingMethods || [])
+                .map(method => {
+                    // Handle both string and object formats
+                    if (typeof method === 'string') return method.trim();
+                    if (typeof method === 'object' && method?.method) return method.method.trim();
+                    return '';
+                })
+                .filter(method => method !== '');
             if (validatedTags.length === 0) {
                 alert('At least one valid tag is required.');
                 return;
@@ -226,7 +229,7 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
             const newEvent = {
                 name: eventDetails.name.trim(),
                 date: eventDetails.date,
-                description: eventDetails.description.trim(),
+                description: eventDetails.description?.trim() || '', // Allow empty description
                 tags: validatedTags,
                 processingMethods: validatedProcessingMethods,
                 assignedQGraderIds: participants.assignedQGraderIds,
@@ -326,7 +329,9 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                         data={samples}
                         onUpdate={setSamples}
                         farmers={farmers}
-                        processingMethods={eventDetails.processingMethods || []}
+                        processingMethods={(eventDetails.processingMethods || []).map(method => 
+                            typeof method === 'string' ? method : (method as any)?.method || ''
+                        ).filter(m => m)}
                     />
                 );
             default:
