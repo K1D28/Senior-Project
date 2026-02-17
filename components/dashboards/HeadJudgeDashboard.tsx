@@ -7,7 +7,8 @@ import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const HIGH_VARIANCE_THRESHOLD = 0.75; // For overall attribute stdDev (in Variance column)
@@ -136,11 +137,33 @@ const QualitativeInsights: React.FC<{ scoresForSample: ScoreSheet[], graders: Us
     );
 };
 
-const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, descriptorProfile: string, onUpdateAdjudication: (data: AdjudicationData) => void, onBack: () => void }> = ({ sample, avgScore, descriptorProfile, onUpdateAdjudication, onBack }) => {
+const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, descriptorProfile: string, onUpdateAdjudication: (data: AdjudicationData) => void, onBack: () => void, aiAnalysis?: string }> = ({ sample, avgScore, descriptorProfile, onUpdateAdjudication, onBack, aiAnalysis }) => {
     const [finalScore, setFinalScore] = useState<string>(sample.adjudicatedFinalScore?.toFixed(2) || avgScore.toFixed(2));
     const [justification, setJustification] = useState<string>(sample.adjudicationJustification || '');
     const [gradeLevel, setGradeLevel] = useState<string>(sample.gradeLevel || getGradeFromScore(avgScore));
     const [headJudgeNotes, setHeadJudgeNotes] = useState<string>(sample.headJudgeNotes || '');
+
+    // Reset form state when sample changes (by blind code)
+    useEffect(() => {
+        setFinalScore(sample.adjudicatedFinalScore?.toFixed(2) || avgScore.toFixed(2));
+        setJustification(sample.adjudicationJustification || '');
+        setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
+        setHeadJudgeNotes(sample.headJudgeNotes || '');
+    }, [sample.id, sample.blindCode]);
+
+    // Auto-fill justification when AI analysis is received
+    useEffect(() => {
+        if (aiAnalysis) {
+            setJustification(prev => prev ? `${prev}\n${aiAnalysis}` : aiAnalysis);
+        }
+    }, [aiAnalysis]);
+
+    // Auto-fill final notes for farmer when AI analysis is received
+    useEffect(() => {
+        if (aiAnalysis) {
+            setHeadJudgeNotes(prev => prev ? `${prev}\n\n${aiAnalysis}` : aiAnalysis);
+        }
+    }, [aiAnalysis]);
 
     const showJustification = useMemo(() => Math.abs(parseFloat(finalScore) - avgScore) > 0.01, [finalScore, avgScore]);
 
@@ -209,9 +232,9 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
 
 
 // --- The Main Cockpit View ---
-interface AdjudicationCockpitProps { sample: CoffeeSample; appData: AppData; event: CuppingEvent; onBack: () => void; onUpdateAdjudication: (sampleId: string, finalData: AdjudicationData) => void; }
+interface AdjudicationCockpitProps { sample: CoffeeSample; appData: AppData; event: CuppingEvent; onBack: () => void; onUpdateAdjudication: (sampleId: string, finalData: AdjudicationData) => void; onAIAnalyze: () => void; isAILoading: boolean; aiAnalysis?: string; }
 
-const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appData, event, onBack, onUpdateAdjudication }) => {
+const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appData, event, onBack, onUpdateAdjudication, onAIAnalyze, isAILoading, aiAnalysis }) => {
     const scoresForSample = useMemo(() => appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted), [appData.scores, sample.id, event.id]);
     const graders = useMemo(() => appData.users.filter(u => scoresForSample.some(s => s.qGraderId === u.id)), [appData.users, scoresForSample]);
     const scoreAttributes: (keyof Omit<ScoreSheet['scores'], 'finalScore' | 'taints' | 'faults'>)[] = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'];
@@ -236,7 +259,18 @@ const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appDa
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Adjudication Cockpit: <span className={`font-mono ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h2>
-                <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1"><ChevronLeft size={16}/><span>Back to Samples</span></Button>
+                <div className="flex items-center space-x-2">
+                    <Button 
+                        onClick={onAIAnalyze} 
+                        variant="secondary" 
+                        className="flex items-center space-x-1"
+                        disabled={isAILoading}
+                    >
+                        <Sparkles size={16} />
+                        <span>AI Analyze</span>
+                    </Button>
+                    <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1"><ChevronLeft size={16}/><span>Back to Samples</span></Button>
+                </div>
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-2 space-y-6">
@@ -246,7 +280,7 @@ const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appDa
                 </div>
                 <div className="xl:col-span-1">
                     <div className="sticky top-24">
-                        <FinalizationPanel sample={sample} avgScore={overallStats.average} descriptorProfile={descriptorProfile} onUpdateAdjudication={(data) => onUpdateAdjudication(sample.id, data)} onBack={onBack}/>
+                        <FinalizationPanel sample={sample} avgScore={overallStats.average} descriptorProfile={descriptorProfile} onUpdateAdjudication={(data) => onUpdateAdjudication(sample.id, data)} onBack={onBack} aiAnalysis={aiAnalysis}/>
                     </div>
                 </div>
             </div>
@@ -266,7 +300,15 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [error, setError] = useState<string | null>(null);
     const [fetchedScores, setFetchedScores] = useState<ScoreSheet[]>([]);
     const [fetchedGraders, setFetchedGraders] = useState<User[]>([]);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<string>('');
+    const [aiLoading, setAiLoading] = useState(false);
     const navigate = useNavigate();
+
+    // Clear AI analysis when switching samples to keep analysis isolated per sample
+    useEffect(() => {
+        setAiAnalysis('');
+    }, [selectedSample?.id, selectedSample?.blindCode]);
 
     useEffect(() => {
         const restoreUserState = async () => {
@@ -343,6 +385,66 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             setError('An unexpected error occurred while fetching events. Please try again later.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAIAnalysis = async () => {
+        if (!selectedSample || !selectedEvent) return;
+        
+        try {
+            setAiLoading(true);
+            console.log('Starting AI analysis for sample:', selectedSample.id);
+            
+            // Get Q Grader scores for this sample
+            const sampleScores = fetchedScores.filter(s => s.sampleId === String(selectedSample.id));
+            console.log('Found scores:', sampleScores.length);
+            const avgScores = {};
+            
+            if (sampleScores.length > 0) {
+                const scoreKeys = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'];
+                scoreKeys.forEach(key => {
+                    const values = sampleScores.map(s => (s.scores as any)[key] || 0).filter(v => v > 0);
+                    avgScores[key] = values.length > 0 ? values.reduce((a, b) => a + b) / values.length : 0;
+                });
+            }
+            
+            console.log('Sending request with scores:', avgScores);
+            const response = await fetch('http://localhost:5001/api/analyze-sample', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    sampleId: selectedSample.id,
+                    sampleName: `${selectedSample.blindCode}`,
+                    farmName: selectedSample.farmName,
+                    region: selectedSample.region,
+                    variety: selectedSample.variety,
+                    processingMethod: selectedSample.processingMethod,
+                    qGraderScores: avgScores,
+                    headJudgeNotes: '',
+                    analysisType: 'headjudge',
+                }),
+            });
+            
+            console.log('Response status:', response.status);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Analysis received:', data.analysis);
+                setAiAnalysis(data.analysis);
+                setIsAIModalOpen(true);
+            } else {
+                const errorData = await response.json();
+                console.error('Error response:', errorData);
+                alert('Error analyzing sample: ' + errorData.message);
+            }
+        } catch (error) {
+            console.error('AI Analysis error:', error);
+            alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        } finally {
+            setAiLoading(false);
         }
     };
 
@@ -544,7 +646,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     }
 
     if (selectedSample && selectedEvent) {
-        return <AdjudicationCockpit sample={selectedSample} appData={mergedAppData} event={selectedEvent} onBack={() => setSelectedSample(null)} onUpdateAdjudication={onUpdateAdjudication} />
+        return <AdjudicationCockpit sample={selectedSample} appData={mergedAppData} event={selectedEvent} onBack={() => setSelectedSample(null)} onUpdateAdjudication={onUpdateAdjudication} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} aiAnalysis={aiAnalysis} />
     }
 
     if (selectedEvent) {
@@ -623,16 +725,19 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                         const { average } = calculateStats(relevantScores.map(s => s.scores.finalScore));
 
                                         return (
-                                            <div 
-                                                key={sample.id} 
-                                                onClick={() => setSelectedSample(sample)} 
-                                                className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm"
-                                            >
-                                                {sample.adjudicatedFinalScore && <span className="absolute top-2 right-2 text-green-600" title="Finalized"><CheckCircle size={18}/></span>}
-                                                {sample.flaggedForDiscussion && <span className="absolute top-2 left-2 text-yellow-600" title="Flagged for Discussion"><Flag size={18}/></span>}
-                                                <p className="font-mono text-xl font-bold text-gray-800">{sample.blindCode}</p>
-                                                <p className="text-sm font-semibold text-primary">{relevantScores.length > 0 ? `${average.toFixed(2)} avg` : 'No Scores'}</p>
-                                                <p className="text-xs text-text-light">{relevantScores.length} / {selectedEvent.assignedQGraderIds.length} scores in</p>
+                                            <div key={sample.id} className="space-y-0">
+                                                <div 
+                                                    onClick={() => setSelectedSample(sample)}
+                                                    className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm flex flex-col justify-between h-full"
+                                                >
+                                                    {sample.adjudicatedFinalScore && <span className="absolute top-2 right-2 text-green-600" title="Finalized"><CheckCircle size={18}/></span>}
+                                                    {sample.flaggedForDiscussion && <span className="absolute top-2 left-2 text-yellow-600" title="Flagged for Discussion"><Flag size={18}/></span>}
+                                                    <div className="flex-1 flex flex-col justify-center">
+                                                        <p className="font-mono text-xl font-bold text-gray-800">{sample.blindCode}</p>
+                                                        <p className="text-sm font-semibold text-primary">{relevantScores.length > 0 ? `${average.toFixed(2)} avg` : 'No Scores'}</p>
+                                                        <p className="text-xs text-text-light">{relevantScores.length} / {selectedEvent.assignedQGraderIds.length} scores in</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         )
                                     })}
@@ -829,6 +934,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     </div>
                 </div>
             </div>
+
         </div>
     );
 };

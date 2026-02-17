@@ -5,9 +5,15 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import cookieParser from 'cookie-parser';
 import nodemailer from 'nodemailer';
+import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
 const prisma = new PrismaClient();
+
+// Initialize Claude AI client
+const anthropic = new Anthropic({
+  apiKey: process.env.CLAUDE_API_KEY,
+});
 
 // Initialize Supabase Admin Client from environment variables
 const supabaseUrl = process.env.SUPABASE_URL || 'https://mbmilbbdjywnmagxfcyg.supabase.co';
@@ -2220,6 +2226,73 @@ app.get('/api/headjudge/events/:eventId/scores', verifySupabaseToken, async (req
   } catch (error) {
     console.error('Error fetching head judge event scores:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Claude AI Analysis Endpoint
+app.post('/api/analyze-sample', verifySupabaseToken, async (req, res) => {
+  console.log('Analyze endpoint called - Body:', req.body);
+  const { sampleId, sampleName, farmName, region, variety, processingMethod, qGraderScores, headJudgeNotes, analysisType } = req.body;
+
+  if (!anthropic.apiKey) {
+    console.error('CLAUDE_API_KEY is not configured');
+    return res.status(500).json({ message: 'Claude API key not configured' });
+  }
+
+  console.log('API Key exists, proceeding with analysis...');
+  
+  try {
+    let prompt = '';
+
+    if (analysisType === 'qgrader') {
+      // Q Grader analysis - brief tasting notes
+      const scoresText = Object.entries(qGraderScores || {})
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(', ');
+
+      prompt = `Briefly analyze this coffee sample in 2-3 sentences. Include tasting notes and key strengths.
+
+Sample: ${sampleName}
+Farm: ${farmName}
+Region: ${region}
+Variety: ${variety}
+
+Scores: ${scoresText}`;
+    } else if (analysisType === 'headjudge') {
+      // Head Judge analysis - brief recommendation for farmer
+      prompt = `Briefly provide 2-3 sentence final notes for farmer for this sample. Focus on score consistency, recommended grade, and key feedback for the farmer.
+
+Sample: ${sampleName}
+Scores: ${Object.entries(qGraderScores || {}).map(([key, value]) => `${key}: ${value}`).join(', ')}`;
+    }
+
+    const message = await anthropic.messages.create({
+      model: 'claude-opus-4-1',
+      max_tokens: 500,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    console.log('Claude API response received:', message.content[0].type);
+
+    const analysis = message.content[0].type === 'text' ? message.content[0].text : '';
+
+    res.json({
+      success: true,
+      analysis,
+      sampleId,
+      analysisType,
+    });
+  } catch (error) {
+    console.error('Claude API Error:', error);
+    res.status(500).json({
+      message: 'Error analyzing sample',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 });
 
