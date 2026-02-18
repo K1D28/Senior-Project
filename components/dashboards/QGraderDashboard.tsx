@@ -55,6 +55,60 @@ const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
                 
                 {/* Coffee inside */}
                 <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+                
+                {/* Evaporation Curved Lines - flowing wavy steam */}
+                {/* Line 1 - Left */}
+                <path 
+                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite' }} 
+                />
+                
+                {/* Line 2 - Center */}
+                <path 
+                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
+                />
+                
+                {/* Line 3 - Right */}
+                <path 
+                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
+                />
+                
+                <style>{`
+                    @keyframes float {
+                        0% {
+                            transform: translateY(0) scaleY(1);
+                            opacity: 0.8;
+                        }
+                        50% {
+                            opacity: 0.6;
+                        }
+                        100% {
+                            transform: translateY(-15px) scaleY(0.95);
+                            opacity: 0.4;
+                        }
+                    }
+                `}</style>
+                
+                {/* Saucer */}
+                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
+                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
             </svg>
         </div>
     );
@@ -159,10 +213,10 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
     const quickNotes = ["Re-cup", "Favorite", "Check Consistency"];
 
     return (
-        <div className="pb-24">
-            <Card>
-                <div className="p-4 bg-background border-b border-border -m-6 mb-6 flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-text-dark">Scoring Sample: <span className={`font-mono ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h3>
+        <div className="h-screen flex flex-col bg-white">
+            <Card className="flex-1 flex flex-col overflow-hidden m-0">
+                <div className="p-3 bg-background border-b border-border -m-6 mb-3 flex justify-between items-center flex-shrink-0">
+                    <h3 className="text-base font-bold text-text-dark">Scoring Sample: <span className={`font-mono text-sm ${sample.sampleType === 'CALIBRATION' ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode}</span></h3>
                     {onAIAnalyze && (
                         <Button 
                             size="sm"
@@ -170,44 +224,55 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                             disabled={isAILoading}
                             className="flex items-center space-x-1"
                         >
-                            <Sparkles size={16} />
+                            <Sparkles size={14} />
                             <span>AI Analyze</span>
                         </Button>
                     )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 flex-1 overflow-y-auto px-1">
                     {/* Scores Column */}
-                    <div className="space-y-4">
+                    <div className="lg:col-span-1 space-y-2 overflow-y-auto">
                         {scoreFields.map(({ key, label }) => (
-                            <div key={key}>
-                                <div className="flex justify-between items-center mb-1"><label className="text-sm font-medium text-gray-700">{label}</label><span className="font-semibold text-primary tabular-nums">{scores[key].toFixed(2)}</span></div>
-                                <input type="range" min="0" max="10" step="0.25" value={scores[key]} onChange={(e) => handleScoreChange(key, parseFloat(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" disabled={scoreSheet.isSubmitted} />
+                            <div key={key} className="py-1">
+                                <div className="flex justify-between items-center mb-0.5"><label className="text-xs font-medium text-gray-700">{label}</label><span className="font-semibold text-primary tabular-nums text-xs">{scores[key].toFixed(2)}</span></div>
+                                <input type="range" min="0" max="10" step="0.25" value={scores[key]} onChange={(e) => handleScoreChange(key, parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" disabled={scoreSheet.isSubmitted} />
                             </div>
                         ))}
                     </div>
 
                     {/* Notes and Defects Column */}
-                    <div className="space-y-6">
+                    <div className="lg:col-span-2 space-y-3 overflow-y-auto flex flex-col">
                         <div>
-                            <Label>Smart Notes</Label>
-                            <div className="space-y-3 p-3 border border-border rounded-lg">
-                                    <div className="flex items-center space-x-2">
-                                    <Button size="sm" onClick={() => !scoreSheet.isSubmitted && setIsFlavorModalOpen(true)} disabled={scoreSheet.isSubmitted}>+ Add Descriptors</Button>
+                            <Label className="text-xs">Smart Notes</Label>
+                            <div className="space-y-2 p-2 border border-border rounded-lg max-h-24 overflow-y-auto">
+                                    <div className="flex items-center space-x-1">
+                                    <Button size="sm" onClick={() => !scoreSheet.isSubmitted && setIsFlavorModalOpen(true)} disabled={scoreSheet.isSubmitted} className="text-xs py-1">+ Add Descriptors</Button>
                                 </div>
-                                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                                    {descriptors.length > 0 ? descriptors.map(d => <DescriptorItem key={d.name} descriptor={d} onIntensityChange={handleDescriptorIntensityChange} onRemove={handleRemoveDescriptor} disabled={scoreSheet.isSubmitted} />) : <p className="text-sm text-center text-gray-400 py-4">No descriptors added.</p>}
+                                <div className="space-y-1">
+                                    {descriptors.length > 0 ? descriptors.map(d => <DescriptorItem key={d.name} descriptor={d} onIntensityChange={handleDescriptorIntensityChange} onRemove={handleRemoveDescriptor} disabled={scoreSheet.isSubmitted} />) : <p className="text-xs text-center text-gray-400 py-2">No descriptors added.</p>}
                                 </div>
                             </div>
                         </div>
-                        <div>
-                            <Label htmlFor="final-comments">Final Comments</Label>
-                            <textarea id="final-comments" value={notes} onChange={handleNotesChange} rows={3} className="w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary text-sm" placeholder="e.g., vibrant, floral, tea-like body..." disabled={scoreSheet.isSubmitted}></textarea>
-                            <div className="flex items-center space-x-2 mt-2">
-                                {quickNotes.map(qn => <Button key={qn} size="sm" variant="secondary" onClick={() => { setNotes(p => `${p} ${qn}.`.trim()); handleDataChange(); }}>{qn}</Button>)}
+                        {aiAnalysis && (
+                            <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg max-h-20 overflow-y-auto">
+                                <div className="flex items-start gap-2">
+                                    <Sparkles className="text-blue-600 flex-shrink-0 mt-0.5" size={14}/>
+                                    <div className="flex-1">
+                                        <p className="font-semibold text-blue-900 text-xs">AI Analysis:</p>
+                                        <p className="text-xs text-blue-800 mt-0.5 whitespace-pre-wrap line-clamp-3">{aiAnalysis}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex-1 flex flex-col">
+                            <Label htmlFor="final-comments" className="text-xs">Final Comments</Label>
+                            <textarea id="final-comments" value={notes} onChange={handleNotesChange} rows={2} className="flex-1 w-full p-2 border border-border rounded-md focus:ring-primary focus:border-primary text-xs" placeholder="e.g., vibrant, floral, tea-like body..." disabled={scoreSheet.isSubmitted}></textarea>
+                            <div className="flex items-center space-x-1 mt-1 flex-wrap gap-1">
+                                {quickNotes.map(qn => <Button key={qn} size="sm" variant="secondary" onClick={() => { setNotes(p => `${p} ${qn}.`.trim()); handleDataChange(); }} className="text-xs py-0 px-2">{qn}</Button>)}
                             </div>
                         </div>
-                        <div className="space-y-3 pt-4 border-t border-border">
-                            <h4 className="text-base font-medium text-gray-800">Defects</h4>
+                        <div className="space-y-2 pt-2 border-t border-border">
+                            <h4 className="text-xs font-medium text-gray-800">Defects</h4>
                             <DefectCounter label="Taints" count={scores.taints} onCountChange={(c) => handleScoreChange('taints', c)} pointValue={2} disabled={scoreSheet.isSubmitted} />
                             <DefectCounter label="Faults" count={scores.faults} onCountChange={(c) => handleScoreChange('faults', c)} pointValue={4} disabled={scoreSheet.isSubmitted} />
                         </div>
@@ -232,45 +297,27 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
             </Modal>
 
             {/* Sticky Footer */}
-                <div className="fixed bottom-0 left-0 right-0 bg-surface p-3 border-t border-border shadow-md z-10">
-                <div className="max-w-5xl mx-auto flex justify-between items-center">
-                    <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1"><ChevronLeft size={16} /> <span>Back</span></Button>
-                    <div className="text-center"><p className="text-sm text-text-light">Final Score</p><p className="text-2xl font-bold text-text-dark tabular-nums">{calculateFinalScore().toFixed(2)}</p></div>
-                    <div className="flex items-center space-x-2 w-40 justify-end">
-                        <div className="flex items-center space-x-2 text-sm text-text-light">{saveStatus === 'saving' && <><Save size={16} className="animate-spin" /><span>Saving...</span></>}{saveStatus === 'saved' && <><CheckCircle size={16} className="text-green-600"/><span>Saved</span></>}</div>
+                <div className="pt-2 mt-2 border-t border-border flex justify-between items-center flex-shrink-0 text-xs">
+                    <Button onClick={onBack} variant="secondary" className="flex items-center space-x-1 text-xs py-1"><ChevronLeft size={14} /> <span>Back</span></Button>
+                    <div className="text-center">
+                        <p className="text-text-light">Final Score</p>
+                        <p className="text-xl font-bold text-text-dark tabular-nums">{calculateFinalScore().toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                        <div className="flex items-center space-x-1 text-text-light">
+                            {saveStatus === 'saving' && <><Save size={12} className="animate-spin" /><span className="text-xs">Saving...</span></>}
+                            {saveStatus === 'saved' && <><CheckCircle size={12} className="text-green-600"/><span className="text-xs">Saved</span></>}
+                        </div>
                         {!scoreSheet.isSubmitted ? (
-                            <Button onClick={() => handleSubmit(true)} className={saveStatus === 'saving' ? 'opacity-50 cursor-not-allowed' : ''} disabled={saveStatus === 'saving'}>Submit Final</Button>
+                            <Button onClick={() => handleSubmit(true)} className={`text-xs py-1 ${saveStatus === 'saving' ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={saveStatus === 'saving'}>Submit Final</Button>
                         ) : (
-                            <div className="text-sm font-semibold text-gray-600">Submitted</div>
+                            <div className="text-xs font-semibold text-gray-600">Submitted</div>
                         )}
                     </div>
                 </div>
-            </div>
             
-            {/* AI Analysis Modal */}
-            {isAIModalOpen && (
-                <Modal isOpen={isAIModalOpen} onClose={onCloseAIModal} title="🤖 AI Sample Analysis" size="xl">
-                    <div className="space-y-4">
-                        {isAILoading ? (
-                            <div className="flex items-center justify-center py-8">
-                                <div className="animate-spin">
-                                    <Sparkles size={32} className="text-primary" />
-                                </div>
-                                <span className="ml-3 text-primary font-semibold">Analyzing sample...</span>
-                            </div>
-                        ) : (
-                            <div className="prose prose-sm max-w-none">
-                                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 whitespace-pre-wrap text-sm text-gray-700">
-                                    {aiAnalysis}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="mt-6 flex justify-end space-x-2 border-t border-border pt-4">
-                        <Button variant="secondary" onClick={onCloseAIModal}>Close</Button>
-                    </div>
-                </Modal>
-            )}
+            {/* AI Analysis - Now displayed inline in the form above */}
+            {/* Modal removed - AI analysis displays between Smart Notes and Final Comments */}
         </div>
     );
 };

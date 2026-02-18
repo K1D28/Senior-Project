@@ -50,6 +50,60 @@ const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
                 
                 {/* Coffee inside */}
                 <rect x="22" y="35" width="46" height="30" fill="#4A2511" opacity="0.8" />
+                
+                {/* Evaporation Curved Lines - flowing wavy steam */}
+                {/* Line 1 - Left */}
+                <path 
+                    d="M 32 32 Q 28 28 30 20 Q 32 12 28 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite' }} 
+                />
+                
+                {/* Line 2 - Center */}
+                <path 
+                    d="M 50 30 Q 48 25 50 18 Q 52 10 50 2" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.3s' }} 
+                />
+                
+                {/* Line 3 - Right */}
+                <path 
+                    d="M 68 32 Q 72 28 70 20 Q 68 12 72 5" 
+                    stroke="#B8860B" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    strokeLinecap="round"
+                    opacity="0.8"
+                    style={{ animation: 'float 2s ease-in-out infinite 0.6s' }} 
+                />
+                
+                <style>{`
+                    @keyframes float {
+                        0% {
+                            transform: translateY(0) scaleY(1);
+                            opacity: 0.8;
+                        }
+                        50% {
+                            opacity: 0.6;
+                        }
+                        100% {
+                            transform: translateY(-15px) scaleY(0.95);
+                            opacity: 0.4;
+                        }
+                    }
+                `}</style>
+                
+                {/* Saucer */}
+                <ellipse cx="45" cy="75" rx="32" ry="8" fill="#8B5A2B" stroke="#3D2817" strokeWidth="1.5" />
+                <ellipse cx="45" cy="74" rx="32" ry="6" fill="#A0704D" opacity="0.6" />
             </svg>
         </div>
     );
@@ -233,6 +287,17 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
     
     return (
         <Card title="Finalization & Action Panel">
+                {aiAnalysis && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                            <Sparkles className="text-blue-600 flex-shrink-0 mt-1" size={18}/>
+                            <div className="flex-1">
+                                <p className="font-semibold text-blue-900">AI Analysis:</p>
+                                <p className="text-sm text-blue-800 mt-1 whitespace-pre-wrap">{aiAnalysis}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {sample.isLocked ? (
                       <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
                           <CheckCircle className="mx-auto text-green-600 mb-2" size={32}/>
