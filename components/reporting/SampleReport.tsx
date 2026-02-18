@@ -1,6 +1,6 @@
 
-import React, { useMemo } from 'react';
-import type { CoffeeSample, ScoreSheet } from '../../types';
+import React, { useMemo, useState, useEffect } from 'react';
+import type { CoffeeSample, ScoreSheet, CuppingEvent } from '../../types';
 import type { AppData } from '../../data';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '../ui/Button';
@@ -42,8 +42,145 @@ const getEducationalText = (attribute: typeof scoreAttributes[number], score: nu
 };
 
 const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
-    const event = useMemo(() => appData.events.find(e => e.sampleIds.includes(sample.id)), [appData.events, sample.id]);
-    const scoresForSample = useMemo(() => appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event?.id && s.isSubmitted), [appData.scores, sample.id, event]);
+    const [localScores, setLocalScores] = useState<ScoreSheet[]>([]);
+    const [localEvent, setLocalEvent] = useState<CuppingEvent | null>(null);
+    
+    const event = useMemo(() => {
+        // First try to find event in appData
+        const found = appData.events.find(e => {
+            const sampleIds = (e.sampleIds || []).map(id => String(id));
+            return sampleIds.includes(String(sample.id));
+        });
+        console.log('SampleReport: Event lookup in appData', { sampleId: sample.id, eventFound: !!found, eventName: found?.name });
+        
+        // If not found in appData, use locally fetched event
+        if (!found && localEvent) {
+            console.log('SampleReport: Using locally fetched event', { eventName: localEvent.name, sampleIds: localEvent.sampleIds });
+            return localEvent;
+        }
+        
+        return found || null;
+    }, [appData.events, sample.id, localEvent]);
+    
+    // Fetch scores independently if appData.scores is empty or has demo data
+    useEffect(() => {
+        if (!sample.id) return;
+        
+        const fetchScoresAndEvent = async () => {
+            try {
+                console.log('🔍 SampleReport: Attempting to fetch scores for sample', { sampleId: sample.id, hasToken: !!localStorage.getItem('token') });
+                
+                // Try to fetch all Q Grader scores for this sample
+                const response = await fetch(`http://localhost:5001/api/qgrader/scores/sample/${sample.id}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        Authorization: `Bearer ${localStorage.getItem('token')}` 
+                    }
+                });
+                
+                console.log('📊 SampleReport: Fetch response status:', response.status);
+                
+                if (response.ok) {
+                    const allScores = await response.json();
+                    console.log('✓ SampleReport: Fetched raw scores from server:', allScores.length, 'scores');
+                    
+                    if (allScores.length === 0) {
+                        console.warn('⚠️ SampleReport: No scores found for this sample');
+                    } else {
+                        console.log('Sample scores:', allScores.slice(0, 2).map(s => ({ sampleId: s.sampleId, eventId: s.cuppingEventId, fragrance: s.fragrance, isSubmitted: s.isSubmitted })));
+                    }
+                    
+                    // Map server format to ScoreSheet format
+                    const mappedScores: ScoreSheet[] = allScores.map((row: any) => ({
+                        id: `${row.id}`,
+                        eventId: `${row.cuppingEventId}`,
+                        qGraderId: `${row.qGraderId}`,
+                        sampleId: `${row.sampleId}`,
+                        isSubmitted: !!row.isSubmitted,
+                        notes: row.comments || '',
+                        descriptors: row.descriptors ? JSON.parse(row.descriptors) : [],
+                        scores: {
+                            fragrance: Number(row.fragrance) || 0,
+                            flavor: Number(row.flavor) || 0,
+                            aftertaste: Number(row.aftertaste) || 0,
+                            acidity: Number(row.acidity) || 0,
+                            body: Number(row.body) || 0,
+                            balance: Number(row.balance) || 0,
+                            uniformity: Number(row.uniformity) || 0,
+                            cleanCup: Number(row.cleanCup) || 0,
+                            sweetness: Number(row.sweetness) || 0,
+                            overall: Number(row.overall) || 0,
+                            taints: Number(row.taints) || 0,
+                            faults: Number(row.faults) || 0,
+                            finalScore: Number(row.total) || 0,
+                        }
+                    }));
+                    
+                    console.log('✓ SampleReport: Mapped scores ready:', mappedScores.length, 'scores with data');
+                    setLocalScores(mappedScores);
+                    
+                    // Extract eventId from scores to fetch event details if needed
+                    if (mappedScores.length > 0 && !event) {
+                        const eventId = mappedScores[0].eventId;
+                        console.log('🔍 SampleReport: Fetching event details for eventId:', eventId);
+                        
+                        const eventResponse = await fetch(`http://localhost:5001/api/cupping-events/${eventId}`, {
+                            method: 'GET',
+                            credentials: 'include',
+                            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                        });
+                        
+                        if (eventResponse.ok) {
+                            const eventData = await eventResponse.json();
+                            console.log('✓ SampleReport: Fetched event:', eventData.name);
+                            setLocalEvent(eventData);
+                        }
+                    }
+                } else {
+                    console.error('✗ SampleReport: Failed to fetch scores:', response.status, response.statusText);
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                }
+            } catch (err) {
+                console.error('✗ SampleReport: Fetch error:', err);
+            }
+        };
+        
+        fetchScoresAndEvent();
+    }, [sample.id, event]);
+    
+    const scoresForSample = useMemo(() => {
+        // Always use localScores (fetched from DB), ignore appData.scores which may have mock data
+        console.log('SampleReport: Attempting scores lookup', { 
+            sampleId: String(sample.id), 
+            eventId: String(event?.id), 
+            localScoresCount: localScores.length,
+        });
+        
+        // Check what's in localScores
+        if (localScores.length > 0) {
+            console.log('Sample of fetched scores:', localScores.slice(0, 3).map(s => ({ sampleId: s.sampleId, eventId: s.eventId, isSubmitted: s.isSubmitted, fragrance: s.scores?.fragrance })));
+        }
+        
+        const scores = localScores.filter(s => {
+            const sampleMatch = String(s.sampleId) === String(sample.id);
+            const eventMatch = String(s.eventId) === String(event?.id);
+            const submittedMatch = s.isSubmitted;
+            const fullMatch = sampleMatch && eventMatch && submittedMatch;
+            
+            if (fullMatch) {
+                console.log('✓ MATCH FOUND:', { sampleId: s.sampleId, eventId: s.eventId, fragrance: s.scores?.fragrance });
+            }
+            
+            return fullMatch;
+        });
+        
+        console.log('SampleReport: Scores lookup result', { sampleId: sample.id, eventId: event?.id, scoresFound: scores.length });
+        return scores;
+    }, [localScores, sample.id, event]);
+    
     const farmer = useMemo(() => appData.users.find(u => u.id === sample.farmerId), [appData.users, sample.farmerId]);
 
     const rankInfo = useMemo(() => {
@@ -52,7 +189,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
         }
 
         const rankedEventSamples = appData.samples
-            .filter(s => event.sampleIds.includes(s.id) && s.adjudicatedFinalScore !== undefined)
+            .filter(s => event.sampleIds.map(id => String(id)).includes(String(s.id)) && s.adjudicatedFinalScore !== undefined)
             .sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0));
         
         const rank = rankedEventSamples.findIndex(s => s.id === sample.id) + 1;
@@ -85,12 +222,12 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
 
     const competitionSamplesInCategory = useMemo(() => {
         if (!event) return [];
-        return appData.samples.filter(s => event.sampleIds.includes(s.id) && s.processingMethod === sample.processingMethod && s.adjudicatedFinalScore);
+        return appData.samples.filter(s => event.sampleIds.map(id => String(id)).includes(String(s.id)) && s.processingMethod === sample.processingMethod && s.adjudicatedFinalScore);
     }, [appData.samples, event, sample.processingMethod]);
     
     const radarChartData = useMemo(() => {
-      if (!event) return [];
-      const competitionScoresForCategory = appData.scores.filter(sc => competitionSamplesInCategory.some(s => s.id === sc.sampleId) && sc.isSubmitted);
+      if (!event || !appData.samples) return [];
+      const competitionScoresForCategory = localScores.filter(sc => competitionSamplesInCategory.some(s => String(s.id) === String(sc.sampleId)) && sc.isSubmitted);
 
       return scoreAttributes.map(attr => {
           const sampleScores = scoresForSample.map(s => s.scores[attr]);
@@ -103,7 +240,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
               'Competition Avg.': parseFloat(calculateStats(competitionScores).average.toFixed(2)),
           };
       });
-    }, [scoresForSample, competitionSamplesInCategory, appData.scores, event]);
+    }, [scoresForSample, competitionSamplesInCategory, localScores, event, appData.samples]);
     
     const descriptorFrequency = useMemo(() => {
         const allDescriptors = scoresForSample.flatMap(s => s.descriptors.map(d => d.name));
@@ -123,7 +260,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
             const attrName = String(attr).charAt(0).toUpperCase() + String(attr).slice(1);
 
             const allScoresForAttr = competitionSamplesInCategory.flatMap(s => 
-                appData.scores.filter(score => score.sampleId === s.id && score.isSubmitted).map(score => score.scores[attr])
+                localScores.filter(score => score.sampleId === s.id && score.isSubmitted).map(score => score.scores[attr])
             );
             const sortedScores = [...allScoresForAttr].sort((a,b) => a-b);
             const rank = sortedScores.filter(s => s < sampleAvgScore).length;
