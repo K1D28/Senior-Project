@@ -1,11 +1,33 @@
 import { Role, User, CoffeeSample, CuppingEvent, ScoreSheet, ActivityLog } from './types';
 import axios from 'axios';
 
+/**
+ * HISTORICAL MOCK DATA - NOT USED IN PRODUCTION
+ * 
+ * This file contains mock data from early development stages.
+ * All user-facing components now fetch data exclusively from the backend API.
+ * 
+ * ✅ IMPORTANT: All actual data comes from these API endpoints:
+ *   - Users: /api/users
+ *   - Events: /api/cupping-events
+ *   - Samples: /api/samples
+ *   - Scores: /api/qgrader/scores/sample/{sampleId}
+ *   - And other API endpoints in server.js
+ */
+
+/**
+ * @deprecated MOCK DATA - Not used in production
+ * Actual users are fetched from /api/users endpoint in AdminDashboard
+ */
 export const USERS: User[] = [
   { id: 'admin-1', name: 'Alice Organizer', email: 'alice@cuppinghub.com', roles: [Role.ADMIN], status: 'Active', lastLogin: '2024-10-25T10:00:00Z' },
   { id: 'headjudge-1', name: 'Eve Adjudicator', email: 'eve@cuppinghub.com', roles: [Role.HEAD_JUDGE, Role.Q_GRADER], status: 'Active', lastLogin: '2024-10-24T09:00:00Z' },
 ];
 
+/**
+ * @deprecated MOCK DATA - Not used in production
+ * Actual samples are fetched from /api/samples endpoint
+ */
 export const COFFEE_SAMPLES: CoffeeSample[] = [
   { id: 'sample-1', farmerId: 'farmer-1', farmName: 'Gedeo Zone Cooperative', region: 'Ethiopia, Yirgacheffe', altitude: 1900, processingMethod: 'Washed', variety: 'Heirloom', blindCode: 'A1B2', moisture: 11.5 },
   { id: 'sample-2', farmerId: 'farmer-2', farmName: 'Finca El Paraiso', region: 'Colombia, Huila', altitude: 1750, processingMethod: 'Natural', variety: 'Pink Bourbon', blindCode: 'C3D4', moisture: 10.8 },
@@ -29,6 +51,12 @@ const calculateFinalScore = (scores: Omit<ScoreSheet['scores'], 'finalScore'>) =
     return attributeTotal - defectTotal;
 }
 
+/**
+ * @deprecated MOCK DATA - Not used in production
+ * Actual Q Grader scores are fetched from /api/qgrader/scores/sample/{sampleId}
+ * in SampleReport.tsx and other components. These historical scores are immediately
+ * replaced by database data and never displayed to users.
+ */
 export const SCORE_SHEETS: ScoreSheet[] = [
   // Scores for Sample 1
   {
@@ -59,19 +87,28 @@ export const SCORE_SHEETS: ScoreSheet[] = [
    // Q-Grader 3 has not submitted any scores yet.
 ];
 
+/**
+ * @deprecated MOCK DATA - Not used in production
+ * Activity logs in production are managed by the backend database.
+ * These historical entries are kept for reference only.
+ */
 export const ACTIVITY_LOG: ActivityLog[] = [
     { id: 'log-1', userId: 'qgrader-3', timestamp: '2024-10-26T09:00:00Z', action: 'Invitation Sent', performedBy: 'admin-1' },
     { id: 'log-2', userId: 'farmer-2', timestamp: '2024-10-20T11:00:00Z', action: 'Deactivated by Admin', performedBy: 'admin-1' },
     { id: 'log-3', userId: 'headjudge-1', timestamp: '2024-10-15T12:00:00Z', action: 'Role "Q Grader" added by Admin', performedBy: 'admin-1' },
 ];
 
+/**
+ * Initial application state structure.
+ * All fields are populated from database APIs on app load and should NOT be relied upon
+ * for actual functionality. See comments in each dashboard for API endpoints.
+ */
 export const initialData = {
-    users: USERS,
-    // Start with no samples in initial data — samples will be loaded from the database via API
-    samples: [] as CoffeeSample[],
-    events: [] as CuppingEvent[], // Explicitly type events as an array of CuppingEvent
-    scores: SCORE_SHEETS,
-    activityLog: ACTIVITY_LOG,
+    users: USERS,                   // ← Replaced by /api/users data immediately
+    samples: [] as CoffeeSample[],   // ← Empty, populated from /api/samples
+    events: [] as CuppingEvent[],    // ← Empty, populated from /api/cupping-events
+    scores: SCORE_SHEETS,            // ← Replaced by /api/qgrader/scores/sample/{id}
+    activityLog: ACTIVITY_LOG,       // ← Used as fallback only
 };
 
 export type AppData = typeof initialData;

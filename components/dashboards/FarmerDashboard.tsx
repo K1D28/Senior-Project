@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { User, CoffeeSample, CuppingEvent } from '../../types';
 import { AppData } from '../../data';
 import { NewSampleRegistrationData } from '../../App';
@@ -153,9 +153,9 @@ interface TabButtonProps {
   setActiveTab: (tab: Tab) => void;
 }
 
-const TabButton: React.FC<TabButtonProps> = ({ tab, label, icon: Icon, activeTab, setActiveTab }) => (
+const TabButton: React.FC<TabButtonProps> = ({ tab, label, icon: Icon, activeTab, setActiveTab: handleTabClick }) => (
   <button
-    onClick={() => setActiveTab(tab)}
+    onClick={() => handleTabClick(tab)}
     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full ${
       activeTab === tab
         ? 'bg-primary text-white'
@@ -266,9 +266,44 @@ const RegistrationModal: React.FC<{
 
 
 const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData, onRegisterForEvent, onLogout }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Map URL paths to tab names
+  const pathToTab: { [key: string]: Tab } = {
+    '/farmer-dashboard': 'dashboard',
+    '/farmer-dashboard/UpcomingEvent': 'events',
+    '/farmer-dashboard/leaderboard': 'leaderboard',
+  };
+  
+  // Map tab names to URL paths
+  const tabToPath: { [key in Tab]: string } = {
+    dashboard: '/farmer-dashboard',
+    events: '/farmer-dashboard/UpcomingEvent',
+    leaderboard: '/farmer-dashboard/leaderboard',
+  };
+  
+  // Initialize activeTab from URL or default to 'dashboard'
+  const [activeTab, setActiveTabState] = useState<Tab>(() => {
+    return pathToTab[location.pathname] || 'dashboard';
+  });
+  
+  // Function for when user clicks a tab button - updates state AND navigates URL
+  const handleTabClick = (tab: Tab) => {
+    setActiveTabState(tab);
+    navigate(tabToPath[tab]);
+  };
+  
+  // Watch for URL changes (browser back/forward) and update activeTab accordingly
+  useEffect(() => {
+    const tabFromUrl = pathToTab[location.pathname];
+    if (tabFromUrl) {
+      setActiveTabState(tabFromUrl);
+    }
+  }, [location.pathname]);
+
   const [viewingReportForSample, setViewingReportForSample] = useState<CoffeeSample | null>(null);
   const [viewingCertificateFor, setViewingCertificateFor] = useState<{ sample: CoffeeSample, event: CuppingEvent, rank: number } | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'events' | 'leaderboard'>('dashboard');
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedEventForRegistration, setSelectedEventForRegistration] = useState<CuppingEvent | null>(null);
@@ -277,8 +312,6 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const [farmerDatabaseId, setFarmerDatabaseId] = useState<number | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const navigate = useNavigate();
 
   // First, fetch the farmer's database ID
   useEffect(() => {
@@ -644,10 +677,10 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
                 {/* Navigation Menu */}
                 <nav className="flex flex-col p-4 gap-2 flex-1">
-                    <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={setActiveTab} />
-                    <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={setActiveTab} />
+                    <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={handleTabClick} />
+                    <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={handleTabClick} />
                     <div className="mt-auto">
-                        <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={setActiveTab} />
+                        <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={handleTabClick} />
                     </div>
                 </nav>
 

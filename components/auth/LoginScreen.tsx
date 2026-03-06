@@ -6,10 +6,10 @@ import { supabase } from './supabaseClient';
 import './LoginScreen.css';
 
 const roleToDashboardMap: Record<string, string> = {
-  ADMIN: '/admin-dashboard',
-  HEAD_JUDGE: '/headjudge-dashboard',
+  ADMIN: '/admin-dashboard/cuppingevents',
+  HEAD_JUDGE: '/headjudge-dashboard/adjudicate',
   FARMER: '/farmer-dashboard',
-  Q_GRADER: '/qgrader-dashboard',
+  Q_GRADER: '/qgrader-dashboard/cuppingevents',
 };
 
 const handleRoleBasedRedirection = (role: string, navigate: (path: string) => void, setError: (message: string) => void) => {

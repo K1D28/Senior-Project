@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Role, User, ScoreSheet, CoffeeSample, CuppingEvent, ActivityLog } from './types';
 import { initialData, AppData } from './data';
 import axios from 'axios'; // Import axios at the top of the file
@@ -72,7 +72,9 @@ export interface EventParticipantsUpdateData {
 
 function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [appData, setAppData] = useState<AppData>({
     users: [],
     samples: [],
@@ -110,23 +112,33 @@ function App() {
   useEffect(() => {
     const restoreUserState = async () => {
       const storedUser = localStorage.getItem('currentUser');
-      if (storedUser) {
+      const token = localStorage.getItem('token');
+      
+      if (storedUser && token) {
         try {
           const user = await verifyAuthentication();
           localStorage.setItem('currentUser', JSON.stringify(user));
+          setCurrentUser(user);
         } catch (error) {
           console.error('Session expired, redirecting to login');
           localStorage.removeItem('currentUser');
+          localStorage.removeItem('token');
           alert('Session expired. Please log in again.');
           navigate('/');
         }
-      } else {
-        navigate('/');
+      } else if (!token) {
+        // Only redirect to login if on a protected route AND no token exists
+        const protectedRoutes = ['/admin-dashboard', '/headjudge-dashboard', '/farmer-dashboard', '/qgrader-dashboard'];
+        const isOnProtectedRoute = protectedRoutes.some(route => location.pathname.startsWith(route));
+        if (isOnProtectedRoute) {
+          navigate('/');
+        }
       }
+      setIsCheckingAuth(false);
     };
 
     restoreUserState();
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   const resetLogoutTimer = useCallback(() => {
     if (logoutTimerRef.current) {
@@ -831,13 +843,133 @@ function App() {
     return <PublicLeaderboard appData={appData} onExit={handleExitLeaderboard} />;
   }
 
+  // Show loading while checking authentication
+  if (isCheckingAuth && (location.pathname.startsWith('/admin-dashboard') || location.pathname.startsWith('/headjudge-dashboard') || location.pathname.startsWith('/farmer-dashboard') || location.pathname.startsWith('/qgrader-dashboard'))) {
+    return <div className="min-h-screen bg-background flex items-center justify-center">Loading...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-background font-sans text-text-dark">
       <Routes>
         <Route path="/" element={<LoginScreen onLogin={handleLogin} />} />
         <Route path="/login" element={<LoginScreen onLogin={handleLogin} />} />
         <Route 
-          path="/admin-dashboard"
+          path="/admin-dashboard/*"
+          element={
+            currentUser ? (
+              <AdminDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRevealResults={revealResults}
+                onCreateFullEvent={createFullEvent}
+                onAddUser={onAddUser}
+                onUpdateUser={updateUser}
+                onUpdateUsersStatus={updateUsersStatus}
+                onAssignUsersToEvent={assignUsersToEvent}
+                onUpdateEventSamples={updateEventSamples}
+                onUpdateEventDetails={updateEventDetails}
+                onUpdateEventParticipants={updateEventParticipants}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/admin-dashboard/cuppingevents"
+          element={
+            currentUser ? (
+              <AdminDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRevealResults={revealResults}
+                onCreateFullEvent={createFullEvent}
+                onAddUser={onAddUser}
+                onUpdateUser={updateUser}
+                onUpdateUsersStatus={updateUsersStatus}
+                onAssignUsersToEvent={assignUsersToEvent}
+                onUpdateEventSamples={updateEventSamples}
+                onUpdateEventDetails={updateEventDetails}
+                onUpdateEventParticipants={updateEventParticipants}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/admin-dashboard/ManageUser"
+          element={
+            currentUser ? (
+              <AdminDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRevealResults={revealResults}
+                onCreateFullEvent={createFullEvent}
+                onAddUser={onAddUser}
+                onUpdateUser={updateUser}
+                onUpdateUsersStatus={updateUsersStatus}
+                onAssignUsersToEvent={assignUsersToEvent}
+                onUpdateEventSamples={updateEventSamples}
+                onUpdateEventDetails={updateEventDetails}
+                onUpdateEventParticipants={updateEventParticipants}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/admin-dashboard/AllSamples"
+          element={
+            currentUser ? (
+              <AdminDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRevealResults={revealResults}
+                onCreateFullEvent={createFullEvent}
+                onAddUser={onAddUser}
+                onUpdateUser={updateUser}
+                onUpdateUsersStatus={updateUsersStatus}
+                onAssignUsersToEvent={assignUsersToEvent}
+                onUpdateEventSamples={updateEventSamples}
+                onUpdateEventDetails={updateEventDetails}
+                onUpdateEventParticipants={updateEventParticipants}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/admin-dashboard/Results"
+          element={
+            currentUser ? (
+              <AdminDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRevealResults={revealResults}
+                onCreateFullEvent={createFullEvent}
+                onAddUser={onAddUser}
+                onUpdateUser={updateUser}
+                onUpdateUsersStatus={updateUsersStatus}
+                onAssignUsersToEvent={assignUsersToEvent}
+                onUpdateEventSamples={updateEventSamples}
+                onUpdateEventDetails={updateEventDetails}
+                onUpdateEventParticipants={updateEventParticipants}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/admin-dashboard/Leaderboard"
           element={
             currentUser ? (
               <AdminDashboard
@@ -875,6 +1007,36 @@ function App() {
           }
         />
         <Route 
+          path="/headjudge-dashboard/adjudicate"
+          element={
+            currentUser ? (
+              <HeadJudgeDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateAdjudication={updateSampleAdjudication}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/headjudge-dashboard/leaderboard"
+          element={
+            currentUser ? (
+              <HeadJudgeDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateAdjudication={updateSampleAdjudication}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
           path="/farmer-dashboard"
           element={
             currentUser ? (
@@ -890,7 +1052,67 @@ function App() {
           }
         />
         <Route 
+          path="/farmer-dashboard/UpcomingEvent"
+          element={
+            currentUser ? (
+              <FarmerDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRegisterForEvent={registerForEvent}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/farmer-dashboard/leaderboard"
+          element={
+            currentUser ? (
+              <FarmerDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRegisterForEvent={registerForEvent}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
           path="/qgrader-dashboard"
+          element={
+            currentUser ? (
+              <QGraderDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateScoreSheet={updateScoreSheet}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/qgrader-dashboard/cuppingevents"
+          element={
+            currentUser ? (
+              <QGraderDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateScoreSheet={updateScoreSheet}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/qgrader-dashboard/leaderboard"
           element={
             currentUser ? (
               <QGraderDashboard

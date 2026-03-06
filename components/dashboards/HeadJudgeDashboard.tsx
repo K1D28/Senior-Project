@@ -9,7 +9,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Modal } from '../ui/Modal';
 import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles, BarChart2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // Coffee Cup Logo with Continuous Evaporation Animation
 const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
@@ -402,6 +402,41 @@ const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appDa
 interface HeadJudgeDashboardProps { currentUser: User; appData: AppData; onUpdateAdjudication: (sampleId: string, finalData: AdjudicationData) => void; onLogout: () => void; }
 
 const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, appData, onUpdateAdjudication, onLogout }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Map URL paths to tab names
+    const pathToTab: { [key: string]: 'adjudicate' | 'leaderboard' } = {
+        '/headjudge-dashboard': 'adjudicate',
+        '/headjudge-dashboard/adjudicate': 'adjudicate',
+        '/headjudge-dashboard/leaderboard': 'leaderboard',
+    };
+    
+    // Map tab names to URL paths
+    const tabToPath: { [key in 'adjudicate' | 'leaderboard']: string } = {
+        adjudicate: '/headjudge-dashboard/adjudicate',
+        leaderboard: '/headjudge-dashboard/leaderboard',
+    };
+    
+    // Initialize activeTab from URL or default to 'adjudicate'
+    const [activeTab, setActiveTabState] = useState<'adjudicate' | 'leaderboard'>(() => {
+        return pathToTab[location.pathname] || 'adjudicate';
+    });
+    
+    // Function for when user clicks a tab button - updates state AND navigates URL
+    const handleTabClick = (tab: 'adjudicate' | 'leaderboard') => {
+        setActiveTabState(tab);
+        navigate(tabToPath[tab]);
+    };
+    
+    // Watch for URL changes (browser back/forward) and update activeTab accordingly
+    useEffect(() => {
+        const tabFromUrl = pathToTab[location.pathname];
+        if (tabFromUrl) {
+            setActiveTabState(tabFromUrl);
+        }
+    }, [location.pathname]);
+
     const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
     const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
@@ -414,8 +449,6 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'adjudicate' | 'leaderboard'>('adjudicate');
-    const navigate = useNavigate();
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
     useEffect(() => {
@@ -805,7 +838,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         {/* Navigation */}
                         <nav className="flex flex-col p-4 gap-2 flex-1">
                             <button
-                                onClick={() => setActiveTab('adjudicate')}
+                                onClick={() => handleTabClick('adjudicate')}
                                 className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                                   activeTab === 'adjudicate' 
                                     ? 'bg-primary text-white shadow-md'
@@ -816,7 +849,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 <span>Adjudicate</span>
                             </button>
                             <button
-                                onClick={() => setActiveTab('leaderboard')}
+                                onClick={() => handleTabClick('leaderboard')}
                                 className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                                   activeTab === 'leaderboard' 
                                     ? 'bg-primary text-white shadow-md'
@@ -915,7 +948,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     <nav className="flex flex-col p-4 gap-2 flex-1">
                         <button
                             onClick={() => {
-                                setActiveTab('adjudicate');
+                                handleTabClick('adjudicate');
                                 setSelectedEvent(null);
                                 setSelectedSample(null);
                             }}
@@ -929,7 +962,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                             <span>Adjudicate</span>
                         </button>
                         <button
-                            onClick={() => setActiveTab('leaderboard')}
+                            onClick={() => handleTabClick('leaderboard')}
                             className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                               activeTab === 'leaderboard' 
                                 ? 'bg-primary text-white shadow-md'

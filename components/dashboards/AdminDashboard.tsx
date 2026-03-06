@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { User, Role, CoffeeSample, CuppingEvent } from '../../types';
 import { AppData, initialData } from '../../data';
@@ -184,8 +184,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         ...initialData,
         events: [] as CuppingEvent[], // Explicitly type events as an array of CuppingEvent
     }); // Default to mock data
-    const [activeTab, setActiveTab] = useState<Tab>('events');
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Map URL paths to tab names
+    const pathToTab: { [key: string]: Tab } = {
+        '/admin-dashboard/cuppingevents': 'events',
+        '/admin-dashboard/ManageUser': 'users',
+        '/admin-dashboard/AllSamples': 'samples',
+        '/admin-dashboard/Results': 'results',
+        '/admin-dashboard/Leaderboard': 'leaderboard',
+    };
+    
+    // Map tab names to URL paths
+    const tabToPath: { [key in Tab]: string } = {
+        events: '/admin-dashboard/cuppingevents',
+        users: '/admin-dashboard/ManageUser',
+        samples: '/admin-dashboard/AllSamples',
+        results: '/admin-dashboard/Results',
+        leaderboard: '/admin-dashboard/Leaderboard',
+    };
+    
+    // Initialize activeTab from URL or default to 'events'
+    const [activeTab, setActiveTabState] = useState<Tab>(() => {
+        return pathToTab[location.pathname] || 'events';
+    });
+    
+    // Function for when user clicks a tab button - updates state AND navigates URL
+    const handleTabClick = (tab: Tab) => {
+        setActiveTabState(tab);
+        navigate(tabToPath[tab]);
+    };
+    
+    // Watch for URL changes (browser back/forward) and update activeTab accordingly
+    // This only updates state, does NOT navigate to prevent loops
+    useEffect(() => {
+        const tabFromUrl = pathToTab[location.pathname];
+        if (tabFromUrl) {
+            setActiveTabState(tabFromUrl);
+        }
+    }, [location.pathname]);
     
     const fetchData = async () => {
         try {
@@ -527,7 +565,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             console.warn('onCreateFullEvent failed or received unexpected payload; falling back to server refresh.', err);
         } finally {
             handleCloseWizard();
-            setActiveTab('events'); // Redirect to the Cupping Event list
+            handleTabClick('events'); // Redirect to the Cupping Event list
             // Wait for fetchData to finish so UI is refreshed when modal closes
             try {
                 await fetchData();
@@ -737,7 +775,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const TabButton = ({ tab, label, icon: Icon }: { tab: Tab, label: string, icon: React.ElementType }) => (
         <button
-            onClick={() => { setActiveTab(tab); setViewingUserId(null); }}
+            onClick={() => { handleTabClick(tab); setViewingUserId(null); }}
             className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${activeTab === tab ? 'bg-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}
         >
             <Icon size={18} />

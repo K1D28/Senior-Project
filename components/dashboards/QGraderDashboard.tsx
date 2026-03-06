@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Modal } from '../ui/Modal';
 import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock, Trophy, LogOut, Sparkles, BarChart2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // FIX: Add type definitions for SpeechRecognition API to the global window object to resolve TypeScript errors.
 declare global {
@@ -326,16 +326,49 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
 interface QGraderDashboardProps { currentUser: User; appData: AppData; onUpdateScoreSheet: (sheet: ScoreSheet) => void; onLogout: () => void; }
 
 const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appData, onUpdateScoreSheet, onLogout }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Map URL paths to tab names
+    const pathToTab: { [key: string]: 'cupping' | 'leaderboard' } = {
+        '/qgrader-dashboard': 'cupping',
+        '/qgrader-dashboard/cuppingevents': 'cupping',
+        '/qgrader-dashboard/leaderboard': 'leaderboard',
+    };
+    
+    // Map tab names to URL paths
+    const tabToPath: { [key in 'cupping' | 'leaderboard']: string } = {
+        cupping: '/qgrader-dashboard/cuppingevents',
+        leaderboard: '/qgrader-dashboard/leaderboard',
+    };
+    
+    // Initialize activeTab from URL or default to 'cupping'
+    const [activeTab, setActiveTabState] = useState<'cupping' | 'leaderboard'>(() => {
+        return pathToTab[location.pathname] || 'cupping';
+    });
+    
+    // Function for when user clicks a tab button - updates state AND navigates URL
+    const handleTabClick = (tab: 'cupping' | 'leaderboard') => {
+        setActiveTabState(tab);
+        navigate(tabToPath[tab]);
+    };
+    
+    // Watch for URL changes (browser back/forward) and update activeTab accordingly
+    useEffect(() => {
+        const tabFromUrl = pathToTab[location.pathname];
+        if (tabFromUrl) {
+            setActiveTabState(tabFromUrl);
+        }
+    }, [location.pathname]);
+
     const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
     const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'cupping' | 'leaderboard'>('cupping');
     const [leaderboardEvents, setLeaderboardEvents] = useState<CuppingEvent[]>([]);
     const [leaderboardSamples, setLeaderboardSamples] = useState<CoffeeSample[]>([]);
-    const navigate = useNavigate();
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
     useEffect(() => {
@@ -527,7 +560,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                     <nav className="flex flex-col p-4 gap-2 flex-1">
                         <button
                             onClick={() => {
-                                setActiveTab('cupping');
+                                handleTabClick('cupping');
                                 setSelectedEvent(null);
                                 setSelectedSample(null);
                             }}
@@ -541,7 +574,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                             <span>Cupping Events</span>
                         </button>
                         <button
-                            onClick={() => setActiveTab('leaderboard')}
+                            onClick={() => handleTabClick('leaderboard')}
                             className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                               activeTab === 'leaderboard' 
                                 ? 'bg-primary text-white shadow-md'
