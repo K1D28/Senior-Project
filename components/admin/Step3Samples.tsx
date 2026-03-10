@@ -4,7 +4,7 @@ import { CoffeeSample, User } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { Trash2, Upload } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 
 interface Step3SamplesProps {
@@ -104,23 +104,6 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
             <Card title="Coffee Samples">
                 <p className="text-sm text-text-light mb-4">Add coffee samples submitted by farmers or via admin submission.</p>
                 
-                {/* CSV Import Section */}
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                            <h4 className="font-semibold text-sm mb-2">Import from CSV</h4>
-                            <p className="text-xs text-text-light mb-3">Format: farmName, variety, region, processingMethod, altitude, moisture, farmerId (one sample per line)</p>
-                            <input
-                                type="file"
-                                accept=".csv"
-                                onChange={handleCSVImport}
-                                className="text-sm"
-                            />
-                        </div>
-                        <Upload size={24} className="text-blue-600" />
-                    </div>
-                </div>
-
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left table-auto">
                         <thead>

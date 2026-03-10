@@ -813,6 +813,42 @@ function App() {
     });
   }, [currentUser]);
 
+  const registerSampleWithoutEvent = useCallback((sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => {
+    if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;
+
+    // Submit sample without blind code and without event assignment
+    fetch('http://localhost:5001/api/samples', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        farmName: sampleData.farmName,
+        farmerId: farmerDatabaseId,
+        region: sampleData.region,
+        variety: sampleData.variety,
+        processingMethod: sampleData.processingMethod,
+        altitude: sampleData.altitude,
+        moisture: sampleData.moisture,
+        sampleType: 'FARMER_REGISTERED',
+        // No cuppingEventId - sample is not assigned to any event yet
+      }),
+    })
+    .then(response => {
+      if (response.ok) {
+        console.log('Sample registered successfully without event');
+        alert('Sample registered successfully! It can be assigned to events later.');
+      } else {
+        alert('Failed to register sample');
+      }
+    })
+    .catch(error => {
+      console.error('Error registering sample:', error);
+      alert('Error registering sample');
+    });
+  }, [currentUser]);
 
   const renderDashboard = () => {
     if (!currentUser) return null;
@@ -1044,6 +1080,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onRegisterForEvent={registerForEvent}
+                onRegisterSampleWithoutEvent={registerSampleWithoutEvent}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1059,6 +1096,23 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onRegisterForEvent={registerForEvent}
+                onRegisterSampleWithoutEvent={registerSampleWithoutEvent}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/farmer-dashboard/RegisterSample"
+          element={
+            currentUser ? (
+              <FarmerDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onRegisterForEvent={registerForEvent}
+                onRegisterSampleWithoutEvent={registerSampleWithoutEvent}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1074,6 +1128,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onRegisterForEvent={registerForEvent}
+                onRegisterSampleWithoutEvent={registerSampleWithoutEvent}
                 onLogout={handleLogout}
               />
             ) : (

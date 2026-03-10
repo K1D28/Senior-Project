@@ -140,10 +140,11 @@ interface FarmerDashboardProps {
   currentUser: User;
   appData: AppData;
   onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
+  onRegisterSampleWithoutEvent?: (sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
   onLogout: () => void;
 }
 
-type Tab = 'dashboard' | 'events' | 'leaderboard';
+type Tab = 'dashboard' | 'events' | 'RegisterSample' | 'leaderboard';
 
 interface TabButtonProps {
   tab: Tab;
@@ -265,7 +266,7 @@ const RegistrationModal: React.FC<{
 };
 
 
-const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData, onRegisterForEvent, onLogout }) => {
+const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData, onRegisterForEvent, onRegisterSampleWithoutEvent, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -273,6 +274,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const pathToTab: { [key: string]: Tab } = {
     '/farmer-dashboard': 'dashboard',
     '/farmer-dashboard/UpcomingEvent': 'events',
+    '/farmer-dashboard/RegisterSample': 'RegisterSample',
     '/farmer-dashboard/leaderboard': 'leaderboard',
   };
   
@@ -280,6 +282,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const tabToPath: { [key in Tab]: string } = {
     dashboard: '/farmer-dashboard',
     events: '/farmer-dashboard/UpcomingEvent',
+    RegisterSample: '/farmer-dashboard/RegisterSample',
     leaderboard: '/farmer-dashboard/leaderboard',
   };
   
@@ -307,6 +310,14 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedEventForRegistration, setSelectedEventForRegistration] = useState<CuppingEvent | null>(null);
+  const [sampleData, setSampleData] = useState<NewSampleRegistrationData>({
+    farmName: '',
+    region: '',
+    altitude: 0,
+    processingMethod: '',
+    variety: '',
+    moisture: undefined,
+  });
   const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
   const [farmerSamplesFromBackend, setFarmerSamplesFromBackend] = useState<CoffeeSample[]>([]);
   const [farmerDatabaseId, setFarmerDatabaseId] = useState<number | null>(null);
@@ -679,6 +690,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                 <nav className="flex flex-col p-4 gap-2 flex-1">
                     <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={handleTabClick} />
                     <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={handleTabClick} />
+                    <TabButton tab="RegisterSample" label="Register Sample" icon={PlusCircle} activeTab={activeTab} setActiveTab={handleTabClick} />
                     <div className="mt-auto">
                         <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={handleTabClick} />
                     </div>
@@ -751,6 +763,72 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                     </div>
                                 </Card>
                             )}
+                        </div>
+                    )}
+                    {activeTab === 'RegisterSample' && (
+                        <div className="space-y-6">
+                            <h3 className="text-2xl font-bold text-primary">Register a Coffee Sample</h3>
+                            <Card>
+                                <p className="text-sm text-text-light mb-6">Register your coffee samples anytime. They can be assigned to events later when they become available.</p>
+                                <form onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (!sampleData.farmName || !sampleData.region || !sampleData.variety || !sampleData.processingMethod) {
+                                        alert("Please fill out all required fields.");
+                                        return;
+                                    }
+                                    // Call register without event context
+                                    if (farmerDatabaseId) {
+                                        onRegisterSampleWithoutEvent?.(sampleData, farmerDatabaseId);
+                                        setSampleData({
+                                            farmName: '',
+                                            region: '',
+                                            altitude: 0,
+                                            processingMethod: '',
+                                            variety: '',
+                                            moisture: undefined,
+                                        });
+                                        setTimeout(() => {
+                                            setRefreshKey(prev => prev + 1);
+                                        }, 500);
+                                    }
+                                }} className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="farmName">Farm Name *</Label>
+                                        <Input id="farmName" value={sampleData.farmName} onChange={(e) => setSampleData(prev => ({...prev, farmName: e.target.value}))} required />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="variety">Variety *</Label>
+                                        <Input id="variety" value={sampleData.variety} onChange={(e) => setSampleData(prev => ({...prev, variety: e.target.value}))} required />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="region">Region *</Label>
+                                        <Input id="region" value={sampleData.region} onChange={(e) => setSampleData(prev => ({...prev, region: e.target.value}))} required />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="processingMethod">Processing Method *</Label>
+                                        <Select id="processingMethod" value={sampleData.processingMethod} onChange={(e) => setSampleData(prev => ({...prev, processingMethod: e.target.value}))} required>
+                                            <option value="" disabled>Select a method...</option>
+                                            <option value="Washed">Washed</option>
+                                            <option value="Natural">Natural</option>
+                                            <option value="Honey">Honey</option>
+                                            <option value="Pulped Natural">Pulped Natural</option>
+                                        </Select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <Label htmlFor="altitude">Altitude (m)</Label>
+                                            <Input id="altitude" type="number" value={sampleData.altitude} onChange={(e) => setSampleData(prev => ({...prev, altitude: Number(e.target.value)}))} />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="moisture">Moisture (%)</Label>
+                                            <Input id="moisture" type="number" step="0.1" value={sampleData.moisture || ''} onChange={(e) => setSampleData(prev => ({...prev, moisture: Number(e.target.value)}))} />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end space-x-2 pt-4 border-t border-border">
+                                        <Button type="submit" className="bg-primary text-white">Register Sample</Button>
+                                    </div>
+                                </form>
+                            </Card>
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
