@@ -4,7 +4,7 @@ import { CoffeeSample, User } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Check } from 'lucide-react';
 import { Card } from '../ui/Card';
 
 interface Step3SamplesProps {
@@ -12,34 +12,49 @@ interface Step3SamplesProps {
   onUpdate: (data: CoffeeSample[]) => void;
   farmers: User[];
   processingMethods: string[];
+  approvedSamples?: CoffeeSample[];
+  eventName?: string;
 }
 
-const newSampleTemplate: CoffeeSample = {
-    id: '',
-    blindCode: '',
-    farmerId: '', // Empty by default, user must select for proxy submissions
-    farmName: '',
-    region: '',
-    altitude: 0,
-    processingMethod: '',
-    variety: '',
-    moisture: 0,
-    sampleType: 'PROXY_SUBMISSION',
+const generateBlindCode = (eventName: string): string => {
+    if (!eventName) {
+        // Fallback if no event name
+        return `BC-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+    }
+    
+    // Extract first letter of each word and uppercase
+    const words = eventName.trim().split(/\s+/);
+    const acronym = words.map(word => word.charAt(0).toUpperCase()).join('');
+    
+    // Generate random 4 digits
+    const randomDigits = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    
+    return `${acronym}-${randomDigits}`;
 };
 
-const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, processingMethods }) => {
+const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, processingMethods, approvedSamples = [], eventName = '' }) => {
+    const [availableSamples, setAvailableSamples] = useState<CoffeeSample[]>([]);
 
     useEffect(() => {
-        console.log('Step3Samples - farmers prop:', farmers);
-    }, [farmers]);
-
-    const handleAddRow = () => {
-        const newSample: CoffeeSample = { ...newSampleTemplate, id: `temp-${Date.now()}`, blindCode: `BC-${Date.now()}`, processingMethod: processingMethods[0] || '', sampleType: 'PROXY_SUBMISSION' };
-        onUpdate([...data, newSample]);
-    };
+        // Filter for approved samples that haven't been added to the event yet
+        const selectedSampleIds = new Set(data.map(s => s.id));
+        const available = (approvedSamples || []).filter(
+            sample => sample.approvalStatus === 'APPROVED' && !selectedSampleIds.has(sample.id)
+        );
+        setAvailableSamples(available);
+    }, [approvedSamples, data]);
 
     const handleRemoveRow = (index: number) => {
         onUpdate(data.filter((_, i) => i !== index));
+    };
+
+    const handleAddSample = (sample: CoffeeSample) => {
+        // Generate blind code with event name and add the approved sample to the event's samples
+        const sampleWithBlindCode = {
+            ...sample,
+            blindCode: generateBlindCode(eventName),
+        };
+        onUpdate([...data, sampleWithBlindCode]);
     };
 
     const handleUpdateRow = (index: number, field: keyof CoffeeSample, value: string | number) => {
@@ -48,73 +63,80 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
         onUpdate(newData);
     };
 
-    const handleCSVImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const csv = e.target?.result as string;
-                const lines = csv.split('\n').filter(line => line.trim());
-                
-                // Skip header row (assumed to be: farmName,variety,region,processingMethod,altitude,moisture,farmerId)
-                const importedSamples: CoffeeSample[] = [];
-                
-                for (let i = 1; i < lines.length; i++) {
-                    const values = lines[i].split(',').map(v => v.trim());
-                    
-                    if (values.length < 7) continue; // Skip incomplete rows
-                    
-                    const newSample: CoffeeSample = {
-                        id: `temp-${Date.now()}-${i}`,
-                        blindCode: `CSV-${Date.now()}-${i}`,
-                        farmName: values[0],
-                        variety: values[1],
-                        region: values[2],
-                        processingMethod: values[3] || processingMethods[0] || '',
-                        altitude: parseFloat(values[4]) || 0,
-                        moisture: parseFloat(values[5]) || 0,
-                        farmerId: values[6],
-                        sampleType: 'PROXY_SUBMISSION',
-                    };
-                    
-                    importedSamples.push(newSample);
-                }
-                
-                if (importedSamples.length > 0) {
-                    onUpdate([...data, ...importedSamples]);
-                    alert(`Successfully imported ${importedSamples.length} samples from CSV`);
-                } else {
-                    alert('No valid samples found in CSV file');
-                }
-            } catch (error) {
-                alert('Error parsing CSV file: ' + (error instanceof Error ? error.message : 'Unknown error'));
-            }
-        };
-        reader.readAsText(file);
-        
-        // Reset input
-        event.target.value = '';
-    };
-
     return (
         <div className="space-y-6">
-            {/* Proxy Submissions Section */}
-            <Card title="Coffee Samples">
-                <p className="text-sm text-text-light mb-4">Add coffee samples submitted by farmers or via admin submission.</p>
+            {/* Available Approved Samples Section */}
+            <Card title="Available Approved Samples">
+                <p className="text-sm text-text-light mb-4">Select approved samples from farmers to add to this event.</p>
+                
+                {availableSamples.length === 0 ? (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded text-sm text-gray-700">
+                        No approved samples available. Farmers can register and get approval for samples through the admin dashboard.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left table-auto">
+                            <thead>
+                                <tr className="border-b border-border bg-background">
+                                    <th className="p-2 font-semibold">Farm Name</th>
+                                    <th className="p-2 font-semibold">Farmer</th>
+                                    <th className="p-2 font-semibold">Variety</th>
+                                    <th className="p-2 font-semibold">Region</th>
+                                    <th className="p-2 font-semibold">Processing</th>
+                                    <th className="p-2 font-semibold">Altitude (m)</th>
+                                    <th className="p-2 font-semibold">Moisture (%)</th>
+                                    <th className="p-2 font-semibold">Blind Code</th>
+                                    <th className="p-2 font-semibold"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {availableSamples.map((sample) => {
+                                    const farmer = farmers.find(f => String((f as any).id ?? (f as any).userDetails?.id ?? (f as any).userId ?? '') === String(sample.farmerId));
+                                    const farmerLabel = (farmer as any)?.name ?? (farmer as any)?.userDetails?.name ?? (farmer as any)?.email ?? sample.farmerId ?? 'Unknown';
+                                    
+                                    return (
+                                        <tr key={sample.id} className="border-b border-border hover:bg-gray-50">
+                                            <td className="p-2">{sample.farmName}</td>
+                                            <td className="p-2">{farmerLabel}</td>
+                                            <td className="p-2">{sample.variety}</td>
+                                            <td className="p-2">{sample.region}</td>
+                                            <td className="p-2">{sample.processingMethod}</td>
+                                            <td className="p-2">{sample.altitude}</td>
+                                            <td className="p-2">{sample.moisture}</td>
+                                            <td className="p-2 font-mono text-xs bg-gray-100 px-2 py-1 rounded">{sample.blindCode}</td>
+                                            <td className="p-2 text-center">
+                                                <button 
+                                                    onClick={() => handleAddSample(sample)} 
+                                                    className="bg-primary text-white p-2 rounded hover:bg-primary-dark flex items-center gap-1"
+                                                    title="Add to event"
+                                                >
+                                                    <Check size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
+            {/* Selected Samples Section */}
+            <Card title="Samples Assigned to Event">
+                <p className="text-sm text-text-light mb-4">Samples selected for this event.</p>
                 
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left table-auto">
                         <thead>
                             <tr className="border-b border-border bg-background">
-                                <th className="p-2 font-semibold">Farmer</th>
                                 <th className="p-2 font-semibold">Farm Name</th>
                                 <th className="p-2 font-semibold">Variety</th>
                                 <th className="p-2 font-semibold">Region</th>
                                 <th className="p-2 font-semibold">Processing</th>
                                 <th className="p-2 font-semibold">Altitude (m)</th>
                                 <th className="p-2 font-semibold">Moisture (%)</th>
+                                <th className="p-2 font-semibold">Blind Code</th>
                                 <th className="p-2 font-semibold"></th>
                             </tr>
                         </thead>
@@ -122,28 +144,14 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
                             {data.map((sample, index) => {
                                 return (
                                     <tr key={sample.id || index} className="border-b border-border">
-                                        <td className="p-1">
-                                            <Select value={sample.farmerId} onChange={e => handleUpdateRow(index, 'farmerId', e.target.value)}>
-                                                <option value="" disabled>Select Farmer</option>
-                                                {farmers.map(f => {
-                                                    const userId = String((f as any).id ?? (f as any).userDetails?.id ?? (f as any).userId ?? '');
-                                                    const label = (f as any).name ?? (f as any).userDetails?.name ?? (f as any).email ?? `Farmer ${userId}`;
-                                                    return <option key={userId} value={userId}>{label}</option>;
-                                                })}
-                                            </Select>
-                                        </td>
-                                        <td className="p-1"><Input type="text" value={sample.farmName} onChange={e => handleUpdateRow(index, 'farmName', e.target.value)} placeholder="e.g., Finca El Paraiso" /></td>
-                                        <td className="p-1"><Input type="text" value={sample.variety} onChange={e => handleUpdateRow(index, 'variety', e.target.value)} placeholder="e.g., Pink Bourbon" /></td>
-                                        <td className="p-1"><Input type="text" value={sample.region} onChange={e => handleUpdateRow(index, 'region', e.target.value)} placeholder="e.g., Colombia, Huila" /></td>
-                                        <td className="p-1">
-                                            <Select value={sample.processingMethod} onChange={e => handleUpdateRow(index, 'processingMethod', e.target.value)}>
-                                                <option value="" disabled>Select Method</option>
-                                                {processingMethods.map(p => <option key={p} value={p}>{p}</option>)}
-                                            </Select>
-                                        </td>
-                                        <td className="p-1"><Input type="number" value={sample.altitude || ''} onChange={e => handleUpdateRow(index, 'altitude', e.target.value ? Number(e.target.value) : 0)} placeholder="e.g., 1750" /></td>
-                                        <td className="p-1"><Input type="number" step="0.1" value={sample.moisture || ''} onChange={e => handleUpdateRow(index, 'moisture', e.target.value ? Number(e.target.value) : 0)} placeholder="e.g., 10.8" /></td>
-                                        <td className="p-1 text-center">
+                                        <td className="p-2">{sample.farmName}</td>
+                                        <td className="p-2">{sample.variety}</td>
+                                        <td className="p-2">{sample.region}</td>
+                                        <td className="p-2">{sample.processingMethod}</td>
+                                        <td className="p-2">{sample.altitude}</td>
+                                        <td className="p-2">{sample.moisture}</td>
+                                        <td className="p-2 font-mono text-xs bg-gray-100 px-2 py-1 rounded">{sample.blindCode}</td>
+                                        <td className="p-2 text-center">
                                             <button onClick={() => handleRemoveRow(index)} className="text-text-light hover:text-red-600 p-2">
                                                 <Trash2 size={16} />
                                             </button>
@@ -154,9 +162,11 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
                         </tbody>
                     </table>
                 </div>
-                <div className="mt-4">
-                    <Button onClick={() => handleAddRow()}>+ Add Sample</Button>
-                </div>
+                {data.length === 0 && (
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                        No samples assigned yet. Select from available approved samples above.
+                    </div>
+                )}
             </Card>
         </div>
     );

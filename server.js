@@ -805,12 +805,12 @@ app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
       return res.status(400).json({ message: 'Only pending farmer-registered samples can be approved' });
     }
 
-    // Approve and generate blind code from event name
+    // Approve the sample - blind code will be assigned when admin adds it to an event
     const approvedSample = await prisma.sample.update({
       where: { id: parseInt(id) },
       data: {
         approvalStatus: 'APPROVED',
-        blindCode: generateBlindCode(sample.cuppingEvent?.name || 'Sample'), // Generate blind code from event name
+        // blindCode is NOT assigned here - will be generated when added to event
         approvedByAdminId: admin.id,
         approvalDate: new Date(),
       },
@@ -1032,30 +1032,37 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
   try {
     console.log('Received request to create cupping event with data:', JSON.stringify(req.body, null, 2));
 
-    // All samples are now proxy submissions with required farmer IDs
-    const transformedSamples = [];
+    // Separate samples into existing (with id) and new samples
+    const existingSampleIds = [];
+    const newSamples = [];
 
-    // Process all samples - farmer ID required for all
     (samples || []).forEach(sample => {
       const farmerId = sample.farmerId ? parseInt(sample.farmerId, 10) : null;
       if (!farmerId || isNaN(farmerId) || farmerId <= 0) {
         throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
       }
-      transformedSamples.push({
-        blindCode: generateBlindCode(name), // Generate blind code from event name + random digits
-        farmerId: farmerId,
-        processingMethod: sample.processingMethod,
-        farmName: sample.farmName,
-        variety: sample.variety,
-        region: sample.region,
-        altitude: sample.altitude,
-        moisture: sample.moisture,
-        sampleType: 'PROXY_SUBMISSION',
-        approvalStatus: 'APPROVED', // Admin-created samples are automatically approved
-      });
+      
+      if (sample.id && sample.id !== '') {
+        // Existing sample - just collect its ID
+        existingSampleIds.push(parseInt(sample.id, 10));
+      } else {
+        // New sample - add to create list
+        newSamples.push({
+          blindCode: generateBlindCode(name), // Generate blind code from event name + random digits
+          farmerId: farmerId,
+          processingMethod: sample.processingMethod,
+          farmName: sample.farmName,
+          variety: sample.variety,
+          region: sample.region,
+          altitude: sample.altitude,
+          moisture: sample.moisture,
+          sampleType: 'PROXY_SUBMISSION',
+          approvalStatus: 'APPROVED', // Admin-created samples are automatically approved
+        });
+      }
     });
 
-    // Create event with all samples
+    // Create event without samples first
     const newEvent = await prisma.cuppingEvent.create({
       data: {
         name,
@@ -1063,11 +1070,22 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         description,
         tags: { create: tags.map(tag => ({ tag })) },
         processingMethods: { create: processingMethods.map(method => ({ method })) },
-        samples: {
-          create: transformedSamples,
-        },
+        samples: newSamples.length > 0 ? {
+          create: newSamples,
+        } : undefined,
       },
     });
+
+    // Update existing samples to link them to the event and assign blind code
+    if (existingSampleIds.length > 0) {
+      await prisma.sample.updateMany({
+        where: { id: { in: existingSampleIds } },
+        data: {
+          cuppingEventId: newEvent.id,
+          blindCode: generateBlindCode(name), // Assign blind code from event name
+        },
+      });
+    }
 
     // Add participants after the event is created
     const participantPayload = [];
