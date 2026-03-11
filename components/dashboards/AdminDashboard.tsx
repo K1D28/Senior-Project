@@ -776,7 +776,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const TabButton = ({ tab, label, icon: Icon }: { tab: Tab, label: string, icon: React.ElementType }) => (
         <button
             onClick={() => { handleTabClick(tab); setViewingUserId(null); }}
-            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${activeTab === tab ? 'bg-primary text-white shadow-md' : 'text-gray-700 hover:bg-gray-100'}`}
+            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                activeTab === tab 
+                    ? 'bg-primary text-white' 
+                    : 'text-black'
+            }`}
         >
             <Icon size={18} />
             <span>{label}</span>

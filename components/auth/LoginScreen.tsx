@@ -121,7 +121,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+    <div className="login-screen min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <h1 className="text-2xl font-bold mb-8">Welcome to Cupping Hub</h1>
       <div className="w-full max-w-md bg-surface p-6 rounded-lg shadow-md">
         <h1 className="text-2xl font-bold mb-4">Login</h1>

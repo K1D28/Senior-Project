@@ -24,21 +24,34 @@ body {
   background-color: #5a3c2a; /* Darker coffee color */
 }
 
-button {
+.login-screen button {
   color: #ffffff; /* White color for the button */
   background-color: transparent; /* No background */
   border: none; /* Remove border */
   transition: none; /* Remove transitions */
 }
 
-button:hover {
+.login-screen button:hover {
   color: #ffffff; /* Keep white color on hover */
   background-color: transparent; /* No background on hover */
 }
 
-button:active {
+.login-screen button:active {
   color: #ffffff; /* Keep white color on press */
   background-color: transparent; /* No background on press */
+}
+
+/* Specific styling for the main login button */
+.login-screen button[type="submit"] {
+  color: #ffffff !important; /* Force white text for login button */
+  background-color: #6f4e37 !important; /* Coffee color background */
+  border: none;
+  transition: background-color 0.3s ease;
+}
+
+.login-screen button[type="submit"]:hover {
+  color: #ffffff !important; /* Keep white text on hover */
+  background-color: #5a3c2a !important; /* Darker coffee color on hover */
 }
 
 input {

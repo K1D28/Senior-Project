@@ -841,8 +841,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 onClick={() => handleTabClick('adjudicate')}
                                 className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                                   activeTab === 'adjudicate' 
-                                    ? 'bg-primary text-white shadow-md'
-                                    : 'text-gray-700 hover:bg-gray-100'
+                                    ? 'bg-primary text-white'
+                                    : 'text-black'
                                 }`}
                             >
                                 <Coffee size={18} />
@@ -852,8 +852,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 onClick={() => handleTabClick('leaderboard')}
                                 className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                                   activeTab === 'leaderboard' 
-                                    ? 'bg-primary text-white shadow-md'
-                                    : 'text-gray-700 hover:bg-gray-100'
+                                    ? 'bg-primary text-white'
+                                    : 'text-black'
                                 }`}
                             >
                                 <Trophy size={18} />
@@ -954,8 +954,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                             }}
                             className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                               activeTab === 'adjudicate' 
-                                ? 'bg-primary text-white shadow-md'
-                                : 'text-gray-700 hover:bg-gray-100'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-700 hover:text-black'
                             }`}
                         >
                             <Coffee size={18} />
@@ -965,8 +965,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                             onClick={() => handleTabClick('leaderboard')}
                             className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                               activeTab === 'leaderboard' 
-                                ? 'bg-primary text-white shadow-md'
-                                : 'text-gray-700 hover:bg-gray-100'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-700 hover:text-black'
                             }`}
                         >
                             <Trophy size={18} />

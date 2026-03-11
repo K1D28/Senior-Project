@@ -160,7 +160,7 @@ const TabButton: React.FC<TabButtonProps> = ({ tab, label, icon: Icon, activeTab
     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full ${
       activeTab === tab
         ? 'bg-primary text-white'
-        : 'text-text-dark hover:bg-gray-100'
+        : 'text-black'
     }`}
   >
     <Icon size={18} />
