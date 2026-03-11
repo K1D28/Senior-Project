@@ -1076,15 +1076,17 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
       },
     });
 
-    // Update existing samples to link them to the event and assign blind code
+    // Update existing samples to link them to the event and assign blind code (unique for each)
     if (existingSampleIds.length > 0) {
-      await prisma.sample.updateMany({
-        where: { id: { in: existingSampleIds } },
-        data: {
-          cuppingEventId: newEvent.id,
-          blindCode: generateBlindCode(name), // Assign blind code from event name
-        },
-      });
+      for (const sampleId of existingSampleIds) {
+        await prisma.sample.update({
+          where: { id: sampleId },
+          data: {
+            cuppingEventId: newEvent.id,
+            blindCode: generateBlindCode(name), // Generate unique blind code for each sample
+          },
+        });
+      }
     }
 
     // Add participants after the event is created
