@@ -124,31 +124,46 @@ function App() {
       const storedUser = localStorage.getItem('currentUser');
       const token = localStorage.getItem('token');
       
-      if (storedUser && token) {
-        if (token === 'database-auth') {
-          console.error('Legacy token detected, clearing session');
-          localStorage.removeItem('currentUser');
-          localStorage.removeItem('token');
+      // If NO token, user is logged out - clear any lingering state
+      if (!token) {
+        console.log('No token found - clearing session state');
+        setCurrentUser(null);
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('token');
+        
+        // Only redirect to login if on a protected route
+        const protectedRoutes = ['/admin-dashboard', '/headjudge-dashboard', '/farmer-dashboard', '/qgrader-dashboard'];
+        const isOnProtectedRoute = protectedRoutes.some(route => location.pathname.startsWith(route));
+        if (isOnProtectedRoute) {
           navigate('/');
-          setIsCheckingAuth(false);
-          return;
         }
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      // Token exists - verify it's still valid
+      if (token === 'database-auth') {
+        console.error('Legacy token detected, clearing session');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('token');
+        setCurrentUser(null);
+        navigate('/');
+        setIsCheckingAuth(false);
+        return;
+      }
+      
+      // Try to verify the real token
+      if (storedUser && token) {
         try {
           const user = normalizeUserRoles(await verifyAuthentication());
           localStorage.setItem('currentUser', JSON.stringify(user));
           setCurrentUser(user);
         } catch (error) {
-          console.error('Session expired, redirecting to login');
+          console.error('Session expired or invalid, redirecting to login');
           localStorage.removeItem('currentUser');
           localStorage.removeItem('token');
+          setCurrentUser(null);
           alert('Session expired. Please log in again.');
-          navigate('/');
-        }
-      } else if (!token) {
-        // Only redirect to login if on a protected route AND no token exists
-        const protectedRoutes = ['/admin-dashboard', '/headjudge-dashboard', '/farmer-dashboard', '/qgrader-dashboard'];
-        const isOnProtectedRoute = protectedRoutes.some(route => location.pathname.startsWith(route));
-        if (isOnProtectedRoute) {
           navigate('/');
         }
       }
@@ -190,8 +205,8 @@ function App() {
   const handleLogout = () => {
     console.log('Logging out user and redirecting to login page.');
     setCurrentUser(null);
-    localStorage.removeItem('currentUser');
-    navigate('/');
+    localStorage.clear();
+    window.location.href = '/';
   };
 
   const handleShowLeaderboard = () => {
