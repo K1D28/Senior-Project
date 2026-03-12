@@ -103,6 +103,7 @@ const allowedOrigins = [
   'http://localhost:5174',
   'https://senior-project-frontend.onrender.com',
   'https://senior-project-1frontend.onrender.com',
+  'https://senior-project-2.onrender.com',
 ];
 
 const corsOptions = {
