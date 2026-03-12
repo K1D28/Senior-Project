@@ -1688,28 +1688,38 @@ app.post('/api/auth/login', async (req, res) => {
     // Step 4: Try to authenticate with Supabase Auth for JWT token
     let token = null;
     try {
+      console.log('Attempting Supabase sign in...');
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      console.log('Supabase sign in result:', { hasData: !!data, hasError: !!error, errorMsg: error?.message });
+      
       if (error) {
-        console.error('Supabase Auth failed (non-critical):', error.message);
-        // Try to sign up the user in Supabase Auth if they don't exist there
-        const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-        });
-        if (!signUpError) {
-          // Now try signing in again
-          const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
-          token = retryData?.session?.access_token;
+        console.log('Sign in failed, attempting auto-signup...');
+        try {
+          const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+          });
+          console.log('Supabase signup result:', { hasData: !!signUpData, hasError: !!signUpError, errorMsg: signUpError?.message });
+          
+          if (!signUpError && signUpData) {
+            console.log('Signup successful, retrying sign in...');
+            const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
+            token = retryData?.session?.access_token;
+            console.log('Retry sign in result:', { hasToken: !!token });
+          }
+        } catch (signupErr) {
+          console.error('Signup error:', signupErr.message);
         }
-      } else {
-        token = data.session?.access_token;
+      } else if (data?.session?.access_token) {
+        token = data.session.access_token;
+        console.log('Token obtained from initial sign in');
       }
     } catch (authErr) {
-      console.error('Supabase Auth error (non-critical):', authErr.message);
+      console.error('Supabase Auth exception:', authErr.message, authErr.stack);
     }
 
-    console.log('Token generated:', !!token);
+    console.log('Final token status:', token ? 'obtained' : 'not obtained');
 
     // Return user data even if token generation failed
     const responseData = {
@@ -1725,6 +1735,8 @@ app.post('/api/auth/login', async (req, res) => {
       }
     };
 
+    console.log('Sending login response...');
+    
     if (token) {
       res.cookie('token', token, {
         httpOnly: true,
@@ -1733,9 +1745,10 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    res.json(responseData);
+    res.status(200).json(responseData);
   } catch (err) {
-    console.error('Unexpected error during login:', err);
+    console.error('Login endpoint error:', err.message);
+    console.error('Stack:', err.stack);
     res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 });
