@@ -2406,8 +2406,20 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Add global error handlers
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.message);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION:', err.message || err);
+  console.error('Stack:', err.stack || 'N/A');
+});
+
 // Update the server to listen on port 5001
-const PORT = 5001;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
