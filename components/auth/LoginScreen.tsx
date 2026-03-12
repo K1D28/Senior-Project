@@ -72,23 +72,43 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email: username, password }),
-        credentials: 'include', // Include cookies in the request
+        credentials: 'include',
       });
 
-      if (response.ok) {
-        const loginData = await response.json();
-        
+      // Read response text first to avoid JSON parse errors
+      const responseText = await response.text();
+      console.log('Login response status:', response.status);
+      console.log('Login response body:', responseText.substring(0, 200));
+
+      let loginData;
+      try {
+        loginData = JSON.parse(responseText);
+      } catch {
+        console.error('Failed to parse login response:', responseText.substring(0, 500));
+        setError('Server returned invalid response. Please try again.');
+        return;
+      }
+
+      if (response.ok && loginData.token) {
         // Store token for future API calls
-        if (loginData.token) {
-          localStorage.setItem('token', loginData.token);
+        localStorage.setItem('token', loginData.token);
+
+        // If we already have user data from login, use it directly
+        if (loginData.user) {
+          const user = { ...loginData.user, roles: [loginData.user.role] };
+          localStorage.setItem('currentUser', JSON.stringify(user));
+          const primaryRole = user.role;
+          handleRoleBasedRedirection(primaryRole, navigate, setError);
+          onLogin(user);
+          return;
         }
 
+        // Fallback: verify with token
         const userResponse = await fetch(`${BACKEND_URL}/api/auth/verify`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${loginData.token}`,
           },
-          credentials: 'include',
         });
 
         if (userResponse.ok) {
@@ -102,10 +122,15 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           console.error('Failed to verify user role:', userResponse.status);
           setError('Failed to verify user role.');
         }
+      } else if (response.ok && loginData.user) {
+        // Login successful but no token - use user data directly
+        const user = { ...loginData.user, roles: [loginData.user.role] };
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        handleRoleBasedRedirection(user.role, navigate, setError);
+        onLogin(user);
       } else {
-        const errorData = await response.json();
-        console.error('Login failed at backend:', response.status, errorData);
-        setError(errorData.message || 'Login failed. Invalid email or password.');
+        console.error('Login failed:', response.status, loginData);
+        setError(loginData.message || 'Login failed. Invalid email or password.');
       }
     } catch (err) {
       console.error('Unexpected error during login:', err);
