@@ -1,1 +1,1 @@
-web: npx serve -s dist -l 3000 -c serve.json
+web: npm run build && node frontend-server.js
