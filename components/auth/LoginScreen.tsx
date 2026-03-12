@@ -64,48 +64,37 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
 
   const handleLogin = async () => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: username, password });
-      if (error) {
-        console.error('Login failed:', error.message);
-        setError('Login failed: ' + error.message);
-      } else {
-        console.log('Login successful:', data);
-        const token = data.session?.access_token;
-        console.log('Token being stored in cookie:', token); // Debugging log
-        if (token) {
-          localStorage.setItem('token', token); // Store the token in localStorage
+      // Call backend login endpoint which handles everything
+      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: username, password }),
+        credentials: 'include', // Include cookies in the request
+      });
 
-          const response = await fetch('http://localhost:5001/api/auth/login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email: username, password }),
-            credentials: 'include', // Include cookies in the request
-          });
+      if (response.ok) {
+        const userResponse = await fetch(`${BACKEND_URL}/api/auth/verify`, {
+          method: 'GET',
+          credentials: 'include', // Include cookies in the request
+        });
 
-          if (response.ok) {
-            const userResponse = await fetch('http://localhost:5001/api/auth/verify', {
-              method: 'GET',
-              credentials: 'include', // Include cookies in the request
-            });
-
-            if (userResponse.ok) {
-              const user = await userResponse.json();
-              localStorage.setItem('currentUser', JSON.stringify(user));
-              const roles = Array.isArray(user.roles) ? user.roles : [user.role];
-              const primaryRole = roles[0]; // Assuming the first role is the primary role
-              handleRoleBasedRedirection(primaryRole, navigate, setError);
-              onLogin(user);
-            } else {
-              console.error('Failed to verify user role:', userResponse.status);
-              setError('Failed to verify user role.');
-            }
-          } else {
-            console.error('Login failed at backend:', response.status);
-            setError('Login failed at backend.');
-          }
+        if (userResponse.ok) {
+          const user = await userResponse.json();
+          localStorage.setItem('currentUser', JSON.stringify(user));
+          const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+          const primaryRole = roles[0]; // Assuming the first role is the primary role
+          handleRoleBasedRedirection(primaryRole, navigate, setError);
+          onLogin(user);
+        } else {
+          console.error('Failed to verify user role:', userResponse.status);
+          setError('Failed to verify user role.');
         }
+      } else {
+        const errorData = await response.json();
+        console.error('Login failed at backend:', response.status, errorData);
+        setError(errorData.message || 'Login failed. Invalid email or password.');
       }
     } catch (err) {
       console.error('Unexpected error during login:', err);
