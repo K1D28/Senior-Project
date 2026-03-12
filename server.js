@@ -39,9 +39,23 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey); // Correctly ini
 
 // Add CORS middleware to allow requests from the frontend
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const allowedOrigins = [
+  FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:5174',
+];
+
 const corsOptions = {
-  origin: FRONTEND_URL, // Allow requests from the frontend (Vite default 5173)
-  credentials: true, // Allow cookies to be sent
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.log('CORS blocked origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
@@ -49,7 +63,10 @@ app.use(cookieParser()); // Add cookie parser middleware
 
 // Middleware
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', FRONTEND_URL);
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
