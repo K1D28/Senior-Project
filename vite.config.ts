@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
         historyApiFallback: true,
         proxy: {
           '/api': {
-            target: 'http://localhost:5001', // Replace with your backend server URL
+            target: env.VITE_BACKEND_URL || 'http://localhost:5001',
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api/, '/api'),
           },
@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'https://backend-production-b273.up.railway.app'),
+        'process.env.VITE_BACKEND_URL': JSON.stringify(env.VITE_BACKEND_URL || 'https://backend-production-b273.up.railway.app'),
         'process.env': {},
       },
       resolve: {
