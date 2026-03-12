@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Modal } from '../ui/Modal';
@@ -120,7 +121,7 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             const updatedH = (role === 'headJudge' ? assignedHeadJudgeIds.filter(id => id !== userId) : assignedHeadJudgeIds)
                 .map(id => parseInt(id, 10));
 
-            const response = await axios.put(`http://localhost:5001/api/cupping-events/${event?.id}/participants`, {
+            const response = await axios.put(`' + BACKEND_URL + '/api/cupping-events/${event?.id}/participants`, {
                 assignedQGraderIds: updatedQ,
                 assignedHeadJudgeIds: updatedH,
             }, { withCredentials: true });
@@ -164,7 +165,7 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
                 return;
             }
 
-            const response = await axios.put(`http://localhost:5001/api/cupping-events/${event.id}/participants`, {
+            const response = await axios.put(`' + BACKEND_URL + '/api/cupping-events/${event.id}/participants`, {
                 assignedQGraderIds: assignedQGraderIds.map(id => parseInt(id, 10)),
                 assignedHeadJudgeIds: assignedHeadJudgeIds.map(id => parseInt(id, 10)),
             }, {

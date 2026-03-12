@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { User, CuppingEvent, CoffeeSample, ScoreSheet, Descriptor, Role } from '../../types';
 import { AppData } from '../../data';
@@ -461,7 +462,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             if (storedUser) {
                 const user = JSON.parse(storedUser);
                 try {
-                    const response = await fetch('http://localhost:5001/api/auth/verify', {
+                    const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
                         method: 'GET',
                         credentials: 'include',
                     });
@@ -492,7 +493,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         setLoading(true);
         setError(null);
         try {
-            let url = 'http://localhost:5001/api/cupping-events/headjudge';
+            let url = '' + BACKEND_URL + '/api/cupping-events/headjudge';
             if (eventId) {
                 if (!/^[0-9]+$/.test(eventId)) {
                     throw new Error('Invalid eventId: must be a valid integer.');
@@ -580,7 +581,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             }
             
             console.log('Sending request with scores:', avgScores);
-            const response = await fetch('http://localhost:5001/api/analyze-sample', {
+            const response = await fetch('' + BACKEND_URL + '/api/analyze-sample', {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -633,7 +634,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         }
 
         try {
-            const url = `http://localhost:5001/api/headjudge/events/${evId}/scores`;
+            const url = `' + BACKEND_URL + '/api/headjudge/events/${evId}/scores`;
             console.log('HeadJudge: fetching submitted scores from', url);
             const res = await fetch(url, { method: 'GET', credentials: 'include' });
             if (res.ok) {
@@ -714,7 +715,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     // Also refresh the assigned events to ensure we have latest event state
                     const refreshAssignedEvents = async () => {
                         try {
-                            const url = 'http://localhost:5001/api/cupping-events/headjudge';
+                            const url = '' + BACKEND_URL + '/api/cupping-events/headjudge';
                             const res = await fetch(url, { method: 'GET', credentials: 'include' });
                             if (res.ok) {
                                 const events = await res.json();

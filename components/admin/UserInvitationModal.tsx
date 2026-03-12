@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -70,7 +71,7 @@ const UserInvitationModal: React.FC<UserInvitationModalProps> = ({ isOpen, onClo
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5001/api/users/invite', {
+      const response = await fetch('' + BACKEND_URL + '/api/users/invite', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

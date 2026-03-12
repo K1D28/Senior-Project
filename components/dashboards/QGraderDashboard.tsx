@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { User, CuppingEvent, CoffeeSample, ScoreSheet, CuppingScore, Descriptor } from '../../types';
 import { AppData } from '../../data';
@@ -466,7 +467,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
             setAiLoading(true);
             const scoreSheet = getOrCreateScoreSheet(String(selectedSample.id));
             
-            const response = await fetch('http://localhost:5001/api/analyze-sample', {
+            const response = await fetch('' + BACKEND_URL + '/api/analyze-sample', {
                 method: 'POST',
                 credentials: 'include',
                 headers: {

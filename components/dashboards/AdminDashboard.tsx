@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -306,7 +307,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             if (storedUser) {
                 const user = JSON.parse(storedUser);
                 try {
-                    const response = await fetch('http://localhost:5001/api/auth/verify', {
+                    const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
                         method: 'GET',
                         credentials: 'include',
                     });
@@ -587,7 +588,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleApproveSample = async (sampleId: string | number) => {
         try {
-            const response = await fetch(`http://localhost:5001/api/samples/${sampleId}/approve`, {
+            const response = await fetch(`' + BACKEND_URL + '/api/samples/${sampleId}/approve`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -623,7 +624,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleDeclineSample = async (sampleId: string | number) => {
         try {
-            const response = await fetch(`http://localhost:5001/api/samples/${sampleId}/decline`, {
+            const response = await fetch(`' + BACKEND_URL + '/api/samples/${sampleId}/decline`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,

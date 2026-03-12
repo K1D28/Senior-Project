@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useEffect, useMemo, Component, ErrorInfo } from 'react';
 import axios from 'axios';
 import { User, Role, CuppingEvent, Farmer, QGrader, Admin, HeadJudge } from '../../types';
@@ -63,7 +64,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const response = await axios.get('http://localhost:5001/api/users', { withCredentials: true });
+                const response = await axios.get('' + BACKEND_URL + '/api/users', { withCredentials: true });
                 setUsers(response.data);
             } catch (error) {
                 console.error('Error fetching users:', error);
@@ -89,7 +90,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
             return;
         }
         try {
-            const response = await axios.post('http://localhost:5001/api/users', {
+            const response = await axios.post('' + BACKEND_URL + '/api/users', {
                 name: newUserName,
                 email, // Send single email
                 role, // Send single role
@@ -111,8 +112,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
 
     const handleAddUser = async (user: User) => {
         try {
-            await axios.post('http://localhost:5001/api/users', user, { withCredentials: true });
-            const updatedUsers = await axios.get('http://localhost:5001/api/users', { withCredentials: true });
+            await axios.post('' + BACKEND_URL + '/api/users', user, { withCredentials: true });
+            const updatedUsers = await axios.get('' + BACKEND_URL + '/api/users', { withCredentials: true });
             setUsers(updatedUsers.data.farmers.concat(updatedUsers.data.qGraders));
         } catch (error) {
             console.error('Error adding users:', error);
@@ -215,7 +216,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
     const handleEditUserSave = async (updatedData: { name: string; email: string; roles: Role[]; status: User['status'] }) => {
         if (!editedUser) return;
         try {
-            await axios.put(`http://localhost:5001/api/users/${editedUser.id}`, updatedData, { withCredentials: true });
+            await axios.put(`' + BACKEND_URL + '/api/users/${editedUser.id}`, updatedData, { withCredentials: true });
             alert('User updated successfully.');
             setUsers((prevUsers) => prevUsers.map(user => user.id === editedUser.id ? { ...user, ...updatedData } : user));
             setEditedUser(null); // Close the modal
@@ -227,7 +228,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
 
     const handleEditUser = async (userId: string, updatedData: { name: string; status: User['status'] }) => {
         try {
-            await axios.put(`http://localhost:5001/api/users/${userId}`, updatedData, { withCredentials: true });
+            await axios.put(`' + BACKEND_URL + '/api/users/${userId}`, updatedData, { withCredentials: true });
             alert('User updated successfully.');
             setUsers((prevUsers) => prevUsers.map(user => user.id === userId ? { ...user, ...updatedData } : user));
         } catch (error) {
@@ -239,7 +240,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
     const handleDeleteUser = async (userId: string) => {
         if (confirm('Are you sure you want to delete this user?')) {
             try {
-                await axios.delete(`http://localhost:5001/api/users/${userId}`, { withCredentials: true });
+                await axios.delete(`' + BACKEND_URL + '/api/users/${userId}`, { withCredentials: true });
                 alert('User deleted successfully.');
                 setUsers((prevUsers) => prevUsers.filter(user => user.id !== userId));
             } catch (error) {

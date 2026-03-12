@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, CoffeeSample, CuppingEvent } from '../../types';
@@ -328,7 +329,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   useEffect(() => {
     const fetchFarmerDatabaseId = async () => {
       try {
-        const response = await fetch(`http://localhost:5001/api/farmer-profile`, {
+        const response = await fetch(`' + BACKEND_URL + '/api/farmer-profile`, {
           credentials: 'include',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -355,7 +356,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const fetchAssignedEvents = async () => {
     try {
       setLoadingEvents(true);
-      const response = await fetch(`http://localhost:5001/api/cupping-events/farmer`, { 
+      const response = await fetch(`' + BACKEND_URL + '/api/cupping-events/farmer`, { 
         credentials: 'include',
         headers: { 
           'Authorization': `Bearer ${localStorage.getItem('token')}` 
@@ -383,7 +384,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     }
     try {
       console.log(`Fetching samples for farmer ID: ${farmerDatabaseId}`);
-      const response = await fetch(`http://localhost:5001/api/samples?farmerId=${farmerDatabaseId}`, {
+      const response = await fetch(`' + BACKEND_URL + '/api/samples?farmerId=${farmerDatabaseId}`, {
         credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

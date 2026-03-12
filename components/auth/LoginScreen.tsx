@@ -4,6 +4,7 @@ import { USERS } from '../../data';
 import { Role, User } from '../../types';
 import { supabase } from './supabaseClient';
 import { BACKEND_URL } from '../../utils/api';
+import { BACKEND_URL } from '../../utils/api';
 import './LoginScreen.css';
 
 const roleToDashboardMap: Record<string, string> = {
@@ -35,7 +36,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
       const storedUser = localStorage.getItem('currentUser');
       if (storedUser) {
         try {
-          const response = await fetch('http://localhost:5001/api/auth/verify', {
+          const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
             method: 'GET',
             credentials: 'include',
           });

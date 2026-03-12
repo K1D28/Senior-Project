@@ -1,3 +1,4 @@
+import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useCallback, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Modal } from '../ui/Modal';
@@ -14,7 +15,7 @@ import { AlertTriangle, CheckCircle } from 'lucide-react';
 const validateToken = async (token: string | null): Promise<boolean> => {
     if (!token) return false;
     try {
-        const response = await axios.get('http://localhost:5001/api/auth/validate-token', {
+        const response = await axios.get('' + BACKEND_URL + '/api/auth/validate-token', {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
@@ -64,7 +65,7 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                 };
                 console.log('Request Headers (using cookies):', headers); // Debugging log
                 // Fetch all participants (Head Judges, Q Graders, and Farmers)
-                const participantsResponse = await axios.get('http://localhost:5001/api/participants', {
+                const participantsResponse = await axios.get('' + BACKEND_URL + '/api/participants', {
                     headers,
                     withCredentials: true, // Use cookies for authentication
                 });
