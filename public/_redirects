@@ -1,1 +1,7 @@
+# Don't rewrite static assets
+/assets/*    200
+/*.js        200
+/*.css       200
+
+# SPA routing - rewrite all other requests to index.html
 /*    /index.html   200
