@@ -17,7 +17,7 @@ console.log(`[Frontend Server] dist path: ${distPath}`);
 app.use(express.static(distPath));
 
 // SPA fallback - serve index.html for any route
-app.get('*', (req, res) => {
+app.get('/*', (req, res) => {
   console.log(`[Frontend Server] GET ${req.path} -> index.html`);
   res.sendFile(path.join(distPath, 'index.html'));
 });
