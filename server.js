@@ -15,14 +15,46 @@ console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
 console.log('DATABASE_URL preview:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT SET');
 console.log('NODE_ENV:', process.env.NODE_ENV);
 
-const prisma = new PrismaClient({
-  errorFormat: 'pretty',
-  log: ['error', 'warn'],
+// Initialize Prisma with retry logic
+let prisma;
+let retries = 0;
+const maxRetries = 3;
+
+async function initPrisma() {
+  try {
+    prisma = new PrismaClient({
+      errorFormat: 'pretty',
+      log: ['error', 'warn'],
+    });
+    
+    // Test the connection
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✓ Database connection successful');
+    return prisma;
+  } catch (error) {
+    retries++;
+    console.error(`Database connection failed (attempt ${retries}/${maxRetries}):`, error.message);
+    
+    if (retries < maxRetries) {
+      console.log(`Retrying in 2 seconds...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return initPrisma();
+    } else {
+      console.error('Failed to connect after max retries');
+      throw error;
+    }
+  }
+}
+
+// Initialize on startup
+initPrisma().catch(err => {
+  console.error('Critical: Could not initialize Prisma:', err);
+  process.exit(1);
 });
 
 // Handle Prisma disconnection on app shutdown
 process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
+  if (prisma) await prisma.$disconnect();
 });
 
 // Initialize Claude AI client
