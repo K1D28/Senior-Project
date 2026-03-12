@@ -34,10 +34,15 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   useEffect(() => {
     const checkExistingLogin = async () => {
       const storedUser = localStorage.getItem('currentUser');
-      if (storedUser) {
+      const storedToken = localStorage.getItem('token');
+      
+      if (storedUser && storedToken) {
         try {
-          const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
+          const response = await fetch(`${BACKEND_URL}/api/auth/verify`, {
             method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+            },
             credentials: 'include',
           });
           if (response.ok) {
@@ -54,10 +59,12 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
           } else {
             console.error('Failed to verify user:', response.status); // Debugging log
             localStorage.removeItem('currentUser');
+            localStorage.removeItem('token');
           }
         } catch (error) {
           console.error('Error verifying token:', error);
           localStorage.removeItem('currentUser');
+          localStorage.removeItem('token');
         }
       }
     };
