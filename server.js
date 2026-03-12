@@ -26,6 +26,36 @@ process.on('SIGTERM', async () => {
   if (prisma) await prisma.$disconnect();
 });
 
+// Attempt to proactively connect Prisma at startup and surface detailed errors in logs
+(async () => {
+  try {
+    console.log('Attempting to connect Prisma to the database...');
+    await prisma.$connect();
+    console.log('Prisma connected to the database successfully.');
+  } catch (connectErr) {
+    console.error('Prisma connection error at startup:', connectErr && connectErr.message);
+    if (connectErr && connectErr.stack) console.error(connectErr.stack);
+
+    // Try a DNS lookup on the host portion of DATABASE_URL to help narrow network/DNS issues
+    try {
+      const dbUrl = process.env.DATABASE_URL || '';
+      if (dbUrl) {
+        const parsed = new URL(dbUrl.startsWith('postgres') ? dbUrl : dbUrl);
+        const hostname = parsed.hostname;
+        console.log('Performing DNS lookup for host:', hostname);
+        const dns = await import('dns/promises');
+        const lookup = await dns.lookup(hostname);
+        console.log('DNS lookup result:', lookup);
+      } else {
+        console.warn('No DATABASE_URL present for DNS lookup.');
+      }
+    } catch (dnsErr) {
+      console.error('DNS lookup failed:', dnsErr && dnsErr.message);
+      if (dnsErr && dnsErr.stack) console.error(dnsErr.stack);
+    }
+  }
+})();
+
 // Initialize Claude AI client
 const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
