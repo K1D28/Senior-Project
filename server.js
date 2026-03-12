@@ -148,7 +148,14 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self' " + FRONTEND_URL + ";");
+  res.setHeader('Content-Security-Policy', 
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://aistudiocdn.com; " +
+    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://aistudiocdn.com; " +
+    "connect-src 'self' " + FRONTEND_URL + " https://mbmilbbdjywnmagxfcyg.supabase.co; " +
+    "img-src 'self' data: https:; " +
+    "font-src 'self' data: https:;"
+  );
   next();
 });
 
