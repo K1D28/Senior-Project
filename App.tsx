@@ -13,6 +13,11 @@ import QGraderDashboard from './components/dashboards/QGraderDashboard';
 import Header from './components/ui/Header';
 import PublicLeaderboard from './components/reporting/PublicLeaderboard';
 
+const normalizeUserRoles = (user: User): User => {
+  const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+  return { ...user, roles };
+};
+
 export interface AdjudicationData {
     score?: number;
     grade?: string;
@@ -117,7 +122,7 @@ function App() {
       
       if (storedUser && token) {
         try {
-          const user = await verifyAuthentication();
+          const user = normalizeUserRoles(await verifyAuthentication());
           localStorage.setItem('currentUser', JSON.stringify(user));
           setCurrentUser(user);
         } catch (error) {
@@ -167,7 +172,7 @@ function App() {
   }, [currentUser, resetLogoutTimer]);
 
   const handleLogin = (user: User) => {
-    setCurrentUser(user);
+    setCurrentUser(normalizeUserRoles(user));
   };
 
   const handleLogout = () => {
