@@ -1,24 +1,22 @@
-import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require('express');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const dist = path.join(__dirname, 'dist');
+
+console.log(`Serving files from: ${dist}`);
 
 // Serve static files from dist
-app.use(express.static(path.join(__dirname, 'dist'), {
+app.use(express.static(dist, {
   maxAge: '1h',
   etag: false
 }));
 
-// SPA routing - serve index.html for all routes
+// SPA routing - serve index.html for all routes without file extensions
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'), {
-    maxAge: '1h'
-  });
+  console.log(`Serving index.html for route: ${req.path}`);
+  res.sendFile(path.join(dist, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
