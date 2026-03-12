@@ -1599,31 +1599,81 @@ app.get('/api/qgraders', verifySupabaseToken, async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  console.log('Login attempt with email:', email); // Debugging log
+  console.log('Login attempt with email:', email);
 
   try {
+    // Step 1: Get user from User table
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      console.error('User not found:', email);
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    console.log('User found with role:', user.role);
+
+    // Step 2: Get password from respective role table
+    let roleData = null;
+    
+    if (user.role === 'ADMIN') {
+      roleData = await prisma.admin.findUnique({ where: { email } });
+    } else if (user.role === 'HEAD_JUDGE') {
+      roleData = await prisma.headJudge.findUnique({ where: { email } });
+    } else if (user.role === 'FARMER') {
+      roleData = await prisma.farmer.findUnique({ where: { email } });
+    } else if (user.role === 'Q_GRADER') {
+      roleData = await prisma.qGrader.findUnique({ where: { email } });
+    }
+
+    if (!roleData) {
+      console.error('Role data not found for:', email);
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Step 3: Verify password from database
+    const dbPassword = roleData.password.trim();
+    if (dbPassword !== password) {
+      console.error('Password mismatch for:', email);
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    console.log('Password verified for:', email);
+
+    // Step 4: Authenticate with Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      console.error('Supabase login failed:', error.message); // Debugging log
+      console.error('Supabase login failed:', error.message);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = data.session?.access_token;
-    console.log('Generated token:', token); // Debugging log
+    console.log('Generated token:', token);
 
     if (token) {
       res.cookie('token', token, {
-        httpOnly: true, // Prevent client-side access
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-        sameSite: 'strict', // Prevent CSRF attacks
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
       });
-      res.json({ message: 'Login successful' });
+      res.json({ 
+        message: 'Login successful',
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          status: user.status,
+          lastLogin: user.lastLogin,
+        }
+      });
     } else {
-      console.error('Failed to generate token'); // Debugging log
+      console.error('Failed to generate token');
       res.status(500).json({ message: 'Failed to generate token' });
     }
   } catch (err) {
-    console.error('Unexpected error during login:', err); // Debugging log
+    console.error('Unexpected error during login:', err);
     res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 });
