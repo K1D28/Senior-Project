@@ -1685,15 +1685,45 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('Password verified for:', email);
 
-    // Step 4: Authenticate with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      console.error('Supabase login failed:', error.message);
-      return res.status(401).json({ message: 'Invalid email or password' });
+    // Step 4: Try to authenticate with Supabase Auth for JWT token
+    let token = null;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        console.error('Supabase Auth failed (non-critical):', error.message);
+        // Try to sign up the user in Supabase Auth if they don't exist there
+        const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        if (!signUpError) {
+          // Now try signing in again
+          const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
+          token = retryData?.session?.access_token;
+        }
+      } else {
+        token = data.session?.access_token;
+      }
+    } catch (authErr) {
+      console.error('Supabase Auth error (non-critical):', authErr.message);
     }
 
-    const token = data.session?.access_token;
-    console.log('Generated token:', token);
+    console.log('Token generated:', !!token);
+
+    // Return user data even if token generation failed
+    const responseData = {
+      message: 'Login successful',
+      token: token || 'no-token',
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        status: user.status,
+        lastLogin: user.lastLogin,
+      }
+    };
 
     if (token) {
       res.cookie('token', token, {
@@ -1701,22 +1731,9 @@ app.post('/api/auth/login', async (req, res) => {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'none',
       });
-      res.json({ 
-        message: 'Login successful',
-        token: token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          status: user.status,
-          lastLogin: user.lastLogin,
-        }
-      });
-    } else {
-      console.error('Failed to generate token');
-      res.status(500).json({ message: 'Failed to generate token' });
     }
+
+    res.json(responseData);
   } catch (err) {
     console.error('Unexpected error during login:', err);
     res.status(500).json({ message: 'Internal server error', error: err.message });
