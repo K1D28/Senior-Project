@@ -49,8 +49,15 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
             console.log('Stored user:', user); // Debugging log
 
             // Normalize role to roles array
-            const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+            const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
             console.log('Normalized roles:', roles); // Debugging log
+
+            if (roles.length === 0) {
+              console.error('User has no roles defined');
+              localStorage.removeItem('currentUser');
+              localStorage.removeItem('token');
+              return;
+            }
 
             const primaryRole = roles[0]; // Assuming the first role is the primary role
             handleRoleBasedRedirection(primaryRole, navigate, setError);
@@ -102,9 +109,14 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
 
         // If we already have user data from login, use it directly
         if (loginData.user) {
-          const user = { ...loginData.user, roles: [loginData.user.role] };
+          const user = { ...loginData.user, roles: loginData.user.role ? [loginData.user.role] : [] };
+          if (user.roles.length === 0) {
+            console.error('User returned from login has no role');
+            setError('Login failed: User has no assigned role.');
+            return;
+          }
           localStorage.setItem('currentUser', JSON.stringify(user));
-          const primaryRole = user.role;
+          const primaryRole = user.roles[0];
           handleRoleBasedRedirection(primaryRole, navigate, setError);
           onLogin(user);
           return;
@@ -121,7 +133,12 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
         if (userResponse.ok) {
           const user = await userResponse.json();
           localStorage.setItem('currentUser', JSON.stringify(user));
-          const roles = Array.isArray(user.roles) ? user.roles : [user.role];
+          const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+          if (roles.length === 0) {
+            console.error('Verified user has no roles');
+            setError('Login failed: User has no assigned role.');
+            return;
+          }
           const primaryRole = roles[0];
           handleRoleBasedRedirection(primaryRole, navigate, setError);
           onLogin(user);
@@ -131,6 +148,11 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
         }
       } else if (response.ok && loginData.user) {
         // Login successful but no token - use user data directly
+        if (!loginData.user.role) {
+          console.error('User has no role assigned');
+          setError('Login failed: User has no assigned role.');
+          return;
+        }
         const user = { ...loginData.user, roles: [loginData.user.role] };
         localStorage.setItem('currentUser', JSON.stringify(user));
         handleRoleBasedRedirection(user.role, navigate, setError);
