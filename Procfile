@@ -1,1 +1,0 @@
-web: npm run build && node frontend-server.js
