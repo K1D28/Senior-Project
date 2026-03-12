@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm install && npm run build",
+  "startCommand": "npx serve -s dist -l 3000",
+  "envVars": [
+    {
+      "key": "VITE_API_URL",
+      "value": "https://your-railway-backend-url"
+    },
+    {
+      "key": "VITE_BACKEND_URL",
+      "value": "https://your-railway-backend-url"
+    }
+  ]
+}

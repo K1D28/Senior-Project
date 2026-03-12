@@ -149,8 +149,6 @@ app.use(express.json());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static files from dist folder (built frontend)
-app.use(express.static(path.join(__dirname, 'dist')));
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', 
@@ -2679,24 +2677,11 @@ app.use((req, res, next) => {
   if (!req.path.startsWith('/api')) {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
     res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error(`Error serving index.html for ${req.path}:`, err.message);
-        // If index.html doesn't exist, return 404
-        if (!res.headersSent) {
-          res.status(404).json({ message: 'Not found' });
-        }
-      }
-    });
-  } else {
-    next();
-  }
-});
-
-// 404 handler for API routes
+// 404 handler for unmapped routes
 app.use((req, res) => {
-  console.warn(`404 - API route not found: ${req.method} ${req.path}`);
+  console.warn(`404 - Route not found: ${req.method} ${req.path}`);
   res.status(404).json({
-    message: 'API route not found',
+    message: 'Route not found',
     path: req.path,
   });
 });
