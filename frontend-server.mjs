@@ -16,8 +16,8 @@ console.log(`[Frontend Server] dist path: ${distPath}`);
 
 app.use(express.static(distPath));
 
-// SPA fallback - serve index.html for any route
-app.get('/*', (req, res) => {
+// SPA fallback - serve index.html for any route (using regex instead of wildcard)
+app.get(/.*/g, (req, res) => {
   console.log(`[Frontend Server] GET ${req.path} -> index.html`);
   res.sendFile(path.join(distPath, 'index.html'));
 });
