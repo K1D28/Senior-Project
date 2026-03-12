@@ -1735,19 +1735,19 @@ app.post('/api/auth/login', async (req, res) => {
   console.log('Login attempt with email:', email);
 
   try {
-    // Step 1: Get user from User table
+    // Step 1: Get user from User table to verify they exist
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
     if (!user) {
-      console.error('User not found:', email);
+      console.error('User not found in database:', email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     console.log('User found with role:', user.role);
 
-    // Step 2: Get password from respective role table
+    // Step 2: Get password from respective role table for verification
     let roleData = null;
     
     if (user.role === 'ADMIN') {
@@ -1765,33 +1765,53 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Step 3: Verify password from database
+    // Step 3: Verify password from database first
     const dbPassword = roleData.password.trim();
     if (dbPassword !== password) {
       console.error('Password mismatch for:', email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    console.log('Password verified for:', email);
+    console.log('Database password verified for:', email);
 
-    // For now, skip Supabase Auth and just return user data
-    // The token can be generated on the frontend if needed
+    // Step 4: Try Supabase Auth sign in
+    let supabaseToken = null;
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (!authError && authData && authData.session) {
+        supabaseToken = authData.session.access_token;
+        console.log('Supabase Auth successful, got token');
+      } else {
+        console.log('Supabase Auth failed (using database-auth fallback):', authError?.message);
+        // If Supabase auth fails but DB password is correct, use database-auth token
+        supabaseToken = 'database-auth';
+      }
+    } catch (supabaseErr) {
+      console.error('Supabase Auth error (using database-auth fallback):', supabaseErr.message);
+      supabaseToken = 'database-auth';
+    }
+
     console.log('Login successful, returning user data');
 
     const responseData = {
       message: 'Login successful',
-      token: 'database-auth',
+      token: supabaseToken,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        name: user.name,
-        status: user.status,
+        name: user.name || roleData.name,
+        status: user.status || roleData.status,
         lastLogin: user.lastLogin,
+        supabaseId: user.supabaseId,
       }
     };
 
-    console.log('Sending response:', JSON.stringify(responseData).substring(0, 100));
+    console.log('Sending response with token type:', supabaseToken === 'database-auth' ? 'database-auth' : 'supabase-jwt');
     res.status(200).json(responseData);
   } catch (err) {
     console.error('Login endpoint error:', err.message);
