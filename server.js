@@ -2419,7 +2419,7 @@ process.on('unhandledRejection', (err) => {
 });
 
 // Update the server to listen on port 5001
-const PORT = process.env.PORT || 5001;
+const PORT = 5001; // Always use 5001, don't use environment PORT
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
