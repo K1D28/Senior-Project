@@ -138,6 +138,13 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Serve static files from dist folder (built frontend)
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use(express.static(path.join(__dirname, 'dist')));
+
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self' " + FRONTEND_URL + ";");
@@ -2651,6 +2658,11 @@ Scores: ${Object.entries(qGraderScores || {}).map(([key, value]) => `${key}: ${v
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
+});
+
+// SPA fallback: Serve index.html for all unmatched routes (client-side routing)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.use((err, req, res, next) => {
