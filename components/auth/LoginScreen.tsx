@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { USERS } from '../../data';
 import { Role, User } from '../../types';
 import { supabase } from './supabaseClient';
+import { BACKEND_URL } from '../../utils/api';
 import './LoginScreen.css';
 
 const roleToDashboardMap: Record<string, string> = {
