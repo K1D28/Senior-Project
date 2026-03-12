@@ -49,7 +49,11 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
     useEffect(() => {
         const fetchParticipants = async () => {
             try {
-                const response = await axios.get('/api/participants');
+                const token = localStorage.getItem('token');
+                const response = await axios.get(`${BACKEND_URL}/api/participants`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    withCredentials: true,
+                });
                 console.log('Participants API Response:', response.data); // Debugging log
 
                 setAllHeadJudges(response.data.headJudges || []);

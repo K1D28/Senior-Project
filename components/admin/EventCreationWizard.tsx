@@ -59,9 +59,11 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
     useEffect(() => {
         const fetchParticipants = async () => {
             try {
+                const token = localStorage.getItem('token');
                 const headers = {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 };
                 console.log('Request Headers (using cookies):', headers); // Debugging log
                 // Fetch all participants (Head Judges, Q Graders, and Farmers)
