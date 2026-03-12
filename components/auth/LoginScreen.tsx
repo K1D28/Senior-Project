@@ -13,6 +13,14 @@ const roleToDashboardMap: Record<string, string> = {
   Q_GRADER: '/qgrader-dashboard/cuppingevents',
 };
 
+const normalizeRoles = (user: Partial<User>): string[] => {
+  if (Array.isArray(user.roles)) {
+    return user.roles.filter(Boolean) as string[];
+  }
+  if (user.role) return [user.role];
+  return [];
+};
+
 const handleRoleBasedRedirection = (role: string, navigate: (path: string) => void, setError: (message: string) => void) => {
   const dashboardPath = roleToDashboardMap[role];
   if (dashboardPath) {
@@ -49,7 +57,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
             console.log('Stored user:', user); // Debugging log
 
             // Normalize role to roles array
-            const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+            const roles = normalizeRoles(user);
             console.log('Normalized roles:', roles); // Debugging log
 
             if (roles.length === 0) {
@@ -109,7 +117,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
 
         // If we already have user data from login, use it directly
         if (loginData.user) {
-          const user = { ...loginData.user, roles: loginData.user.role ? [loginData.user.role] : [] };
+          const user = { ...loginData.user, roles: normalizeRoles(loginData.user) };
           if (user.roles.length === 0) {
             console.error('User returned from login has no role');
             setError('Login failed: User has no assigned role.');
@@ -133,7 +141,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
         if (userResponse.ok) {
           const user = await userResponse.json();
           localStorage.setItem('currentUser', JSON.stringify(user));
-          const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+          const roles = normalizeRoles(user);
           if (roles.length === 0) {
             console.error('Verified user has no roles');
             setError('Login failed: User has no assigned role.');
