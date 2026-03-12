@@ -1868,74 +1868,87 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
   }
 
   try {
-    // Step 1: Create the user in Supabase
-    const { data: supabaseUser, error: supabaseError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-    });
+    // Step 1: Create role-specific record first (Admin, Farmer, QGrader, HeadJudge)
+    let roleRecord = null;
+    const roleUpper = String(role).toUpperCase();
 
-    if (supabaseError) {
-      console.error('Error creating user in Supabase:', supabaseError.message);
-      return res.status(500).json({ message: 'Failed to create user in Supabase.' });
+    if (roleUpper === 'ADMIN') {
+      roleRecord = await prisma.admin.upsert({
+        where: { email },
+        update: { password },
+        create: { email, password, name: email.split('@')[0] },
+      });
+    } else if (roleUpper === 'FARMER') {
+      roleRecord = await prisma.farmer.upsert({
+        where: { email },
+        update: { password },
+        create: { email, password, name: email.split('@')[0], status: 'Active' },
+      });
+    } else if (roleUpper === 'Q_GRADER') {
+      roleRecord = await prisma.qGrader.upsert({
+        where: { email },
+        update: { password },
+        create: { email, password, name: email.split('@')[0], status: 'Active' },
+      });
+    } else if (roleUpper === 'HEAD_JUDGE') {
+      roleRecord = await prisma.headJudge.upsert({
+        where: { email },
+        update: { password },
+        create: { email, password, name: email.split('@')[0], status: 'Active' },
+      });
+    } else {
+      return res.status(400).json({ message: `Invalid role: ${role}` });
     }
 
-    // Step 2: Add the user to the Prisma database
-    const prismaUser = await prisma.user.create({
-      data: {
+    // Step 2: Create/update user in Prisma (for role-agnostic lookups)
+    const prismaUser = await prisma.user.upsert({
+      where: { email },
+      update: { role: roleUpper },
+      create: {
         email,
-        role,
-        supabaseId: supabaseUser.user.id,
+        role: roleUpper,
+        supabaseId: `local-${Date.now()}-${Math.random()}`,
+        name: roleRecord.name,
+        status: roleRecord.status || 'Active',
       },
     });
 
-    // Step 3: Send an email invitation with the confirmation link
-    const confirmationLink = `${process.env.APP_URL || 'http://localhost:3000'}/confirm-email?email=${email}`;
-    console.log('Preparing to send invitation email to', email);
-    console.log('Email env vars - NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? 'set' : 'NOT SET');
-    console.log('Email env vars - NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? 'set' : 'NOT SET');
-    
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.NODEMAILER_EMAIL, // Your email address
-        pass: process.env.NODEMAILER_EMAIL_PASSWORD, // Your email password or app-specific password
-      },
-    });
+    // Step 3: Attempt to send email (non-blocking)
+    if (process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_EMAIL_PASSWORD) {
+      try {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: process.env.NODEMAILER_EMAIL,
+            pass: process.env.NODEMAILER_EMAIL_PASSWORD,
+          },
+        });
 
-    const mailOptions = {
-      from: process.env.NODEMAILER_EMAIL,
-      to: email,
-      subject: 'Welcome to the Platform',
-      text: `Hi ${prismaUser.name || 'User'},
+        const mailOptions = {
+          from: process.env.NODEMAILER_EMAIL,
+          to: email,
+          subject: 'Welcome to Cupping Hub',
+          text: `Hi ${prismaUser.name || 'User'},\n\nYou have been invited to join Cupping Hub as a ${role}.\n\nLogin credentials:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password.\n\nBest regards,\nCupping Hub Team`,
+        };
 
-You have been invited to join our platform as a ${role}.
-
-Your login credentials are:
-Email: ${email}
-Password: ${password}
-
-Please confirm your email address by clicking the link below:
-
-${confirmationLink}
-
-Please log in and change your password after your first login.
-
-Best regards,
-The Team`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Error sending email:', error);
-      } else {
-        console.log('Email sent successfully:', info.response);
+        transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            console.error('Email send error (non-blocking):', error.message);
+          } else {
+            console.log('Email sent successfully');
+          }
+        });
+      } catch (emailErr) {
+        console.error('Email setup error (non-blocking):', emailErr.message);
       }
-    });
+    } else {
+      console.log('Email credentials not configured, skipping email send');
+    }
 
     res.status(201).json({ message: 'User invited successfully.', user: prismaUser });
   } catch (error) {
     console.error('Error inviting user:', error);
-    res.status(500).json({ message: 'An unexpected error occurred.' });
+    res.status(500).json({ message: 'An unexpected error occurred.', error: error.message });
   }
 });
 
