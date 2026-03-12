@@ -232,10 +232,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
             const [usersResponse, eventsResponse, samplesResponse, participantsResponse] = await Promise.all([
-                axios.get('/api/users', { headers }),
-                axios.get('/api/cupping-events', { headers }),
-                axios.get('/api/samples', { headers }),
-                axios.get('/api/participants', { headers }),
+                axios.get(`${BACKEND_URL}/api/users`, { headers, withCredentials: true }),
+                axios.get(`${BACKEND_URL}/api/cupping-events`, { headers, withCredentials: true }),
+                axios.get(`${BACKEND_URL}/api/samples`, { headers, withCredentials: true }),
+                axios.get(`${BACKEND_URL}/api/participants`, { headers, withCredentials: true }),
             ]);
 
             console.log('Fetched events data:', eventsResponse.data); // Debugging log
@@ -304,11 +304,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     useEffect(() => {
         const restoreUserState = async () => {
             const storedUser = localStorage.getItem('currentUser');
-            if (storedUser) {
+            const storedToken = localStorage.getItem('token');
+            if (storedUser && storedToken) {
                 const user = JSON.parse(storedUser);
                 try {
-                    const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
+                    const response = await fetch(`${BACKEND_URL}/api/auth/verify`, {
                         method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${storedToken}`,
+                        },
                         credentials: 'include',
                     });
                     if (response.ok) {
@@ -319,12 +323,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     } else if (response.status === 401) {
                         console.log('Session expired, redirecting to login');
                         localStorage.removeItem('currentUser'); // Clear invalid user state
+                        localStorage.removeItem('token');
                         alert('Session expired. Please log in again.'); // Show popup message
                         navigate('/'); // Redirect to login page
                     }
                 } catch (error) {
                     console.error('Error verifying authentication:', error);
                     localStorage.removeItem('currentUser'); // Clear invalid user state
+                    localStorage.removeItem('token');
                     alert('Session expired. Please log in again.'); // Show popup message
                     navigate('/'); // Redirect to login page
                 }

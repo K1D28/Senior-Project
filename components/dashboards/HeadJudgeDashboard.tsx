@@ -459,11 +459,15 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     useEffect(() => {
         const restoreUserState = async () => {
             const storedUser = localStorage.getItem('currentUser');
-            if (storedUser) {
+            const storedToken = localStorage.getItem('token');
+            if (storedUser && storedToken) {
                 const user = JSON.parse(storedUser);
                 try {
-                    const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
+                    const response = await fetch(`${BACKEND_URL}/api/auth/verify`, {
                         method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${storedToken}`,
+                        },
                         credentials: 'include',
                     });
                     if (response.ok) {
@@ -473,12 +477,14 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     } else if (response.status === 401) {
                         console.log('Session expired, redirecting to login');
                         localStorage.removeItem('currentUser');
+                        localStorage.removeItem('token');
                         alert('Session expired. Please log in again.');
                         navigate('/');
                     }
                 } catch (error) {
                     console.error('Error verifying authentication:', error);
                     localStorage.removeItem('currentUser');
+                    localStorage.removeItem('token');
                     alert('Session expired. Please log in again.');
                     navigate('/');
                 }
