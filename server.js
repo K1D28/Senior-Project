@@ -144,8 +144,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Serve static files from dist folder (built frontend)
-// Use fallthrough: true so unmatched routes fall through to SPA fallback
-app.use(express.static(path.join(__dirname, 'dist'), { fallthrough: true }));
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
 
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
@@ -2673,14 +2678,32 @@ Scores: ${Object.entries(qGraderScores || {}).map(([key, value]) => `${key}: ${v
 app.use((req, res, next) => {
   // Only serve index.html for non-API routes
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    const indexPath = path.join(__dirname, 'dist', 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error(`Error serving index.html for ${req.path}:`, err.message);
+        // If index.html doesn't exist, return 404
+        if (!res.headersSent) {
+          res.status(404).json({ message: 'Not found' });
+        }
+      }
+    });
   } else {
     next();
   }
 });
 
+// 404 handler for API routes
+app.use((req, res) => {
+  console.warn(`404 - API route not found: ${req.method} ${req.path}`);
+  res.status(404).json({
+    message: 'API route not found',
+    path: req.path,
+  });
+});
+
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error('Server error:', err);
   res.status(500).json({
     message: 'Internal server error',
   });
