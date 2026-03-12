@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,7 +11,10 @@ const PORT = process.env.PORT || 3000;
 const dist = path.join(__dirname, 'dist');
 
 console.log(`[Frontend Server] Starting...`);
-console.log(`[Frontend Server] Serving files from: ${dist}`);
+console.log(`[Frontend Server] __dirname: ${__dirname}`);
+console.log(`[Frontend Server] dist path: ${dist}`);
+console.log(`[Frontend Server] dist exists: ${fs.existsSync(dist)}`);
+console.log(`[Frontend Server] index.html exists: ${fs.existsSync(path.join(dist, 'index.html'))}`);
 
 // Serve static files from dist with caching headers
 app.use(express.static(dist, {
@@ -20,8 +24,17 @@ app.use(express.static(dist, {
 
 // SPA routing - serve index.html for all routes
 app.get('*', (req, res) => {
-  console.log(`[Frontend Server] ${req.method} ${req.path} -> index.html`);
-  res.sendFile(path.join(dist, 'index.html'));
+  const indexPath = path.join(dist, 'index.html');
+  console.log(`[Frontend Server] ${req.method} ${req.path}`);
+  console.log(`[Frontend Server] Serving: ${indexPath}`);
+  console.log(`[Frontend Server] File exists: ${fs.existsSync(indexPath)}`);
+  
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error(`[Frontend Server] Error sending file: ${err.message}`);
+      res.status(500).send(`Error: ${err.message}`);
+    }
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
