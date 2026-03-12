@@ -138,6 +138,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Request logging middleware - MUST be before other middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
@@ -145,13 +151,6 @@ const __dirname = path.dirname(__filename);
 
 // Serve static files from dist folder (built frontend)
 app.use(express.static(path.join(__dirname, 'dist')));
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-});
-
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', 
