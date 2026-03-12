@@ -144,7 +144,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Serve static files from dist folder (built frontend)
-app.use(express.static(path.join(__dirname, 'dist')));
+// Use fallthrough: true so unmatched routes fall through to SPA fallback
+app.use(express.static(path.join(__dirname, 'dist'), { fallthrough: true }));
 
 // Middleware to set Content Security Policy headers
 app.use((req, res, next) => {
