@@ -19,7 +19,13 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       preview: {
-        historyApiFallback: true,
+        port: 4173,
+        host: '0.0.0.0',
+      },
+      build: {
+        outDir: 'dist',
+        sourcemap: false,
+        minify: 'terser',
       },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
