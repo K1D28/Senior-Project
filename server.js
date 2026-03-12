@@ -209,6 +209,28 @@ const verifySupabaseToken = async (req, res, next) => {
     return res.status(401).json({ message: 'Unauthorized: No token provided' });
   }
 
+  // Support database-auth token format: database-auth:<email>
+  if (token.startsWith('database-auth:')) {
+    const email = token.slice('database-auth:'.length).trim();
+    if (!email) {
+      console.log('Database auth token missing email');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    try {
+      const prismaUser = await prisma.user.findUnique({ where: { email } });
+      if (!prismaUser) {
+        console.log('Database auth token email not found:', email);
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+      req.user = prismaUser;
+      console.log('Database auth token verified (email):', email);
+      return next();
+    } catch (err) {
+      console.error('Database auth verification failed:', err.message);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
   try {
     const { data: supabaseUser, error } = await supabaseAdmin.auth.getUser(token);
     console.log('Supabase getUser response:', { error: error ? (error.message || error) : null, hasUser: !!(supabaseUser && supabaseUser.user) });
@@ -417,14 +439,26 @@ app.get('/api/auth/verify', async (req, res) => {
     if (auth.startsWith('Bearer ')) token = auth.slice('Bearer '.length);
   }
   
-  // For database-auth token, we trust the stored user data
-  // In a production app, you'd verify a JWT signature
-  if (token === 'database-auth') {
-    // The frontend stores user data in localStorage after login
-    // Just return success - frontend will use stored user data
-    console.log('Database auth token verified');
-    res.json({ message: 'Token valid', authenticated: true });
-    return;
+  // For database-auth token, parse embedded email and return user
+  if (token && token.startsWith('database-auth:')) {
+    const email = token.slice('database-auth:'.length).trim();
+    if (!email) {
+      console.log('Database auth token missing email');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    try {
+      const prismaUser = await prisma.user.findUnique({ where: { email } });
+      if (!prismaUser) {
+        console.log('Database auth token email not found:', email);
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+      const userWithRoles = { ...prismaUser, roles: [prismaUser.role] };
+      console.log('Database auth token verified for user:', email);
+      return res.json(userWithRoles);
+    } catch (err) {
+      console.error('Database auth verification failed:', err.message);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   }
   
   // Try Supabase token verification as fallback
@@ -1787,12 +1821,12 @@ app.post('/api/auth/login', async (req, res) => {
         console.log('Supabase Auth successful, got token');
       } else {
         console.log('Supabase Auth failed (using database-auth fallback):', authError?.message);
-        // If Supabase auth fails but DB password is correct, use database-auth token
-        supabaseToken = 'database-auth';
+        // If Supabase auth fails but DB password is correct, use database-auth token with email
+        supabaseToken = `database-auth:${email}`;
       }
     } catch (supabaseErr) {
       console.error('Supabase Auth error (using database-auth fallback):', supabaseErr.message);
-      supabaseToken = 'database-auth';
+      supabaseToken = `database-auth:${email}`;
     }
 
     console.log('Login successful, returning user data');
