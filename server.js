@@ -18,28 +18,26 @@ console.log('NODE_ENV:', process.env.NODE_ENV);
 // Optional: Force IPv4 resolution for the DB host when running in environments
 // where IPv6 egress is broken. Set FORCE_PG_IPV4=1 in Railway variables to enable.
 if (process.env.FORCE_PG_IPV4 === '1' && process.env.DATABASE_URL) {
-  (async () => {
-    try {
-      const dbUrl = process.env.DATABASE_URL;
-      const parsed = new URL(dbUrl.startsWith('postgres') ? dbUrl : dbUrl);
-      const hostname = parsed.hostname;
-      console.log('FORCE_PG_IPV4 requested — resolving A record for', hostname);
-      const dns = await import('dns/promises');
-      const lookup = await dns.lookup(hostname, { family: 4 });
-      console.log('A record resolved to IPv4:', lookup.address);
-      // Replace hostname in the DATABASE_URL with the IPv4 address
-      parsed.hostname = lookup.address;
-      // Keep the hostname unchanged in case URL parsing encodes it into host
-      const newUrl = parsed.toString();
-      process.env.DATABASE_URL = newUrl;
-      // Also set PGHOST/PGPORT to be safe for drivers that consult them
-      process.env.PGHOST = lookup.address;
-      process.env.PGPORT = parsed.port || '5432';
-      console.log('Updated DATABASE_URL to use IPv4 host (hidden password):', newUrl.substring(0, 80) + '...');
-    } catch (err) {
-      console.error('FORCE_PG_IPV4 failed:', err && err.message);
-    }
-  })();
+  try {
+    // Use top-level await so the DATABASE_URL is replaced before Prisma is constructed
+    const dbUrl = process.env.DATABASE_URL;
+    const parsed = new URL(dbUrl.startsWith('postgres') ? dbUrl : dbUrl);
+    const hostname = parsed.hostname;
+    console.log('FORCE_PG_IPV4 requested — resolving A record for', hostname);
+    const dns = await import('dns/promises');
+    const lookup = await dns.lookup(hostname, { family: 4 });
+    console.log('A record resolved to IPv4:', lookup.address);
+    // Replace hostname in the DATABASE_URL with the IPv4 address
+    parsed.hostname = lookup.address;
+    const newUrl = parsed.toString();
+    process.env.DATABASE_URL = newUrl;
+    // Also set PGHOST/PGPORT to be safe for drivers that consult them
+    process.env.PGHOST = lookup.address;
+    process.env.PGPORT = parsed.port || '5432';
+    console.log('Updated DATABASE_URL to use IPv4 host (hidden password):', newUrl.substring(0, 80) + '...');
+  } catch (err) {
+    console.error('FORCE_PG_IPV4 failed:', err && err.message);
+  }
 }
 
 // Initialize Prisma - don't crash if connection fails immediately
