@@ -1630,6 +1630,12 @@ app.get('/api/qgraders', verifySupabaseToken, async (req, res) => {
     }
 });
 
+// Simple test endpoint
+app.get('/api/test', (req, res) => {
+  console.log('Test endpoint called');
+  res.json({ message: 'Server is working!' });
+});
+
 // Health check endpoint to test database connection
 app.get('/api/health', async (req, res) => {
   try {
@@ -1642,10 +1648,20 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  console.log('=== LOGIN ENDPOINT CALLED ===');
+  console.log('Request body:', req.body);
+  
   const { email, password } = req.body;
+  
+  if (!email || !password) {
+    console.log('Missing email or password');
+    return res.status(400).json({ message: 'Email and password required' });
+  }
+  
   console.log('Login attempt with email:', email);
 
   try {
+    console.log('Attempting to find user in database...');
     // Step 1: Get user from User table
     const user = await prisma.user.findUnique({
       where: { email },
