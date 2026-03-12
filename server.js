@@ -54,7 +54,7 @@ process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION:', err);
 });
 
-const PORT = 5001;
+const PORT = process.env.PORT || 5001; // Use Railway's PORT
 app.listen(PORT, () => {
   console.log(`Minimal server running on port ${PORT}`);
 });
