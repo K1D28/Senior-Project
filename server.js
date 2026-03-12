@@ -7,6 +7,8 @@ import cookieParser from 'cookie-parser';
 import nodemailer from 'nodemailer';
 import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
@@ -138,11 +140,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Serve static files from dist folder (built frontend)
-import path from 'path';
-import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Serve static files from dist folder (built frontend)
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Middleware to set Content Security Policy headers
