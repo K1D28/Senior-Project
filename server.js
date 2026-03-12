@@ -8,7 +8,15 @@ import nodemailer from 'nodemailer';
 import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  errorFormat: 'pretty',
+  log: ['error'],
+});
+
+// Handle Prisma disconnection on app shutdown
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+});
 
 // Initialize Claude AI client
 const anthropic = new Anthropic({
@@ -1595,6 +1603,17 @@ app.get('/api/qgraders', verifySupabaseToken, async (req, res) => {
         console.error('Error fetching Q Graders:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
+});
+
+// Health check endpoint to test database connection
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(503).json({ status: 'error', database: 'disconnected', error: error.message });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
