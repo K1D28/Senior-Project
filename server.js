@@ -1699,10 +1699,11 @@ app.post('/api/auth/login', async (req, res) => {
       res.cookie('token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',
       });
       res.json({ 
         message: 'Login successful',
+        token: token,
         user: {
           id: user.id,
           email: user.email,

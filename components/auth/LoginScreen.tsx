@@ -76,16 +76,26 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
       });
 
       if (response.ok) {
+        const loginData = await response.json();
+        
+        // Store token for future API calls
+        if (loginData.token) {
+          localStorage.setItem('token', loginData.token);
+        }
+
         const userResponse = await fetch(`${BACKEND_URL}/api/auth/verify`, {
           method: 'GET',
-          credentials: 'include', // Include cookies in the request
+          headers: {
+            'Authorization': `Bearer ${loginData.token}`,
+          },
+          credentials: 'include',
         });
 
         if (userResponse.ok) {
           const user = await userResponse.json();
           localStorage.setItem('currentUser', JSON.stringify(user));
           const roles = Array.isArray(user.roles) ? user.roles : [user.role];
-          const primaryRole = roles[0]; // Assuming the first role is the primary role
+          const primaryRole = roles[0];
           handleRoleBasedRedirection(primaryRole, navigate, setError);
           onLogin(user);
         } else {
