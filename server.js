@@ -1685,46 +1685,13 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('Password verified for:', email);
 
-    // Step 4: Try to authenticate with Supabase Auth for JWT token
-    let token = null;
-    try {
-      console.log('Attempting Supabase sign in...');
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      console.log('Supabase sign in result:', { hasData: !!data, hasError: !!error, errorMsg: error?.message });
-      
-      if (error) {
-        console.log('Sign in failed, attempting auto-signup...');
-        try {
-          const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-          });
-          console.log('Supabase signup result:', { hasData: !!signUpData, hasError: !!signUpError, errorMsg: signUpError?.message });
-          
-          if (!signUpError && signUpData) {
-            console.log('Signup successful, retrying sign in...');
-            const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
-            token = retryData?.session?.access_token;
-            console.log('Retry sign in result:', { hasToken: !!token });
-          }
-        } catch (signupErr) {
-          console.error('Signup error:', signupErr.message);
-        }
-      } else if (data?.session?.access_token) {
-        token = data.session.access_token;
-        console.log('Token obtained from initial sign in');
-      }
-    } catch (authErr) {
-      console.error('Supabase Auth exception:', authErr.message, authErr.stack);
-    }
+    // For now, skip Supabase Auth and just return user data
+    // The token can be generated on the frontend if needed
+    console.log('Login successful, returning user data');
 
-    console.log('Final token status:', token ? 'obtained' : 'not obtained');
-
-    // Return user data even if token generation failed
     const responseData = {
       message: 'Login successful',
-      token: token || 'no-token',
+      token: 'database-auth',
       user: {
         id: user.id,
         email: user.email,
@@ -1735,20 +1702,11 @@ app.post('/api/auth/login', async (req, res) => {
       }
     };
 
-    console.log('Sending login response...');
-    
-    if (token) {
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-      });
-    }
-
+    console.log('Sending response:', JSON.stringify(responseData).substring(0, 100));
     res.status(200).json(responseData);
   } catch (err) {
     console.error('Login endpoint error:', err.message);
-    console.error('Stack:', err.stack);
+    console.error('Error type:', err.constructor.name);
     res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 });
