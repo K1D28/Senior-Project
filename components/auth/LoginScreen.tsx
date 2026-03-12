@@ -194,11 +194,15 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
       <div className="w-full max-w-md bg-surface p-6 rounded-lg shadow-md">
         <h1 className="text-2xl font-bold mb-4">Login</h1>
         {error && <p className="text-red-500 mb-4">{error}</p>}
-        <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+        <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} autoComplete="off">
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Username</label>
             <input
               type="text"
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyPress={handleKeyPress}
@@ -209,6 +213,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
             <label className="block text-sm font-medium mb-2">Password</label>
             <input
               type={showPassword ? 'text' : 'password'}
+              autoComplete="off"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={handleKeyPress}

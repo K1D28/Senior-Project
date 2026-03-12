@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import cookieParser from 'cookie-parser';
 import nodemailer from 'nodemailer';
 import Anthropic from '@anthropic-ai/sdk';
+import fs from 'fs/promises';
 
 const app = express();
 
@@ -1935,6 +1936,103 @@ The Team`,
   } catch (error) {
     console.error('Error inviting user:', error);
     res.status(500).json({ message: 'An unexpected error occurred.' });
+  }
+});
+
+// Admin-only: seed demo data if database is empty
+app.post('/api/admin/seed-demo', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  try {
+    const sampleCount = await prisma.sample.count();
+    const eventCount = await prisma.cuppingEvent.count();
+    if (sampleCount > 0 || eventCount > 0) {
+      return res.json({ message: 'Seed skipped: data already exists', sampleCount, eventCount });
+    }
+
+    const farmer = await prisma.farmer.upsert({
+      where: { email: 'demo.farmer@cuppinghub.com' },
+      update: {},
+      create: {
+        email: 'demo.farmer@cuppinghub.com',
+        password: 'demo1234',
+        name: 'Demo Farmer',
+        status: 'Active',
+      },
+    });
+
+    const headJudge = await prisma.headJudge.upsert({
+      where: { email: 'demo.headjudge@cuppinghub.com' },
+      update: {},
+      create: {
+        email: 'demo.headjudge@cuppinghub.com',
+        password: 'demo1234',
+        name: 'Demo Head Judge',
+        status: 'Active',
+      },
+    });
+
+    const qGrader = await prisma.qGrader.upsert({
+      where: { email: 'demo.qgrader@cuppinghub.com' },
+      update: {},
+      create: {
+        email: 'demo.qgrader@cuppinghub.com',
+        password: 'demo1234',
+        name: 'Demo Q Grader',
+        status: 'Active',
+      },
+    });
+
+    const event = await prisma.cuppingEvent.create({
+      data: {
+        name: 'Demo Cupping Event',
+        date: new Date(),
+        description: 'Auto-seeded demo event',
+      },
+    });
+
+    await prisma.participant.createMany({
+      data: [
+        { role: 'FARMER', eventId: event.id, farmerId: farmer.id },
+        { role: 'HEAD_JUDGE', eventId: event.id, headJudgeId: headJudge.id },
+        { role: 'Q_GRADER', eventId: event.id, qGraderId: qGrader.id },
+      ],
+    });
+
+    const csvUrl = new URL('./sample_coffee_data.csv', import.meta.url);
+    const csv = await fs.readFile(csvUrl, 'utf8');
+    const lines = csv.trim().split(/\r?\n/);
+    const header = lines.shift()?.split(',') || [];
+    const rows = lines.map(line => {
+      const values = line.split(',');
+      return header.reduce((acc, key, idx) => {
+        acc[key] = values[idx];
+        return acc;
+      }, {});
+    });
+
+    const sampleData = rows.map((row) => ({
+      farmName: row.farmName || 'Unknown Farm',
+      variety: row.variety || 'Unknown',
+      region: row.region || 'Unknown',
+      processingMethod: row.processingMethod || 'Unknown',
+      altitude: Number(row.altitude || 0),
+      moisture: Number(row.moisture || 0),
+      farmerId: farmer.id,
+      cuppingEventId: event.id,
+    }));
+
+    if (sampleData.length > 0) {
+      await prisma.sample.createMany({ data: sampleData });
+    }
+
+    return res.json({
+      message: 'Seed complete',
+      eventId: event.id,
+      samplesSeeded: sampleData.length,
+      participantsSeeded: 3,
+    });
+  } catch (error) {
+    console.error('Seed demo error:', error);
+    return res.status(500).json({ message: 'Seed failed', error: error.message });
   }
 });
 
