@@ -93,10 +93,14 @@ function App() {
 
   const verifyAuthentication = async () => {
     try {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken || storedToken === 'database-auth') {
+        throw new Error('Missing or legacy token');
+      }
       const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}` // Include token in Authorization header
+          Authorization: `Bearer ${storedToken}` // Include token in Authorization header
         },
         credentials: 'include',
       });
@@ -121,6 +125,14 @@ function App() {
       const token = localStorage.getItem('token');
       
       if (storedUser && token) {
+        if (token === 'database-auth') {
+          console.error('Legacy token detected, clearing session');
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('token');
+          navigate('/');
+          setIsCheckingAuth(false);
+          return;
+        }
         try {
           const user = normalizeUserRoles(await verifyAuthentication());
           localStorage.setItem('currentUser', JSON.stringify(user));

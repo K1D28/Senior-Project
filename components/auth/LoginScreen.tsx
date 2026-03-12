@@ -44,6 +44,12 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
       const storedToken = localStorage.getItem('token');
       
       if (storedUser && storedToken) {
+        if (storedToken === 'database-auth') {
+          console.error('Legacy token detected, clearing session');
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('token');
+          return;
+        }
         try {
           const response = await fetch(`${BACKEND_URL}/api/auth/verify`, {
             method: 'GET',
