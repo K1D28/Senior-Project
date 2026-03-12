@@ -8,9 +8,16 @@ import nodemailer from 'nodemailer';
 import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
+
+// Debug: Check if DATABASE_URL is available
+console.log('Environment check:');
+console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('DATABASE_URL preview:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT SET');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 const prisma = new PrismaClient({
   errorFormat: 'pretty',
-  log: ['error'],
+  log: ['error', 'warn'],
 });
 
 // Handle Prisma disconnection on app shutdown
