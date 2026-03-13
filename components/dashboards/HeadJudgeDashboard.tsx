@@ -241,8 +241,8 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
     const [gradeLevel, setGradeLevel] = useState<string>(sample.gradeLevel || getGradeFromScore(avgScore));
     const [headJudgeNotes, setHeadJudgeNotes] = useState<string>(sample.headJudgeNotes || '');
     
-    // Calculate average Q Grader scores per attribute
-    const averageAttributeScores = useMemo(() => {
+    // Initialize adjusted scores from Q Grader averages
+    const [adjustedScores, setAdjustedScores] = useState(() => {
         if (!appData || !event) {
             return {
                 fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
@@ -260,32 +260,37 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         });
         
         return avgScores as any;
-    }, [appData, event, sample.id]);
-    
-    const [adjustedScores, setAdjustedScores] = useState(averageAttributeScores);
+    });
     
     // Calculate final score based on adjusted scores (same formula as Q Grader)
     const calculatedFinalScore = useMemo(() => {
         const sum = Object.values(adjustedScores).reduce((a, b) => a + b, 0);
-        // For now, assume no taints/faults in adjustment (Head Judge just adjusts attributes)
         return sum;
     }, [adjustedScores]);
-    
-    const [finalScore, setFinalScore] = useState<string>(sample.adjudicatedFinalScore?.toFixed(2) || calculatedFinalScore.toFixed(2));
 
     // Reset form state when sample changes (by blind code)
     useEffect(() => {
-        setAdjustedScores(averageAttributeScores);
-        setFinalScore(sample.adjudicatedFinalScore?.toFixed(2) || calculatedFinalScore.toFixed(2));
+        if (!appData || !event) {
+            setAdjustedScores({
+                fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
+                uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
+            });
+        } else {
+            const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
+            const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
+            
+            const avgScores: Record<string, number> = {};
+            attributes.forEach(attr => {
+                const values = scoresForSample.map(s => s.scores[attr]);
+                avgScores[attr] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : (attr === 'uniformity' || attr === 'cleanCup' || attr === 'sweetness' ? 10 : 6);
+            });
+            
+            setAdjustedScores(avgScores as any);
+        }
         setJustification(sample.adjudicationJustification || '');
         setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
         setHeadJudgeNotes(sample.headJudgeNotes || '');
-    }, [sample.id, sample.blindCode, avgScore]);
-
-    // Auto-update final score when adjusted scores change
-    useEffect(() => {
-        setFinalScore(calculatedFinalScore.toFixed(2));
-    }, [calculatedFinalScore]);
+    }, [sample.id, sample.blindCode, appData, event, avgScore]);
 
     // Auto-fill justification when AI analysis is received
     useEffect(() => {
@@ -301,13 +306,13 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         }
     }, [aiAnalysis]);
 
-    const showJustification = useMemo(() => Math.abs(parseFloat(finalScore) - avgScore) > 0.01, [finalScore, avgScore]);
+    const showJustification = useMemo(() => Math.abs(calculatedFinalScore - avgScore) > 0.01, [calculatedFinalScore, avgScore]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('HeadJudge Finalization: Save & Lock clicked', { finalScore, gradeLevel, headJudgeNotes, justification, showJustification });
+        console.log('HeadJudge Finalization: Save & Lock clicked', { calculatedFinalScore, gradeLevel, headJudgeNotes, justification, showJustification });
         onUpdateAdjudication({
-            score: parseFloat(finalScore),
+            score: calculatedFinalScore,
             grade: gradeLevel,
             notes: headJudgeNotes,
             justification: showJustification ? justification : '',
@@ -373,7 +378,7 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                     </div>
                     <div>
                         <Label htmlFor="finalScore">Final Official Score</Label>
-                        <Input id="finalScore" type="number" step="0.25" value={finalScore} disabled className="bg-gray-100 cursor-not-allowed" />
+                        <Input id="finalScore" type="number" step="0.25" value={calculatedFinalScore.toFixed(2)} disabled className="bg-gray-100 cursor-not-allowed" />
                     </div>
                     {showJustification && (
                         <div>
