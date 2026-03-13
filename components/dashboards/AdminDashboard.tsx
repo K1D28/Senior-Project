@@ -882,7 +882,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const handleDeleteEvent = async (eventId: string) => {
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`/api/cupping-events/${eventId}`, {
+            await axios.delete(`${BACKEND_URL}/api/cupping-events/${eventId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
