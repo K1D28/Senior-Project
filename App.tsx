@@ -454,10 +454,11 @@ function App() {
 
     try {
       // Fetch existing roles from the database
-      const rolesResponse = await fetch('/api/roles', {
+      const rolesResponse = await fetch(`${BACKEND_URL}/api/roles`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         credentials: 'include',
       });
@@ -469,10 +470,11 @@ function App() {
       const existingRoles = await rolesResponse.json();
 
       // Add new users to the database
-      const response = await fetch('/api/users/invite', {
+      const response = await fetch(`${BACKEND_URL}/api/users/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         credentials: 'include',
         body: JSON.stringify(inviteData),
