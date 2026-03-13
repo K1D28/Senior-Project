@@ -881,13 +881,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleDeleteEvent = async (eventId: string) => {
         try {
-            await axios.delete(`/api/cupping-events/${eventId}`);
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/cupping-events/${eventId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             setAppData((prevData) => ({
                 ...prevData,
                 events: prevData.events.filter((event) => event.id !== eventId),
             }));
+            alert('Event deleted successfully');
         } catch (error) {
             console.error('Error deleting event:', error);
+            alert('Failed to delete event');
         }
     };
 
