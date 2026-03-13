@@ -771,6 +771,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                         {selectedSample && selectedEvent && (
                             <Modal
                                 isOpen={!!selectedSample}
+                                size="xl"
                                 onClose={() => {
                                     setSelectedSample(null);
                                     navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
