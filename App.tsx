@@ -747,10 +747,10 @@ function App() {
                 return { ...prevData, samples: [...prevData.samples, normalizedSample] };
               }
             });
-            // If event results revealed by backend, update event in state
-            if (body.resultsRevealed && updatedSample.cuppingEventId) {
-              setAppData(prev => ({ ...prev, events: prev.events.map(e => e.id === String(updatedSample.cuppingEventId) ? { ...e, isResultsRevealed: true } : e) }));
-            }
+            // Disabled: Do not auto-reveal results. Admin must manually click "Reveal Results" button.
+            // if (body.resultsRevealed && updatedSample.cuppingEventId) {
+            //   setAppData(prev => ({ ...prev, events: prev.events.map(e => e.id === String(updatedSample.cuppingEventId) ? { ...e, isResultsRevealed: true } : e) }));
+            // }
             // Notify headjudge dashboard to refresh submitted scores for this event
             try {
               const ev = new CustomEvent('headjudge:decision-saved', { detail: { sampleId, eventId: updatedSample.cuppingEventId } });
