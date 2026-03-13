@@ -143,6 +143,7 @@ export interface CuppingEvent {
   assignedHeadJudgeIds: string[];
   sampleIds: string[];
   isResultsRevealed: boolean;
+  status?: 'In Progress' | 'Complete'; // Event completion status
   tags?: { id: string; tag: string }[];
   registrationOpen?: boolean;
   participants?: Participant[]; // Added participants property
