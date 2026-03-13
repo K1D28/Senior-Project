@@ -898,6 +898,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         }
     };
 
+    const handleRevealResults = async (eventId: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${BACKEND_URL}/api/cupping-events/${eventId}/reveal-results`, {}, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            // Update the appData to mark the event as revealed
+            setAppData((prevData) => ({
+                ...prevData,
+                events: prevData.events.map((event) =>
+                    event.id === eventId ? { ...event, isResultsRevealed: true } : event
+                ),
+            }));
+            alert('Results revealed successfully');
+        } catch (error) {
+            console.error('Error revealing results:', error);
+            alert('Failed to reveal results');
+        }
+    };
+
     const renderActions = (event: CuppingEvent) => (
         <div className="p-2 border border-border rounded-md bg-background shadow-sm relative overflow-visible">
             <Dropdown>
@@ -1136,7 +1158,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                                                 <div className="flex flex-col items-center gap-1">
                                                                     <p className="text-xs text-gray-600">Ready to reveal results?</p>
                                                                     <button 
-                                                                        onClick={() => onRevealResults(event.id)}
+                                                                        onClick={() => handleRevealResults(event.id)}
                                                                         className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600"
                                                                     >
                                                                         Reveal Results
@@ -1212,7 +1234,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                                     </select>
                                                     {event.status === 'Complete' && (
                                                         <button 
-                                                            onClick={() => onRevealResults(event.id)}
+                                                            onClick={() => handleRevealResults(event.id)}
                                                             className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 whitespace-nowrap"
                                                         >
                                                             Reveal Results

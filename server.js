@@ -1668,6 +1668,34 @@ app.put('/api/cupping-events/:id', verifySupabaseToken, async (req, res) => {
     }
 });
 
+// Reveal results for a cupping event
+app.put('/api/cupping-events/:id/reveal-results', verifySupabaseToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const eventId = parseInt(id);
+        
+        // Check if event exists
+        const event = await prisma.cuppingEvent.findUnique({
+            where: { id: eventId }
+        });
+        
+        if (!event) {
+            return res.status(404).json({ message: 'Event not found' });
+        }
+        
+        // Update the event to reveal results
+        const updatedEvent = await prisma.cuppingEvent.update({
+            where: { id: eventId },
+            data: { isResultsRevealed: true }
+        });
+        
+        res.json({ message: 'Results revealed successfully', event: updatedEvent });
+    } catch (error) {
+        console.error('Error revealing results:', error);
+        res.status(500).json({ message: 'Failed to reveal results' });
+    }
+});
+
 // Update participants for a cupping event
 app.put('/api/cupping-events/:id/participants', verifySupabaseToken, async (req, res) => {
     const { id } = req.params;
