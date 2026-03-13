@@ -236,11 +236,15 @@ const QualitativeInsights: React.FC<{ scoresForSample: ScoreSheet[], graders: Us
     );
 };
 
-const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, descriptorProfile: string, onUpdateAdjudication: (data: AdjudicationData) => void, onBack: () => void, aiAnalysis?: string }> = ({ sample, avgScore, descriptorProfile, onUpdateAdjudication, onBack, aiAnalysis }) => {
+const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, descriptorProfile: string, onUpdateAdjudication: (data: AdjudicationData) => void, onBack: () => void, aiAnalysis?: string, appData?: AppData, event?: CuppingEvent }> = ({ sample, avgScore, descriptorProfile, onUpdateAdjudication, onBack, aiAnalysis, appData, event }) => {
     const [finalScore, setFinalScore] = useState<string>(sample.adjudicatedFinalScore?.toFixed(2) || avgScore.toFixed(2));
     const [justification, setJustification] = useState<string>(sample.adjudicationJustification || '');
     const [gradeLevel, setGradeLevel] = useState<string>(sample.gradeLevel || getGradeFromScore(avgScore));
     const [headJudgeNotes, setHeadJudgeNotes] = useState<string>(sample.headJudgeNotes || '');
+    const [adjustedScores, setAdjustedScores] = useState({
+        fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
+        uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
+    });
 
     // Reset form state when sample changes (by blind code)
     useEffect(() => {
@@ -307,6 +311,33 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                       </div>
                 ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Score Adjustment Section */}
+                    <div className="border border-border rounded-lg p-4 bg-blue-50">
+                        <h4 className="font-semibold text-gray-900 mb-3">Adjust Q Grader Scores (Optional)</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            {['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance'].map(score => (
+                                <div key={score} className="space-y-1">
+                                    <label className="text-xs font-semibold text-gray-700 capitalize">{score}</label>
+                                    <div className="flex items-center gap-2">
+                                        <input type="range" min="0" max="10" step="0.5" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
+                                        <span className="text-sm font-bold text-primary w-8 text-right">{adjustedScores[score as keyof typeof adjustedScores]}</span>
+                                    </div>
+                                </div>
+                            ))}
+                            {['uniformity', 'cleanCup', 'sweetness', 'overall'].map(score => (
+                                <div key={score} className="space-y-1">
+                                    <label className="text-xs font-semibold text-gray-700 capitalize">{score === 'cleanCup' ? 'Clean Cup' : score === 'uniformity' ? 'Uniformity' : score === 'sweetness' ? 'Sweetness' : 'Overall'}</label>
+                                    <div className="flex items-center gap-2">
+                                        <input type="range" min="0" max="10" step="0.5" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
+                                        <span className="text-sm font-bold text-primary w-8 text-right">{adjustedScores[score as keyof typeof adjustedScores]}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-3 p-2 bg-white rounded text-sm text-gray-700">
+                            <p>Adjusted Avg: <span className="font-bold text-primary">{((Object.values(adjustedScores).slice(0, 6).reduce((a, b) => a + b, 0) / 6 + (Object.values(adjustedScores).slice(6).reduce((a, b) => a + b, 0) / 4) / 2)).toFixed(2)}</span></p>
+                        </div>
+                    </div>
                     <div>
                         <Label htmlFor="finalScore">Final Official Score</Label>
                         <Input id="finalScore" type="number" step="0.25" value={finalScore} onChange={e => setFinalScore(e.target.value)} required />
@@ -455,6 +486,33 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     useEffect(() => {
         setAiAnalysis('');
     }, [selectedSample?.id, selectedSample?.blindCode]);
+
+    // Handle URL parameters to restore selected event and sample for Head Judge adjudication
+    useEffect(() => {
+        const pathParts = location.pathname.split('/');
+        const adjudicateIndex = pathParts.indexOf('adjudicate');
+        if (adjudicateIndex !== -1 && adjudicateIndex + 2 < pathParts.length) {
+            const eventName = decodeURIComponent(pathParts[adjudicateIndex + 1]);
+            const blindCode = decodeURIComponent(pathParts[adjudicateIndex + 2]);
+            
+            // Find and select the event
+            if (assignedEvents.length > 0) {
+                const matchingEvent = assignedEvents.find(e => e.name === eventName);
+                if (matchingEvent && matchingEvent !== selectedEvent) {
+                    setSelectedEvent(matchingEvent);
+                }
+                
+                // If blindCode is in URL, find and select that sample
+                if (blindCode && matchingEvent && selectedEvent?.id === matchingEvent.id) {
+                    const samples = (matchingEvent as any).sampleObjects || (matchingEvent as any).samples || [];
+                    const matchingSample = samples.find((s: any) => s.blindCode === blindCode);
+                    if (matchingSample && matchingSample !== selectedSample) {
+                        setSelectedSample(matchingSample);
+                    }
+                }
+            }
+        }
+    }, [location.pathname, assignedEvents]);
 
     useEffect(() => {
         const restoreUserState = async () => {
@@ -922,7 +980,10 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                         return (
                                             <div key={sample.id} className="space-y-0">
                                                 <div 
-                                                    onClick={() => setSelectedSample(sample)}
+                                                    onClick={() => {
+                                                        setSelectedSample(sample);
+                                                        navigate(`/headjudge-dashboard/adjudicate/${encodeURIComponent(selectedEvent.name)}/${encodeURIComponent(sample.blindCode || '')}`);
+                                                    }}
                                                     className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm flex flex-col justify-between h-full"
                                                 >
                                                     {sample.adjudicatedFinalScore && <span className="absolute top-2 right-2 text-green-600" title="Finalized"><CheckCircle size={18}/></span>}
