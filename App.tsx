@@ -1092,6 +1092,21 @@ function App() {
           }
         />
         <Route 
+          path="/headjudge-dashboard/adjudicate/:eventName"
+          element={
+            currentUser ? (
+              <HeadJudgeDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateAdjudication={updateSampleAdjudication}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
           path="/headjudge-dashboard/adjudicate/:eventName/:blindCode"
           element={
             currentUser ? (
