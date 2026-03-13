@@ -14,7 +14,7 @@ import Header from './components/ui/Header';
 import PublicLeaderboard from './components/reporting/PublicLeaderboard';
 
 const normalizeUserRoles = (user: User): User => {
-  const roles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+  const roles = Array.isArray(user.roles) ? user.roles : [];
   return { ...user, roles };
 };
 

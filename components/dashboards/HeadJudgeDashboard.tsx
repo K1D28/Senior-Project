@@ -280,7 +280,7 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         setJustification(sample.adjudicationJustification || '');
         setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
         setHeadJudgeNotes(sample.headJudgeNotes || '');
-    }, [sample.id, sample.blindCode, averageAttributeScores, calculatedFinalScore, avgScore]);
+    }, [sample.id, sample.blindCode, avgScore]);
 
     // Auto-update final score when adjusted scores change
     useEffect(() => {
