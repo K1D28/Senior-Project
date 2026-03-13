@@ -681,15 +681,12 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
             user: process.env.NODEMAILER_EMAIL,
             pass: process.env.NODEMAILER_EMAIL_PASSWORD,
           },
-          logger: true, // Enable detailed logging
-          debug: true,  // Show debug info
+          logger: false, // Disable detailed logging to reduce noise
+          debug: false,
         });
 
-        // Verify transporter with await
-        console.log('📧 [EMAIL] Verifying transporter configuration...');
-        await transporter.verify();
-        console.log('✅ [EMAIL] Transporter verified successfully');
-
+        console.log('📧 [EMAIL] Sending email (skipping verify to avoid timeout)...');
+        
         const mailOptions = {
           from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
           to: email,
@@ -700,13 +697,17 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
 
         console.log('📧 [EMAIL] Sending email with options:', { from: mailOptions.from, to: mailOptions.to, subject: mailOptions.subject });
         
-        // Use Promise wrapper so we can await and catch any errors
-        const info = await new Promise((resolve, reject) => {
+        // Send email with timeout
+        const emailPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Email send timeout after 10 seconds'));
+          }, 10000);
+
           transporter.sendMail(mailOptions, (err, info) => {
+            clearTimeout(timeout);
             if (err) {
               console.error('🔴 [EMAIL] Send Mail Error:', err.message);
               console.error('🔴 [EMAIL] Error Code:', err.code);
-              console.error('🔴 [EMAIL] Full Error:', JSON.stringify(err, null, 2));
               return reject(err);
             }
             console.log('✅ [EMAIL] Email sent successfully');
@@ -714,8 +715,14 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
             resolve(info);
           });
         });
-        
-        console.log('✅ [EMAIL] Email delivery confirmed for:', email);
+
+        try {
+          await emailPromise;
+          console.log('✅ [EMAIL] Email delivery confirmed for:', email);
+        } catch (emailError) {
+          console.error('❌ [EMAIL] Email send failed (continuing anyway):', emailError.message || emailError);
+          if (emailError.code) console.error('❌ [EMAIL] Error code:', emailError.code);
+        }
       }
     } catch (mailErr) {
       console.error('❌ [EMAIL] Error while attempting to send invitation email:', mailErr.message || mailErr);
