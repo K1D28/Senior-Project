@@ -1082,33 +1082,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             </td>
                                             <td className="p-4 text-center">
                                                 <div className="space-y-2">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <select 
-                                                            value={event.status || 'In Progress'} 
-                                                            onChange={(e) => {
-                                                                const newEvents = appData.events.map(ev => 
-                                                                    ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
-                                                                );
-                                                                setAppData({ ...appData, events: newEvents });
-                                                            }}
-                                                            className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
-                                                        >
-                                                            <option value="In Progress">In Progress</option>
-                                                            <option value="Complete">Complete</option>
-                                                        </select>
-                                                    </div>
-                                                    {event.status === 'Complete' && !event.isResultsRevealed && (
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <p className="text-xs text-gray-600">Ready to reveal results?</p>
-                                                            <button 
-                                                                onClick={() => onRevealResults(event.id)}
-                                                                className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600"
-                                                            >
-                                                                Reveal Results
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                    {event.isResultsRevealed && (
+                                                    {!event.isResultsRevealed ? (
+                                                        <>
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <select 
+                                                                    value={event.status || 'In Progress'} 
+                                                                    onChange={(e) => {
+                                                                        const newEvents = appData.events.map(ev => 
+                                                                            ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
+                                                                        );
+                                                                        setAppData({ ...appData, events: newEvents });
+                                                                    }}
+                                                                    className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
+                                                                >
+                                                                    <option value="In Progress">In Progress</option>
+                                                                    <option value="Complete">Complete</option>
+                                                                </select>
+                                                            </div>
+                                                            {event.status === 'Complete' && (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <p className="text-xs text-gray-600">Ready to reveal results?</p>
+                                                                    <button 
+                                                                        onClick={() => onRevealResults(event.id)}
+                                                                        className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600"
+                                                                    >
+                                                                        Reveal Results
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : (
                                                         <span className="inline-block px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">
                                                             ✓ Revealed
                                                         </span>
@@ -1159,28 +1162,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             </div>
                                         </div>
                                         <div className="flex-shrink-0 flex flex-col items-end gap-2">
-                                            <select 
-                                                value={event.status || 'In Progress'} 
-                                                onChange={(e) => {
-                                                    const newEvents = appData.events.map(ev => 
-                                                        ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
-                                                    );
-                                                    setAppData({ ...appData, events: newEvents });
-                                                }}
-                                                className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
-                                            >
-                                                <option value="In Progress">In Progress</option>
-                                                <option value="Complete">Complete</option>
-                                            </select>
-                                            {event.status === 'Complete' && !event.isResultsRevealed && (
-                                                <button 
-                                                    onClick={() => onRevealResults(event.id)}
-                                                    className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 whitespace-nowrap"
-                                                >
-                                                    Reveal Results
-                                                </button>
-                                            )}
-                                            {event.isResultsRevealed && (
+                                            {!event.isResultsRevealed ? (
+                                                <>
+                                                    <select 
+                                                        value={event.status || 'In Progress'} 
+                                                        onChange={(e) => {
+                                                            const newEvents = appData.events.map(ev => 
+                                                                ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
+                                                            );
+                                                            setAppData({ ...appData, events: newEvents });
+                                                        }}
+                                                        className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
+                                                    >
+                                                        <option value="In Progress">In Progress</option>
+                                                        <option value="Complete">Complete</option>
+                                                    </select>
+                                                    {event.status === 'Complete' && (
+                                                        <button 
+                                                            onClick={() => onRevealResults(event.id)}
+                                                            className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 whitespace-nowrap"
+                                                        >
+                                                            Reveal Results
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
                                                 <span className="inline-block px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 whitespace-nowrap">
                                                     ✓ Revealed
                                                 </span>
