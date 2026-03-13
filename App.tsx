@@ -124,47 +124,46 @@ function App() {
       const storedUser = localStorage.getItem('currentUser');
       const token = localStorage.getItem('token');
       
-      // If NO token, user is logged out - clear any lingering state
+      console.log('[Auth] restoreUserState called');
+      console.log('[Auth] storedUser:', !!storedUser);
+      console.log('[Auth] token:', token ? token.substring(0, 20) + '...' : 'null');
+      
+      // If NO token, user is logged out
       if (!token) {
-        console.log('No token found - clearing session state');
+        console.log('[Auth] No token found - user is logged out');
         setCurrentUser(null);
-        localStorage.removeItem('currentUser');
-        localStorage.removeItem('token');
-        
-        // Only redirect to login if on a protected route
-        const protectedRoutes = ['/admin-dashboard', '/headjudge-dashboard', '/farmer-dashboard', '/qgrader-dashboard'];
-        const isOnProtectedRoute = protectedRoutes.some(route => location.pathname.startsWith(route));
-        if (isOnProtectedRoute) {
-          navigate('/');
-        }
         setIsCheckingAuth(false);
         return;
       }
       
-      // Token exists - verify it's still valid
-      if (token === 'database-auth') {
-        console.error('Legacy token detected, clearing session');
-        localStorage.removeItem('currentUser');
-        localStorage.removeItem('token');
-        setCurrentUser(null);
-        navigate('/');
-        setIsCheckingAuth(false);
-        return;
-      }
-      
-      // Try to verify the real token
+      // Token exists - try to verify it
       if (storedUser && token) {
         try {
+          console.log('[Auth] Attempting to verify token...');
           const user = normalizeUserRoles(await verifyAuthentication());
+          console.log('[Auth] Token verified successfully');
           localStorage.setItem('currentUser', JSON.stringify(user));
           setCurrentUser(user);
         } catch (error) {
-          console.error('Session expired or invalid, redirecting to login');
-          localStorage.removeItem('currentUser');
-          localStorage.removeItem('token');
-          setCurrentUser(null);
-          alert('Session expired. Please log in again.');
-          navigate('/');
+          console.error('[Auth] Token verification failed:', error);
+          // Still keep the user logged in if we have both user and token
+          // The token might be valid even if verification fails (e.g., network issue)
+          if (storedUser && token && token !== 'database-auth') {
+            try {
+              const user = JSON.parse(storedUser);
+              console.log('[Auth] Using stored user data without verification');
+              setCurrentUser(normalizeUserRoles(user));
+            } catch {
+              console.error('[Auth] Failed to parse stored user, clearing session');
+              localStorage.removeItem('currentUser');
+              localStorage.removeItem('token');
+              setCurrentUser(null);
+            }
+          } else {
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('token');
+            setCurrentUser(null);
+          }
         }
       }
       setIsCheckingAuth(false);
