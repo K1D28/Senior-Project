@@ -97,7 +97,7 @@ function App() {
       if (!storedToken || storedToken === 'database-auth') {
         throw new Error('Missing or legacy token');
       }
-      const response = await fetch('' + BACKEND_URL + '/api/auth/verify', {
+      const response = await fetch(`${BACKEND_URL}/api/auth/verify`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${storedToken}` // Include token in Authorization header

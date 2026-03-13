@@ -72,7 +72,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                 console.log('🔍 SampleReport: Attempting to fetch scores for sample', { sampleId: sample.id, hasToken: !!localStorage.getItem('token') });
                 
                 // Try to fetch all Q Grader scores for this sample
-                const response = await fetch(`' + BACKEND_URL + '/api/qgrader/scores/sample/${sample.id}`, {
+                const response = await fetch(`${BACKEND_URL}/api/qgrader/scores/sample/${sample.id}`, {
                     method: 'GET',
                     credentials: 'include',
                     headers: { 

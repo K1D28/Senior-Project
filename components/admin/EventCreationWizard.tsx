@@ -15,7 +15,7 @@ import { AlertTriangle, CheckCircle } from 'lucide-react';
 const validateToken = async (token: string | null): Promise<boolean> => {
     if (!token) return false;
     try {
-        const response = await axios.get('' + BACKEND_URL + '/api/auth/validate-token', {
+        const response = await axios.get(`${BACKEND_URL}/api/auth/validate-token`, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },

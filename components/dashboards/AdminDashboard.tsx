@@ -594,7 +594,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleApproveSample = async (sampleId: string | number) => {
         try {
-            const response = await fetch(`' + BACKEND_URL + '/api/samples/${sampleId}/approve`, {
+            const response = await fetch(`${BACKEND_URL}/api/samples/${sampleId}/approve`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -630,7 +630,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleDeclineSample = async (sampleId: string | number) => {
         try {
-            const response = await fetch(`' + BACKEND_URL + '/api/samples/${sampleId}/decline`, {
+            const response = await fetch(`${BACKEND_URL}/api/samples/${sampleId}/decline`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,

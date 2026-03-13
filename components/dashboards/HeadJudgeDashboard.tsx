@@ -499,7 +499,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         setLoading(true);
         setError(null);
         try {
-            let url = '' + BACKEND_URL + '/api/cupping-events/headjudge';
+            let url = `${BACKEND_URL}/api/cupping-events/headjudge`;
             if (eventId) {
                 if (!/^[0-9]+$/.test(eventId)) {
                     throw new Error('Invalid eventId: must be a valid integer.');

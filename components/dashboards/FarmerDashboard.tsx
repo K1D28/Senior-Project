@@ -329,7 +329,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   useEffect(() => {
     const fetchFarmerDatabaseId = async () => {
       try {
-        const response = await fetch(`' + BACKEND_URL + '/api/farmer-profile`, {
+        const response = await fetch(`${BACKEND_URL}/api/farmer-profile`, {
           credentials: 'include',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -356,7 +356,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const fetchAssignedEvents = async () => {
     try {
       setLoadingEvents(true);
-      const response = await fetch(`' + BACKEND_URL + '/api/cupping-events/farmer`, { 
+      const response = await fetch(`${BACKEND_URL}/api/cupping-events/farmer`, { 
         credentials: 'include',
         headers: { 
           'Authorization': `Bearer ${localStorage.getItem('token')}` 

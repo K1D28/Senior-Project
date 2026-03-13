@@ -467,7 +467,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
             setAiLoading(true);
             const scoreSheet = getOrCreateScoreSheet(String(selectedSample.id));
             
-            const response = await fetch('' + BACKEND_URL + '/api/analyze-sample', {
+            const response = await fetch(`${BACKEND_URL}/api/analyze-sample`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {

@@ -71,7 +71,7 @@ const UserInvitationModal: React.FC<UserInvitationModalProps> = ({ isOpen, onClo
     setError('');
 
     try {
-      const response = await fetch('' + BACKEND_URL + '/api/users/invite', {
+      const response = await fetch(`${BACKEND_URL}/api/users/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

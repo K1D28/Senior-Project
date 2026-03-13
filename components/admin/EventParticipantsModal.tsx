@@ -125,7 +125,7 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             const updatedH = (role === 'headJudge' ? assignedHeadJudgeIds.filter(id => id !== userId) : assignedHeadJudgeIds)
                 .map(id => parseInt(id, 10));
 
-            const response = await axios.put(`' + BACKEND_URL + '/api/cupping-events/${event?.id}/participants`, {
+            const response = await axios.put(`${BACKEND_URL}/api/cupping-events/${event?.id}/participants`, {
                 assignedQGraderIds: updatedQ,
                 assignedHeadJudgeIds: updatedH,
             }, { withCredentials: true });
