@@ -491,9 +491,9 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     useEffect(() => {
         const pathParts = location.pathname.split('/');
         const adjudicateIndex = pathParts.indexOf('adjudicate');
-        if (adjudicateIndex !== -1 && adjudicateIndex + 2 < pathParts.length) {
+        if (adjudicateIndex !== -1 && adjudicateIndex + 1 < pathParts.length) {
             const eventName = decodeURIComponent(pathParts[adjudicateIndex + 1]);
-            const blindCode = decodeURIComponent(pathParts[adjudicateIndex + 2]);
+            const blindCode = adjudicateIndex + 2 < pathParts.length ? decodeURIComponent(pathParts[adjudicateIndex + 2]) : '';
             
             // Find and select the event
             if (assignedEvents.length > 0) {
