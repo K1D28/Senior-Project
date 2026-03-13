@@ -802,7 +802,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const handleCreateEvent = async (newEvent: Partial<CuppingEvent>) => {
         try {
-            const response = await axios.post('/api/cupping-events', newEvent);
+            const token = localStorage.getItem('token');
+            const response = await axios.post(`${BACKEND_URL}/api/cupping-events`, newEvent, { withCredentials: true, headers: token ? { Authorization: `Bearer ${token}` } : {} });
             setAppData((prevData) => ({
                 ...prevData,
                 events: [...prevData.events, {

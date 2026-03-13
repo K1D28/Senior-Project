@@ -36,7 +36,8 @@ export const COFFEE_SAMPLES: CoffeeSample[] = [
 
 export const fetchCuppingEvents = async (): Promise<CuppingEvent[]> => {
   try {
-    const response = await axios.get('/api/cupping-events');
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080';
+    const response = await axios.get(`${BACKEND_URL}/api/cupping-events`);
     return response.data;
   } catch (error) {
     console.error('Error fetching cupping events:', error);

@@ -251,7 +251,7 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
 
             try {
                 // Submit the event
-                let response = await axios.post('/api/cupping-events', newEvent, { withCredentials: true });
+                let response = await axios.post(`${BACKEND_URL}/api/cupping-events`, newEvent, { withCredentials: true, headers: { Authorization: `Bearer ${token}` } });
                 const createdEventId = response.data.id;
 
                 // Build payload that matches NewFullEventData expected by App.createFullEvent
