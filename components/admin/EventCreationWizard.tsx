@@ -251,6 +251,7 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
 
             try {
                 // Submit the event
+                const token = localStorage.getItem('token');
                 let response = await axios.post(`${BACKEND_URL}/api/cupping-events`, newEvent, { withCredentials: true, headers: { Authorization: `Bearer ${token}` } });
                 const createdEventId = response.data.id;
 
