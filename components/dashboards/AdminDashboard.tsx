@@ -349,6 +349,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         console.log('Debugging appData.events:', appData.events); // Log the events data for debugging
     }, [appData.events]);
 
+    // Auto-mark events as Complete when all samples are adjudicated (locked)
+    useEffect(() => {
+        const updatedEvents = appData.events.map(event => {
+            // Skip if already revealed
+            if (event.isResultsRevealed) return event;
+            
+            // Get all samples for this event
+            const eventSamples = appData.samples.filter(s => event.sampleIds?.includes(s.id));
+            
+            // Check if all samples are locked
+            const allSamplesLocked = eventSamples.length > 0 && eventSamples.every(s => s.isLocked);
+            
+            // Auto-set status to Complete if all samples are locked and not already Complete
+            if (allSamplesLocked && event.status !== 'Complete') {
+                return { ...event, status: 'Complete' as const };
+            }
+            
+            return event;
+        });
+        
+        // Only update if something changed
+        if (JSON.stringify(updatedEvents) !== JSON.stringify(appData.events)) {
+            setAppData({ ...appData, events: updatedEvents });
+        }
+    }, [appData.samples]);
+
     if (!appData) {
         return <div>Loading...</div>;
     }
