@@ -545,48 +545,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         }} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} isAIModalOpen={isAIModalOpen} aiAnalysis={aiAnalysis} onCloseAIModal={() => setIsAIModalOpen(false)} />
     }
 
-    if (selectedEvent) {
-        return (
-            <div>
-                <Button onClick={() => {
-                    setSelectedEvent(null);
-                    navigate('/qgrader-dashboard/cuppingevents');
-                }} className="mb-4 flex items-center space-x-1" variant="secondary"> <ChevronLeft size={16}/> <span>Back to Events</span></Button>
-                <Card title={`Sample Tray: ${selectedEvent.name}`}>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {samplesForEvent.map(sample => {
-                             const scoreSheet = getOrCreateScoreSheet(sample.id);
-                             const status = getSampleStatus(scoreSheet, selectedEvent);
-                             const config = statusConfig[status];
-                             const isInteractive = status !== 'Finalized';
-
-                            return (
-                                <div key={sample.id} className="flex flex-col">
-                                    <div 
-                                        onClick={() => {
-                                            if (isInteractive) {
-                                                setSelectedSample(sample);
-                                                navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent!.name)}/${encodeURIComponent(sample.blindCode)}`);
-                                            }
-                                        }} 
-                                        className={`relative p-4 border-2 ${config.borderColor} rounded-lg ${isInteractive ? 'cursor-pointer hover:bg-background' : 'cursor-not-allowed opacity-75 bg-gray-50'} transition-colors duration-200 aspect-square flex flex-col justify-center items-center text-center`}
-                                    >
-                                        <div className="absolute top-2 right-2">{config.icon}</div>
-                                        <p className="font-mono text-2xl md:text-3xl font-bold">{sample.blindCode}</p>
-                                        <p className={`text-sm font-semibold ${config.className}`}>
-                                            {(status === 'Submitted' || status === 'Finalized') ? `Score: ${scoreSheet.scores.finalScore.toFixed(2)}` : config.text}
-                                        </p>
-                                    </div>
-                                </div>
-                             )
-
-                        })}
-                    </div>
-                </Card>
-            </div>
-        )
-    }
-
+    // Render the main layout with split view support
     return (
         <div className="fixed inset-0 bg-white flex flex-col">
             {/* Main Layout with Sidebar */}
@@ -658,11 +617,12 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
 
                 {/* Main Content Area */}
                 <div className="flex-1 overflow-y-auto bg-gradient-to-br from-white via-white to-blue-50/30">
-                    <div className="p-6">
+                    <div className={`p-6 overflow-y-auto flex-1 ${selectedEvent ? 'flex gap-6' : ''}`}>
                         {activeTab === 'cupping' && (
                             <>
-                        {/* Cupping Events List */}
-                        {!selectedEvent && !selectedSample && (
+                        {/* Cupping Events List - Show even when event is selected (left side) */}
+                        <div className={`${selectedEvent ? 'w-1/2 flex-shrink-0 overflow-y-auto' : 'w-full'}`}>
+                        {true && (
                             <Card className="transition-smooth">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-2xl font-extrabold text-primary">Cupping Events</h3>
@@ -766,12 +726,16 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                 </div>
                             </Card>
                         )}
+                        </div>
 
-                        {/* Sample Tray View */}
+                        {/* Sample Tray View - Right side when event is selected */}
                         {selectedEvent && !selectedSample && (
-                            <div>
+                            <div className="flex-1 overflow-y-auto">
                                 <Button 
-                                    onClick={() => setSelectedEvent(null)} 
+                                    onClick={() => {
+                                        setSelectedEvent(null);
+                                        navigate('/qgrader-dashboard/cuppingevents');
+                                    }} 
                                     className="mb-6 flex items-center space-x-1" 
                                     variant="secondary"
                                 >
@@ -806,19 +770,24 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                             </div>
                         )}
 
-                        {/* Cupping Form View */}
+                        {/* Cupping Form View - Full width when scoring */}
                         {selectedSample && selectedEvent && (
-                            <CuppingForm 
-                                scoreSheet={getOrCreateScoreSheet(selectedSample.id)} 
-                                sample={selectedSample} 
-                                onSave={onUpdateScoreSheet} 
-                                onBack={() => setSelectedSample(null)} 
-                                onAIAnalyze={handleAIAnalysis} 
-                                isAILoading={aiLoading} 
-                                isAIModalOpen={isAIModalOpen} 
-                                aiAnalysis={aiAnalysis} 
-                                onCloseAIModal={() => setIsAIModalOpen(false)} 
-                            />
+                            <div className="w-full">
+                                <CuppingForm 
+                                    scoreSheet={getOrCreateScoreSheet(selectedSample.id)} 
+                                    sample={selectedSample} 
+                                    onSave={onUpdateScoreSheet} 
+                                    onBack={() => {
+                                        setSelectedSample(null);
+                                        navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
+                                    }} 
+                                    onAIAnalyze={handleAIAnalysis} 
+                                    isAILoading={aiLoading} 
+                                    isAIModalOpen={isAIModalOpen} 
+                                    aiAnalysis={aiAnalysis} 
+                                    onCloseAIModal={() => setIsAIModalOpen(false)} 
+                                />
+                            </div>
                         )}
                             </>
                         )}
