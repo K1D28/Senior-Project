@@ -384,7 +384,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     }
     try {
       console.log(`Fetching samples for farmer ID: ${farmerDatabaseId}`);
-      const response = await fetch(`' + BACKEND_URL + '/api/samples?farmerId=${farmerDatabaseId}`, {
+      const response = await fetch(`${BACKEND_URL}/api/samples?farmerId=${farmerDatabaseId}`, {
         credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

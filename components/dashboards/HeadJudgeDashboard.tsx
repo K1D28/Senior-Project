@@ -509,6 +509,9 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             console.log('Requesting assigned events from URL:', url);
             const response = await fetch(url, {
                 method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
                 credentials: 'include',
             });
             if (response.ok) {
@@ -548,8 +551,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                 
                 const [eventsResponse, samplesResponse] = await Promise.all([
-                    fetch('/api/cupping-events', { method: 'GET', credentials: 'include', headers }),
-                    fetch('/api/samples', { method: 'GET', credentials: 'include', headers })
+                    fetch(`${BACKEND_URL}/api/cupping-events`, { method: 'GET', credentials: 'include', headers }),
+                    fetch(`${BACKEND_URL}/api/samples`, { method: 'GET', credentials: 'include', headers })
                 ]);
 
                 if (eventsResponse.ok && samplesResponse.ok) {
@@ -587,7 +590,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             }
             
             console.log('Sending request with scores:', avgScores);
-            const response = await fetch('' + BACKEND_URL + '/api/analyze-sample', {
+            const response = await fetch(`${BACKEND_URL}/api/analyze-sample`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -640,9 +643,15 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         }
 
         try {
-            const url = `' + BACKEND_URL + '/api/headjudge/events/${evId}/scores`;
+            const url = `${BACKEND_URL}/api/headjudge/events/${evId}/scores`;
             console.log('HeadJudge: fetching submitted scores from', url);
-            const res = await fetch(url, { method: 'GET', credentials: 'include' });
+            const res = await fetch(url, {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             if (res.ok) {
                 const data = await res.json();
                 // Map server QGraderScore objects to frontend ScoreSheet shape
@@ -721,7 +730,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                     // Also refresh the assigned events to ensure we have latest event state
                     const refreshAssignedEvents = async () => {
                         try {
-                            const url = '' + BACKEND_URL + '/api/cupping-events/headjudge';
+                            const url = `${BACKEND_URL}/api/cupping-events/headjudge`;
                             const res = await fetch(url, { method: 'GET', credentials: 'include' });
                             if (res.ok) {
                                 const events = await res.json();

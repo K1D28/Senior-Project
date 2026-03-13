@@ -127,7 +127,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                         const eventId = mappedScores[0].eventId;
                         console.log('🔍 SampleReport: Fetching event details for eventId:', eventId);
                         
-                        const eventResponse = await fetch(`' + BACKEND_URL + '/api/cupping-events/${eventId}`, {
+                        const eventResponse = await fetch(`${BACKEND_URL}/api/cupping-events/${eventId}`, {
                             method: 'GET',
                             credentials: 'include',
                             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }

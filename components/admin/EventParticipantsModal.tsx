@@ -169,11 +169,14 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
                 return;
             }
 
-            const response = await axios.put(`' + BACKEND_URL + '/api/cupping-events/${event.id}/participants`, {
+            const response = await axios.put(`${BACKEND_URL}/api/cupping-events/${event.id}/participants`, {
                 assignedQGraderIds: assignedQGraderIds.map(id => parseInt(id, 10)),
                 assignedHeadJudgeIds: assignedHeadJudgeIds.map(id => parseInt(id, 10)),
             }, {
                 withCredentials: true, // Ensure cookies are included in the request
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
             console.log('Updated participants:', response.data); // Debugging log
 

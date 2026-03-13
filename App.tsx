@@ -253,7 +253,7 @@ function App() {
         const defects = (Number(updatedSheet.scores.taints || 0) * 2) + (Number(updatedSheet.scores.faults || 0) * 4);
 
         console.log('DEBUG: sending score POST to backend', { sampleId: updatedSheet.sampleId, eventId: updatedSheet.eventId, qGraderId: updatedSheet.qGraderId });
-        const resp = await fetch('' + BACKEND_URL + '/api/qgrader/scores', {
+        const resp = await fetch(`${BACKEND_URL}/api/qgrader/scores`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
@@ -324,7 +324,7 @@ function App() {
       // Always attempt to refresh the grader's canonical scores so UI reflects server state
       try {
         console.log('Re-fetching grader scores after submit...');
-        const mineResp = await fetch('' + BACKEND_URL + '/api/qgrader/scores/mine', { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+        const mineResp = await fetch(`${BACKEND_URL}/api/qgrader/scores/mine`, { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
         console.log('Re-fetch status:', mineResp.status);
         if (mineResp.ok) {
           const rows = await mineResp.json();
@@ -394,7 +394,7 @@ function App() {
 
     (async () => {
       try {
-        const resp = await fetch('' + BACKEND_URL + '/api/qgrader/scores/mine', { credentials: 'include' });
+        const resp = await fetch(`${BACKEND_URL}/api/qgrader/scores/mine`, { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
         if (!resp.ok) return;
         const data = await resp.json();
         // Map server rows to ScoreSheet shape
@@ -703,7 +703,7 @@ function App() {
       // If current user is head judge, persist decision to backend
       if (currentUser && currentUser.roles.includes(Role.HEAD_JUDGE)) {
         try {
-          const resp = await fetch(`' + BACKEND_URL + '/api/headjudge/samples/${sampleId}/decision`, {
+          const resp = await fetch(`${BACKEND_URL}/api/headjudge/samples/${sampleId}/decision`, {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
@@ -794,7 +794,7 @@ function App() {
     };
 
     // Submit the sample directly (no need to register as participant first)
-    fetch('' + BACKEND_URL + '/api/samples', {
+    fetch(`${BACKEND_URL}/api/samples`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -849,7 +849,7 @@ function App() {
     if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;
 
     // Submit sample without blind code and without event assignment
-    fetch('' + BACKEND_URL + '/api/samples', {
+    fetch(`${BACKEND_URL}/api/samples`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

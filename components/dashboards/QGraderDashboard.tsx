@@ -379,9 +379,12 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     useEffect(() => {
         const fetchAssignedEvents = async () => {
             try {
-                const response = await fetch('/api/cupping-events/qgrader', {
+                const response = await fetch(`${BACKEND_URL}/api/cupping-events/qgrader`, {
                     method: 'GET',
                     credentials: 'include',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
                 });
                 if (response.ok) {
                     const events = await response.json();
@@ -409,8 +412,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                 const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                 
                 const [eventsResponse, samplesResponse] = await Promise.all([
-                    fetch('/api/cupping-events', { method: 'GET', credentials: 'include', headers }),
-                    fetch('/api/samples', { method: 'GET', credentials: 'include', headers })
+                    fetch(`${BACKEND_URL}/api/cupping-events`, { method: 'GET', credentials: 'include', headers }),
+                    fetch(`${BACKEND_URL}/api/samples`, { method: 'GET', credentials: 'include', headers })
                 ]);
 
                 if (eventsResponse.ok && samplesResponse.ok) {

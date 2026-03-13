@@ -67,7 +67,7 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                 };
                 console.log('Request Headers (using cookies):', headers); // Debugging log
                 // Fetch all participants (Head Judges, Q Graders, and Farmers)
-                const participantsResponse = await axios.get('' + BACKEND_URL + '/api/participants', {
+                const participantsResponse = await axios.get(`${BACKEND_URL}/api/participants`, {
                     headers,
                     withCredentials: true, // Use cookies for authentication
                 });
