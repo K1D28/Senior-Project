@@ -1600,6 +1600,15 @@ app.get('/api/cupping-events/:id', verifySupabaseToken, async (req, res) => {
 app.delete('/api/cupping-events/:id', verifySupabaseToken, async (req, res) => {
     const { id } = req.params;
     try {
+        // First check if the event exists
+        const existingEvent = await prisma.cuppingEvent.findUnique({
+            where: { id: parseInt(id) },
+        });
+        
+        if (!existingEvent) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        
         // Delete the cupping event and cascade delete related data
         await prisma.cuppingEvent.delete({
             where: { id: parseInt(id) },
