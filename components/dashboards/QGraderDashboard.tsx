@@ -538,14 +538,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         }
     };
 
-    if (selectedSample && selectedEvent) {
-        return <CuppingForm scoreSheet={getOrCreateScoreSheet(selectedSample.id)} sample={selectedSample} onSave={onUpdateScoreSheet} onBack={() => {
-            setSelectedSample(null);
-            navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
-        }} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} isAIModalOpen={isAIModalOpen} aiAnalysis={aiAnalysis} onCloseAIModal={() => setIsAIModalOpen(false)} />
-    }
-
-    // Render the main layout with split view support
+    // Render the main layout with split view support - always use split view, don't take over fullscreen
+    // (removed the early return for selectedSample to keep split view)
     return (
         <div className="fixed inset-0 bg-white flex flex-col">
             {/* Main Layout with Sidebar */}
@@ -770,24 +764,33 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                             </div>
                         )}
 
-                        {/* Cupping Form View - Full width when scoring */}
+                        {/* Cupping Form View - Modal overlay when scoring */}
                         {selectedSample && selectedEvent && (
-                            <div className="w-full">
-                                <CuppingForm 
-                                    scoreSheet={getOrCreateScoreSheet(selectedSample.id)} 
-                                    sample={selectedSample} 
-                                    onSave={onUpdateScoreSheet} 
-                                    onBack={() => {
-                                        setSelectedSample(null);
-                                        navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
-                                    }} 
-                                    onAIAnalyze={handleAIAnalysis} 
-                                    isAILoading={aiLoading} 
-                                    isAIModalOpen={isAIModalOpen} 
-                                    aiAnalysis={aiAnalysis} 
-                                    onCloseAIModal={() => setIsAIModalOpen(false)} 
-                                />
-                            </div>
+                            <Modal
+                                isOpen={!!selectedSample}
+                                onClose={() => {
+                                    setSelectedSample(null);
+                                    navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
+                                }}
+                                title="Score Sample"
+                            >
+                                <div className="max-h-[90vh] overflow-y-auto">
+                                    <CuppingForm 
+                                        scoreSheet={getOrCreateScoreSheet(selectedSample.id)} 
+                                        sample={selectedSample} 
+                                        onSave={onUpdateScoreSheet} 
+                                        onBack={() => {
+                                            setSelectedSample(null);
+                                            navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
+                                        }} 
+                                        onAIAnalyze={handleAIAnalysis} 
+                                        isAILoading={aiLoading} 
+                                        isAIModalOpen={isAIModalOpen} 
+                                        aiAnalysis={aiAnalysis} 
+                                        onCloseAIModal={() => setIsAIModalOpen(false)} 
+                                    />
+                                </div>
+                            </Modal>
                         )}
                             </>
                         )}
