@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Modal } from '../ui/Modal';
 import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock, Trophy, LogOut, Sparkles, BarChart2 } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 
 // FIX: Add type definitions for SpeechRecognition API to the global window object to resolve TypeScript errors.
 declare global {
@@ -376,6 +376,37 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         setAiAnalysis('');
     }, [selectedSample?.id, selectedSample?.blindCode]);
 
+    // Handle URL parameters to restore selected event and sample
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const pathParts = location.pathname.split('/');
+        
+        // Extract eventName and blindCode from URL path
+        // Path format: /qgrader-dashboard/cuppingevents/:eventName or :eventName/:blindCode
+        const cuppingeventsIndex = pathParts.indexOf('cuppingevents');
+        if (cuppingeventsIndex !== -1 && cuppingeventsIndex + 1 < pathParts.length) {
+            const eventName = decodeURIComponent(pathParts[cuppingeventsIndex + 1]);
+            const blindCode = pathParts.length > cuppingeventsIndex + 2 ? decodeURIComponent(pathParts[cuppingeventsIndex + 2]) : null;
+            
+            // Find and select the event
+            if (assignedEvents.length > 0) {
+                const matchingEvent = assignedEvents.find(e => e.name === eventName);
+                if (matchingEvent && matchingEvent !== selectedEvent) {
+                    setSelectedEvent(matchingEvent);
+                }
+                
+                // If blindCode is in URL, find and select that sample
+                if (blindCode && matchingEvent && selectedEvent?.id === matchingEvent.id) {
+                    const samples = appData.coffeeSamples.filter(s => matchingEvent.sampleIds.includes(s.id));
+                    const matchingSample = samples.find(s => s.blindCode === blindCode);
+                    if (matchingSample && matchingSample !== selectedSample) {
+                        setSelectedSample(matchingSample);
+                    }
+                }
+            }
+        }
+    }, [location.pathname, assignedEvents]);
+
     useEffect(() => {
         const fetchAssignedEvents = async () => {
             try {
@@ -508,13 +539,19 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     };
 
     if (selectedSample && selectedEvent) {
-        return <CuppingForm scoreSheet={getOrCreateScoreSheet(selectedSample.id)} sample={selectedSample} onSave={onUpdateScoreSheet} onBack={() => setSelectedSample(null)} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} isAIModalOpen={isAIModalOpen} aiAnalysis={aiAnalysis} onCloseAIModal={() => setIsAIModalOpen(false)} />
+        return <CuppingForm scoreSheet={getOrCreateScoreSheet(selectedSample.id)} sample={selectedSample} onSave={onUpdateScoreSheet} onBack={() => {
+            setSelectedSample(null);
+            navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}`);
+        }} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} isAIModalOpen={isAIModalOpen} aiAnalysis={aiAnalysis} onCloseAIModal={() => setIsAIModalOpen(false)} />
     }
 
     if (selectedEvent) {
         return (
             <div>
-                <Button onClick={() => setSelectedEvent(null)} className="mb-4 flex items-center space-x-1" variant="secondary"> <ChevronLeft size={16}/> <span>Back to Events</span></Button>
+                <Button onClick={() => {
+                    setSelectedEvent(null);
+                    navigate('/qgrader-dashboard/cuppingevents');
+                }} className="mb-4 flex items-center space-x-1" variant="secondary"> <ChevronLeft size={16}/> <span>Back to Events</span></Button>
                 <Card title={`Sample Tray: ${selectedEvent.name}`}>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {samplesForEvent.map(sample => {
@@ -526,7 +563,12 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                             return (
                                 <div key={sample.id} className="flex flex-col">
                                     <div 
-                                        onClick={() => isInteractive && setSelectedSample(sample)} 
+                                        onClick={() => {
+                                            if (isInteractive) {
+                                                setSelectedSample(sample);
+                                                navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent!.name)}/${encodeURIComponent(sample.blindCode)}`);
+                                            }
+                                        }} 
                                         className={`relative p-4 border-2 ${config.borderColor} rounded-lg ${isInteractive ? 'cursor-pointer hover:bg-background' : 'cursor-not-allowed opacity-75 bg-gray-50'} transition-colors duration-200 aspect-square flex flex-col justify-center items-center text-center`}
                                     >
                                         <div className="absolute top-2 right-2">{config.icon}</div>
@@ -662,7 +704,10 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                                 <div className="text-xs font-semibold text-gray-500">Event Complete</div>
                                                             ) : (
                                                                 <Button 
-                                                                    onClick={() => setSelectedEvent(event)} 
+                                                                    onClick={() => {
+                                                                        setSelectedEvent(event);
+                                                                        navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(event.name)}`);
+                                                                    }} 
                                                                     className="bg-primary text-white hover:bg-primary-dark"
                                                                     size="sm"
                                                                 >
@@ -700,7 +745,10 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                         </div>
                                                     ) : (
                                                         <Button 
-                                                            onClick={() => setSelectedEvent(event)} 
+                                                            onClick={() => {
+                                                                setSelectedEvent(event);
+                                                                navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(event.name)}`);
+                                                            }} 
                                                             className="bg-primary text-white hover:bg-primary-dark"
                                                             size="sm"
                                                         >

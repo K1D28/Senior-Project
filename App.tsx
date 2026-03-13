@@ -1201,6 +1201,36 @@ function App() {
           }
         />
         <Route 
+          path="/qgrader-dashboard/cuppingevents/:eventName"
+          element={
+            currentUser ? (
+              <QGraderDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateScoreSheet={updateScoreSheet}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
+          path="/qgrader-dashboard/cuppingevents/:eventName/:blindCode"
+          element={
+            currentUser ? (
+              <QGraderDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateScoreSheet={updateScoreSheet}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
           path="/qgrader-dashboard/leaderboard"
           element={
             currentUser ? (
