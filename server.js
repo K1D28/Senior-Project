@@ -665,59 +665,62 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
 
     // Send an invitation email, but don't let email errors fail the whole request
     try {
-      console.log('Preparing to send invitation email to', email);
-      console.log('Email env vars - NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? 'set' : 'NOT SET');
-      console.log('Email env vars - NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? 'set' : 'NOT SET');
-      console.log('Email env vars - APP_URL:', process.env.APP_URL || 'NOT SET');
-      console.log('Email env vars - EMAIL_SERVICE:', process.env.EMAIL_SERVICE || 'gmail (default)');
+      console.log('📧 [EMAIL] Preparing to send invitation email to:', email);
+      console.log('📧 [EMAIL] NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? process.env.NODEMAILER_EMAIL : 'NOT SET');
+      console.log('📧 [EMAIL] NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? '***SET***' : 'NOT SET');
+      console.log('📧 [EMAIL] APP_URL:', process.env.APP_URL || 'NOT SET');
+      console.log('📧 [EMAIL] EMAIL_SERVICE:', process.env.EMAIL_SERVICE || 'gmail (default)');
       
-      const transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
-        auth: {
-          user: process.env.NODEMAILER_EMAIL,
-          pass: process.env.NODEMAILER_EMAIL_PASSWORD,
-        },
-      });
+      if (!process.env.NODEMAILER_EMAIL || !process.env.NODEMAILER_EMAIL_PASSWORD) {
+        console.warn('⚠️ [EMAIL] Skipping email - missing credentials. Set NODEMAILER_EMAIL and NODEMAILER_EMAIL_PASSWORD in environment');
+        // Don't fail the whole request if email credentials are missing
+      } else {
+        const transporter = nodemailer.createTransport({
+          service: process.env.EMAIL_SERVICE || 'gmail',
+          auth: {
+            user: process.env.NODEMAILER_EMAIL,
+            pass: process.env.NODEMAILER_EMAIL_PASSWORD,
+          },
+          logger: true, // Enable detailed logging
+          debug: true,  // Show debug info
+        });
 
-      // Verify transporter configuration
-      transporter.verify(function(error, success) {
-        if (error) {
-          console.error('🔴 Email transporter verification failed:', error);
-        } else {
-          console.log('✅ Email transporter ready');
-        }
-      });
+        // Verify transporter with await
+        console.log('📧 [EMAIL] Verifying transporter configuration...');
+        await transporter.verify();
+        console.log('✅ [EMAIL] Transporter verified successfully');
 
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
-        to: email,
-        subject: 'Welcome to the Coffee Cupping Platform',
-        text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password after your first login.\n\nLogin URL: ${process.env.APP_URL || 'http://localhost:3000'}\n\nBest regards,\nThe Coffee Cupping Team`,
-        html: `<h2>Welcome to the Coffee Cupping Platform</h2><p>Hi ${name},</p><p>You have been invited to join our platform as a <strong>${role}</strong>.</p><p><strong>Your login credentials are:</strong></p><ul><li>Email: ${email}</li><li>Password: ${password}</li></ul><p>Please <a href="${process.env.APP_URL || 'http://localhost:3000'}">log in</a> and change your password after your first login.</p><p>Best regards,<br>The Coffee Cupping Team</p>`,
-      };
+        const mailOptions = {
+          from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
+          to: email,
+          subject: 'Welcome to the Coffee Cupping Platform',
+          text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password after your first login.\n\nLogin URL: ${process.env.APP_URL || 'http://localhost:3000'}\n\nBest regards,\nThe Coffee Cupping Team`,
+          html: `<h2>Welcome to the Coffee Cupping Platform</h2><p>Hi ${name},</p><p>You have been invited to join our platform as a <strong>${role}</strong>.</p><p><strong>Your login credentials are:</strong></p><ul><li>Email: ${email}</li><li>Password: ${password}</li></ul><p>Please <a href="${process.env.APP_URL || 'http://localhost:3000'}">log in</a> and change your password after your first login.</p><p>Best regards,<br>The Coffee Cupping Team</p>`,
+        };
 
-      // Use Promise wrapper so we can await and catch any errors
-      try {
-        await new Promise((resolve, reject) => {
+        console.log('📧 [EMAIL] Sending email with options:', { from: mailOptions.from, to: mailOptions.to, subject: mailOptions.subject });
+        
+        // Use Promise wrapper so we can await and catch any errors
+        const info = await new Promise((resolve, reject) => {
           transporter.sendMail(mailOptions, (err, info) => {
             if (err) {
-              console.error('📧 Send Mail Error:', err.message);
-              console.error('📧 Error Code:', err.code);
-              console.error('📧 Full Error:', err);
+              console.error('🔴 [EMAIL] Send Mail Error:', err.message);
+              console.error('🔴 [EMAIL] Error Code:', err.code);
+              console.error('🔴 [EMAIL] Full Error:', JSON.stringify(err, null, 2));
               return reject(err);
             }
-            console.log('✅ Email sent successfully to:', email);
-            console.log('📧 Response:', info);
+            console.log('✅ [EMAIL] Email sent successfully');
+            console.log('📧 [EMAIL] Response:', info.response);
             resolve(info);
           });
         });
-        console.log('Email confirmed sent successfully');
-      } catch (emailError) {
-        console.error('❌ Email send failed (continuing anyway):', emailError.message);
-        // Don't fail the request if email fails
+        
+        console.log('✅ [EMAIL] Email delivery confirmed for:', email);
       }
     } catch (mailErr) {
-      console.error('❌ Unexpected error while attempting to send invitation email:', mailErr);
+      console.error('❌ [EMAIL] Error while attempting to send invitation email:', mailErr.message || mailErr);
+      if (mailErr.code) console.error('❌ [EMAIL] Error code:', mailErr.code);
+      // Don't fail the request if email fails - user is still created successfully
     }
 
     res.status(201).json({
