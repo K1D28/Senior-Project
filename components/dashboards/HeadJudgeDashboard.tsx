@@ -891,7 +891,10 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     }
 
     if (selectedSample && selectedEvent) {
-        return <AdjudicationCockpit sample={selectedSample} appData={mergedAppData} event={selectedEvent} onBack={() => setSelectedSample(null)} onUpdateAdjudication={onUpdateAdjudication} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} aiAnalysis={aiAnalysis} />
+        return <AdjudicationCockpit sample={selectedSample} appData={mergedAppData} event={selectedEvent} onBack={() => {
+            setSelectedSample(null);
+            navigate(`/headjudge-dashboard/adjudicate/${encodeURIComponent(selectedEvent.name)}`);
+        }} onUpdateAdjudication={onUpdateAdjudication} onAIAnalyze={handleAIAnalysis} isAILoading={aiLoading} aiAnalysis={aiAnalysis} />
     }
 
     if (selectedEvent) {
