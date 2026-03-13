@@ -397,8 +397,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                 
                 // If blindCode is in URL, find and select that sample
                 if (blindCode && matchingEvent && selectedEvent?.id === matchingEvent.id) {
-                    const samples = appData.coffeeSamples.filter(s => matchingEvent.sampleIds.includes(s.id));
-                    const matchingSample = samples.find(s => s.blindCode === blindCode);
+                    const samples = appData.samples.filter((s: CoffeeSample) => matchingEvent.sampleIds.includes(s.id));
+                    const matchingSample = samples.find((s: CoffeeSample) => s.blindCode === blindCode);
                     if (matchingSample && matchingSample !== selectedSample) {
                         setSelectedSample(matchingSample);
                     }
@@ -440,7 +440,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         const fetchLeaderboardData = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
                 
                 const [eventsResponse, samplesResponse] = await Promise.all([
                     fetch(`${BACKEND_URL}/api/cupping-events`, { method: 'GET', credentials: 'include', headers }),
@@ -614,9 +614,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                     <div className={`p-6 overflow-y-auto flex-1 ${selectedEvent ? 'flex gap-6' : ''}`}>
                         {activeTab === 'cupping' && (
                             <>
-                        {/* Cupping Events List - Show even when event is selected (left side) */}
-                        <div className={`${selectedEvent ? 'w-1/2 flex-shrink-0 overflow-y-auto' : 'w-full'}`}>
-                        {true && (
+                        {/* Cupping Events List - Show only when no event selected */}
+                        {!selectedEvent && (
                             <Card className="transition-smooth">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-2xl font-extrabold text-primary">Cupping Events</h3>
@@ -720,9 +719,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                 </div>
                             </Card>
                         )}
-                        </div>
 
-                        {/* Sample Tray View - Right side when event is selected */}
+                        {/* Sample Tray View - Show only when event selected */}
                         {selectedEvent && !selectedSample && (
                             <div className="flex-1 overflow-y-auto">
                                 <Button 
@@ -747,7 +745,12 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                             return (
                                                 <div key={sample.id} className="flex flex-col">
                                                     <div 
-                                                        onClick={() => isInteractive && setSelectedSample(sample)} 
+                                                        onClick={() => {
+                                                            if (isInteractive && selectedEvent) {
+                                                                setSelectedSample(sample);
+                                                                navigate(`/qgrader-dashboard/cuppingevents/${encodeURIComponent(selectedEvent.name)}/${encodeURIComponent(sample.blindCode || '')}`);
+                                                            }
+                                                        }}
                                                         className={`relative p-4 border-2 ${config.borderColor} rounded-lg ${isInteractive ? 'cursor-pointer hover:bg-background' : 'cursor-not-allowed opacity-75 bg-gray-50'} transition-colors duration-200 aspect-square flex flex-col justify-center items-center text-center`}
                                                     >
                                                         <div className="absolute top-2 right-2">{config.icon}</div>
@@ -797,7 +800,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                         {activeTab === 'leaderboard' && (
                             <div className="space-y-6">
                                 <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
-                                {console.log('QGrader Leaderboard Debug:', { eventsCount: leaderboardEvents.length, revealedCount: leaderboardEvents.filter(e => e.isResultsRevealed).length, revealedWithSamples: leaderboardEvents.filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0).length, events: leaderboardEvents.map(e => ({ name: e.name, revealed: e.isResultsRevealed, sampleCount: e.sampleIds?.length ?? 0 })) })}
+                                {(() => { console.log('QGrader Leaderboard Debug:', { eventsCount: leaderboardEvents.length, revealedCount: leaderboardEvents.filter(e => e.isResultsRevealed).length, revealedWithSamples: leaderboardEvents.filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0).length, events: leaderboardEvents.map(e => ({ name: e.name, revealed: e.isResultsRevealed, sampleCount: e.sampleIds?.length ?? 0 })) }); return null; })()}
                                 {leaderboardEvents.length > 0 && leaderboardEvents.some(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0) ? (
                                     leaderboardEvents
                                       .filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0)
