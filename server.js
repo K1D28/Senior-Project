@@ -675,6 +675,7 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
         console.warn('⚠️ [EMAIL] Skipping email - missing credentials. Set NODEMAILER_EMAIL and NODEMAILER_EMAIL_PASSWORD in environment');
         // Don't fail the whole request if email credentials are missing
       } else {
+        console.log('🔍 [EMAIL] Detected service:', process.env.EMAIL_SERVICE, '-> Using:', process.env.EMAIL_SERVICE || 'gmail');
         const transporter = nodemailer.createTransport({
           service: process.env.EMAIL_SERVICE || 'gmail',
           auth: {
