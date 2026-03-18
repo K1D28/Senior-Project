@@ -682,11 +682,19 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
             user: process.env.NODEMAILER_EMAIL,
             pass: process.env.NODEMAILER_EMAIL_PASSWORD,
           },
-          logger: false, // Disable detailed logging to reduce noise
-          debug: false,
+          logger: true,
+          debug: true,
+          connectionUrl: undefined,
         });
 
-        console.log('📧 [EMAIL] Sending email (skipping verify to avoid timeout)...');
+        console.log('📧 [EMAIL] Verifying transporter connection...');
+        try {
+          const verified = await transporter.verify();
+          console.log('✅ [EMAIL] Transporter verified:', verified);
+        } catch (verifyErr) {
+          console.error('❌ [EMAIL] Transporter verification failed:', verifyErr.message);
+          console.error('❌ [EMAIL] Error code:', verifyErr.code);
+        }
         
         const mailOptions = {
           from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
@@ -2007,7 +2015,7 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
     if (process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_EMAIL_PASSWORD) {
       try {
         const transporter = nodemailer.createTransport({
-          service: 'gmail',
+          service: process.env.EMAIL_SERVICE || 'gmail',
           auth: {
             user: process.env.NODEMAILER_EMAIL,
             pass: process.env.NODEMAILER_EMAIL_PASSWORD,
