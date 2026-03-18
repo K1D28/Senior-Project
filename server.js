@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import cookieParser from 'cookie-parser';
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs/promises';
 import path from 'path';
@@ -663,81 +663,30 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
       }
     }
 
-    // Send an invitation email, but don't let email errors fail the whole request
+    // Send an invitation email using SendGrid
     try {
       console.log('📧 [EMAIL] Preparing to send invitation email to:', email);
-      console.log('📧 [EMAIL] NODEMAILER_EMAIL:', process.env.NODEMAILER_EMAIL ? process.env.NODEMAILER_EMAIL : 'NOT SET');
-      console.log('📧 [EMAIL] NODEMAILER_EMAIL_PASSWORD:', process.env.NODEMAILER_EMAIL_PASSWORD ? '***SET***' : 'NOT SET');
+      console.log('📧 [EMAIL] SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '***SET***' : 'NOT SET');
       console.log('📧 [EMAIL] APP_URL:', process.env.APP_URL || 'NOT SET');
-      console.log('📧 [EMAIL] EMAIL_SERVICE:', process.env.EMAIL_SERVICE || 'gmail (default)');
       
-      if (!process.env.NODEMAILER_EMAIL || !process.env.NODEMAILER_EMAIL_PASSWORD) {
-        console.warn('⚠️ [EMAIL] Skipping email - missing credentials. Set NODEMAILER_EMAIL and NODEMAILER_EMAIL_PASSWORD in environment');
-        // Don't fail the whole request if email credentials are missing
+      if (!process.env.SENDGRID_API_KEY) {
+        console.warn('⚠️ [EMAIL] Skipping email - SENDGRID_API_KEY not configured');
       } else {
-        console.log('🔍 [EMAIL] Detected service:', process.env.EMAIL_SERVICE, '-> Using:', process.env.EMAIL_SERVICE || 'gmail');
-        const transporter = nodemailer.createTransport({
-          service: process.env.EMAIL_SERVICE || 'gmail',
-          auth: {
-            user: process.env.NODEMAILER_EMAIL,
-            pass: process.env.NODEMAILER_EMAIL_PASSWORD,
-          },
-          secure: true, // Use port 465 with TLS
-          logger: true,
-          debug: true,
-          connectionTimeout: 5000,
-          socketTimeout: 5000,
-        });
-
-        console.log('📧 [EMAIL] Verifying transporter connection...');
-        try {
-          const verified = await transporter.verify();
-          console.log('✅ [EMAIL] Transporter verified:', verified);
-        } catch (verifyErr) {
-          console.error('❌ [EMAIL] Transporter verification failed:', verifyErr.message);
-          console.error('❌ [EMAIL] Error code:', verifyErr.code);
-        }
-        
         const mailOptions = {
-          from: process.env.EMAIL_FROM || process.env.NODEMAILER_EMAIL,
+          from: process.env.EMAIL_FROM || 'noreply@cuppinghub.com',
           to: email,
           subject: 'Welcome to the Coffee Cupping Platform',
           text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password after your first login.\n\nLogin URL: ${process.env.APP_URL || 'http://localhost:3000'}\n\nBest regards,\nThe Coffee Cupping Team`,
           html: `<h2>Welcome to the Coffee Cupping Platform</h2><p>Hi ${name},</p><p>You have been invited to join our platform as a <strong>${role}</strong>.</p><p><strong>Your login credentials are:</strong></p><ul><li>Email: ${email}</li><li>Password: ${password}</li></ul><p>Please <a href="${process.env.APP_URL || 'http://localhost:3000'}">log in</a> and change your password after your first login.</p><p>Best regards,<br>The Coffee Cupping Team</p>`,
         };
 
-        console.log('📧 [EMAIL] Sending email with options:', { from: mailOptions.from, to: mailOptions.to, subject: mailOptions.subject });
-        
-        // Send email with timeout
-        const emailPromise = new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Email send timeout after 10 seconds'));
-          }, 10000);
-
-          transporter.sendMail(mailOptions, (err, info) => {
-            clearTimeout(timeout);
-            if (err) {
-              console.error('🔴 [EMAIL] Send Mail Error:', err.message);
-              console.error('🔴 [EMAIL] Error Code:', err.code);
-              return reject(err);
-            }
-            console.log('✅ [EMAIL] Email sent successfully');
-            console.log('📧 [EMAIL] Response:', info.response);
-            resolve(info);
-          });
-        });
-
-        try {
-          await emailPromise;
-          console.log('✅ [EMAIL] Email delivery confirmed for:', email);
-        } catch (emailError) {
-          console.error('❌ [EMAIL] Email send failed (continuing anyway):', emailError.message || emailError);
-          if (emailError.code) console.error('❌ [EMAIL] Error code:', emailError.code);
-        }
+        console.log('📧 [EMAIL] Sending email with SendGrid to:', email);
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        await sgMail.send(mailOptions);
+        console.log('✅ [EMAIL] Email sent successfully via SendGrid to:', email);
       }
     } catch (mailErr) {
       console.error('❌ [EMAIL] Error while attempting to send invitation email:', mailErr.message || mailErr);
-      if (mailErr.code) console.error('❌ [EMAIL] Error code:', mailErr.code);
       // Don't fail the request if email fails - user is still created successfully
     }
 
@@ -2013,39 +1962,24 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
       },
     });
 
-    // Step 3: Attempt to send email (non-blocking)
-    if (process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_EMAIL_PASSWORD) {
+    // Step 3: Attempt to send email using SendGrid (non-blocking)
+    if (process.env.SENDGRID_API_KEY) {
       try {
-        const transporter = nodemailer.createTransport({
-          service: process.env.EMAIL_SERVICE || 'gmail',
-          auth: {
-            user: process.env.NODEMAILER_EMAIL,
-            pass: process.env.NODEMAILER_EMAIL_PASSWORD,
-          },
-          secure: true, // Use port 465 with TLS
-          connectionTimeout: 5000,
-          socketTimeout: 5000,
-        });
-
         const mailOptions = {
-          from: process.env.NODEMAILER_EMAIL,
+          from: process.env.EMAIL_FROM || 'noreply@cuppinghub.com',
           to: email,
           subject: 'Welcome to Cupping Hub',
           text: `Hi ${prismaUser.name || 'User'},\n\nYou have been invited to join Cupping Hub as a ${role}.\n\nLogin credentials:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password.\n\nBest regards,\nCupping Hub Team`,
         };
 
-        transporter.sendMail(mailOptions, (error, info) => {
-          if (error) {
-            console.error('Email send error (non-blocking):', error.message);
-          } else {
-            console.log('Email sent successfully');
-          }
-        });
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        await sgMail.send(mailOptions);
+        console.log('✅ [EMAIL] Email sent successfully via SendGrid to:', email);
       } catch (emailErr) {
-        console.error('Email setup error (non-blocking):', emailErr.message);
+        console.error('❌ [EMAIL] Email send error (non-blocking):', emailErr.message);
       }
     } else {
-      console.log('Email credentials not configured, skipping email send');
+      console.log('📧 [EMAIL] SENDGRID_API_KEY not configured, skipping email send');
     }
 
     res.status(201).json({ message: 'User invited successfully.', user: prismaUser });
