@@ -682,9 +682,11 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
             user: process.env.NODEMAILER_EMAIL,
             pass: process.env.NODEMAILER_EMAIL_PASSWORD,
           },
+          secure: true, // Use port 465 with TLS
           logger: true,
           debug: true,
-          connectionUrl: undefined,
+          connectionTimeout: 5000,
+          socketTimeout: 5000,
         });
 
         console.log('📧 [EMAIL] Verifying transporter connection...');
@@ -2020,6 +2022,9 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
             user: process.env.NODEMAILER_EMAIL,
             pass: process.env.NODEMAILER_EMAIL_PASSWORD,
           },
+          secure: true, // Use port 465 with TLS
+          connectionTimeout: 5000,
+          socketTimeout: 5000,
         });
 
         const mailOptions = {
