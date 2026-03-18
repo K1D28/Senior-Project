@@ -668,12 +668,15 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
       console.log('📧 [EMAIL] Preparing to send invitation email to:', email);
       console.log('📧 [EMAIL] SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '***SET***' : 'NOT SET');
       console.log('📧 [EMAIL] APP_URL:', process.env.APP_URL || 'NOT SET');
+      console.log('📧 [EMAIL] EMAIL_FROM:', process.env.EMAIL_FROM || 'NOT SET (using default)');
       
       if (!process.env.SENDGRID_API_KEY) {
         console.warn('⚠️ [EMAIL] Skipping email - SENDGRID_API_KEY not configured');
       } else {
+        const senderEmail = process.env.EMAIL_FROM || 'noreply@cuppinghub.com';
+        console.log('📧 [EMAIL] Using sender email:', senderEmail);
         const mailOptions = {
-          from: process.env.EMAIL_FROM || 'noreply@cuppinghub.com',
+          from: senderEmail,
           to: email,
           subject: 'Welcome to the Coffee Cupping Platform',
           text: `Hi ${name},\n\nYou have been invited to join our platform as a ${role}.\n\nYour login credentials are:\nEmail: ${email}\nPassword: ${password}\n\nPlease log in and change your password after your first login.\n\nLogin URL: ${process.env.APP_URL || 'http://localhost:3000'}\n\nBest regards,\nThe Coffee Cupping Team`,
