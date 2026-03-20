@@ -29,22 +29,17 @@ model HeadJudge {
   status       String        @default("Active")
   participants Participant[] // Relation to Participant
   headJudgeDecisions HeadJudgeDecision[]
+  reEvaluationRequests ReEvaluationRequest[] // Relation to re-evaluation requests
 }
 
 model Farmer {
-  id               Int           @id @default(autoincrement())
-  email            String        @unique
-  password         String
-  name             String
-  status           String
-  lastLogin        DateTime?
-  farmName         String?
-  variety          String?
-  region           String?
-  processingMethod String?
-  altitude         Float?
-  moisture         Float?
-  participants     Participant[]
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String
+  lastLogin    DateTime?
+  participants Participant[]
 }
 
 model QGrader {
@@ -87,6 +82,7 @@ model CuppingEvent {
   qGraderScores     QGraderScore[]
   tags              CuppingEventTag[]
   processingMethods CuppingEventProcessingMethod[]
+  reEvaluationRequests ReEvaluationRequest[] // Relation to re-evaluation requests
   createdAt         DateTime                       @default(now())
   updatedAt         DateTime                       @updatedAt
 }
@@ -132,6 +128,7 @@ model Sample {
   lockedByHeadJudgeId   Int?
   lockedAt              DateTime?
   headJudgeDecisions    HeadJudgeDecision[]
+  reEvaluationRequests  ReEvaluationRequest[] // Relation to re-evaluation requests
 }
 
 // QGraderScore: stores per-Q grader scoring for a sample within an event
@@ -186,6 +183,27 @@ model CuppingEventProcessingMethod {
   method       String
   eventId      Int
   cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+// Re-evaluation Request: Head Judge can request a sample to be re-evaluated after Q Grader submits scores
+model ReEvaluationRequest {
+  id               Int       @id @default(autoincrement())
+  sampleId         Int
+  sample           Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  cuppingEventId   Int
+  cuppingEvent     CuppingEvent @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  headJudgeId      Int
+  headJudge        HeadJudge @relation(fields: [headJudgeId], references: [id])
+  
+  status           String    @default("PENDING") // PENDING, APPROVED, COMPLETED, REJECTED
+  reason           String?   // Why re-evaluation is needed
+  notes            String?   // Additional notes from head judge
+  
+  requestedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+  
+  @@unique([sampleId, cuppingEventId, headJudgeId])
 }
 
 enum Role {
