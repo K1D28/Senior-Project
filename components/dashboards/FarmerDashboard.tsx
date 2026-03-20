@@ -812,7 +812,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                             <option value="Washed">Washed</option>
                                             <option value="Natural">Natural</option>
                                             <option value="Honey">Honey</option>
-                                            <option value="Pulped Natural">Pulped Natural</option>
+                                            <option value="Dry">Dry</option>
                                         </Select>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
@@ -830,6 +830,60 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                     </div>
                                 </form>
                             </Card>
+
+                            {/* Registered Samples List */}
+                            {farmerSamples.length > 0 && (
+                                <Card title="Your Registered Samples">
+                                    <div className="grid gap-4">
+                                        {farmerSamples.map((sample) => (
+                                            <div key={sample.id} className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex-1">
+                                                        <h4 className="font-semibold text-lg text-text">{sample.farmName}</h4>
+                                                        <p className="text-sm text-text-light">{sample.variety} • {sample.region}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {sample.approvalStatus === 'APPROVED' ? (
+                                                            <div className="flex items-center gap-2 bg-green-50 px-3 py-1 rounded-full">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-green-600"></span>
+                                                                <span className="text-sm font-semibold text-green-700">Approved</span>
+                                                            </div>
+                                                        ) : sample.approvalStatus === 'REJECTED' ? (
+                                                            <div className="flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-red-600"></span>
+                                                                <span className="text-sm font-semibold text-red-700">Rejected</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1 rounded-full">
+                                                                <span className="w-2.5 h-2.5 rounded-full bg-yellow-600"></span>
+                                                                <span className="text-sm font-semibold text-yellow-700">Pending</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                    <div>
+                                                        <span className="text-text-light">Processing Method</span>
+                                                        <p className="font-medium text-text">{sample.processingMethod}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-text-light">Altitude</span>
+                                                        <p className="font-medium text-text">{sample.altitude || '-'} m</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-text-light">Moisture</span>
+                                                        <p className="font-medium text-text">{sample.moisture || '-'}%</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-text-light">Blind Code</span>
+                                                        <p className="font-medium text-text">{sample.blindCode || 'Not assigned'}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+                            )}
                         </div>
                     )}
                     {activeTab === 'leaderboard' && (
