@@ -251,15 +251,24 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         }
         
         const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
+        
+        if (scoresForSample.length === 0) {
+            return {
+                fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
+                uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
+            };
+        }
+        
         const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
         
         const avgScores: Record<string, number> = {};
         attributes.forEach(attr => {
             const values = scoresForSample.map(s => s.scores[attr]);
-            avgScores[attr] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : (attr === 'uniformity' || attr === 'cleanCup' || attr === 'sweetness' ? 10 : 6);
+            avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
         });
         
-        // Scale the averaged scores so their sum matches avgScore
+        // avgScore is the average of finalScores from Q Graders
+        // We need to scale individual attributes proportionally so they sum to avgScore
         const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
         const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
         
@@ -285,23 +294,31 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
             });
         } else {
             const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
-            const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
             
-            const avgScores: Record<string, number> = {};
-            attributes.forEach(attr => {
-                const values = scoresForSample.map(s => s.scores[attr]);
-                avgScores[attr] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : (attr === 'uniformity' || attr === 'cleanCup' || attr === 'sweetness' ? 10 : 6);
-            });
-            
-            // Scale the averaged scores so their sum matches avgScore
-            const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
-            const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
-            
-            Object.keys(avgScores).forEach(attr => {
-                avgScores[attr] = avgScores[attr] * scaleFactor;
-            });
-            
-            setAdjustedScores(avgScores as any);
+            if (scoresForSample.length === 0) {
+                setAdjustedScores({
+                    fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
+                    uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
+                });
+            } else {
+                const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
+                
+                const avgScores: Record<string, number> = {};
+                attributes.forEach(attr => {
+                    const values = scoresForSample.map(s => s.scores[attr]);
+                    avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
+                });
+                
+                // Scale individual attributes proportionally so they sum to avgScore
+                const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
+                const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
+                
+                Object.keys(avgScores).forEach(attr => {
+                    avgScores[attr] = avgScores[attr] * scaleFactor;
+                });
+                
+                setAdjustedScores(avgScores as any);
+            }
         }
         setJustification(sample.adjudicationJustification || '');
         setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
