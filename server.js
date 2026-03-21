@@ -2470,6 +2470,137 @@ app.get('/api/qgrader/scores/mine', verifySupabaseToken, async (req, res) => {
   }
 });
 
+// Q Grader: request re-evaluation for a locked sample after submission
+app.post('/api/qgrader/reevaluation-requests', verifySupabaseToken, async (req, res) => {
+  try {
+    const { sampleId, cuppingEventId, headJudgeId, reason } = req.body || {};
+    if (!sampleId || !cuppingEventId) {
+      return res.status(400).json({ message: 'sampleId and cuppingEventId are required' });
+    }
+
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    let qGrader = await prisma.qGrader.findUnique({ where: { email: userEmail } });
+    if (!qGrader && req.user?.role === 'Q_GRADER') {
+      qGrader = await prisma.qGrader.create({ data: { email: userEmail, password: '', name: req.user?.name || userEmail, status: 'Active' } });
+    }
+    if (!qGrader) return res.status(403).json({ message: 'Only Q Graders may request re-evaluation' });
+
+    const eventId = parseInt(cuppingEventId);
+    const sampId = parseInt(sampleId);
+
+    const participant = await prisma.participant.findFirst({ where: { eventId, qGraderId: qGrader.id, role: 'Q_GRADER' } });
+    if (!participant) return res.status(403).json({ message: 'You are not assigned to this event' });
+
+    const sample = await prisma.sample.findUnique({ where: { id: sampId } });
+    if (!sample || sample.cuppingEventId !== eventId) return res.status(404).json({ message: 'Sample not found for this event' });
+    if (!sample.isLocked) return res.status(400).json({ message: 'Sample is not locked; re-evaluation is not required' });
+
+    const submittedScore = await prisma.qGraderScore.findFirst({ where: { sampleId: sampId, qGraderId: qGrader.id, isSubmitted: true } });
+    if (!submittedScore) return res.status(403).json({ message: 'You must submit your score before requesting re-evaluation' });
+
+    let targetHeadJudgeId = headJudgeId ? parseInt(headJudgeId) : null;
+    if (targetHeadJudgeId) {
+      const headJudgeParticipant = await prisma.participant.findFirst({ where: { eventId, headJudgeId: targetHeadJudgeId, role: 'HEAD_JUDGE' } });
+      if (!headJudgeParticipant) return res.status(400).json({ message: 'Specified head judge is not assigned to this event' });
+    } else {
+      const firstHeadJudge = await prisma.participant.findFirst({ where: { eventId, role: 'HEAD_JUDGE' } });
+      if (!firstHeadJudge?.headJudgeId) return res.status(400).json({ message: 'No head judge assigned to this event' });
+      targetHeadJudgeId = firstHeadJudge.headJudgeId;
+    }
+
+    const existing = await prisma.reEvaluationRequest.findFirst({ where: { sampleId: sampId, cuppingEventId: eventId, headJudgeId: targetHeadJudgeId } });
+    if (existing) return res.json({ request: existing, message: 'Request already exists' });
+
+    const request = await prisma.reEvaluationRequest.create({
+      data: {
+        sampleId: sampId,
+        cuppingEventId: eventId,
+        headJudgeId: targetHeadJudgeId,
+        reason: reason || null,
+      },
+    });
+
+    res.status(201).json({ request });
+  } catch (error) {
+    console.error('Error creating re-evaluation request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: list re-evaluation requests (optionally filtered by event)
+app.get('/api/headjudge/reevaluation-requests', verifySupabaseToken, async (req, res) => {
+  try {
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may access requests' });
+
+    const { eventId } = req.query || {};
+    const whereClause = {
+      headJudgeId: headJudge.id,
+      ...(eventId ? { cuppingEventId: parseInt(eventId) } : {}),
+    };
+
+    const requests = await prisma.reEvaluationRequest.findMany({
+      where: whereClause,
+      include: { sample: true, cuppingEvent: true },
+      orderBy: { requestedAt: 'desc' },
+    });
+
+    res.json(requests);
+  } catch (error) {
+    console.error('Error fetching re-evaluation requests:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Head Judge: approve/decline re-evaluation request
+app.post('/api/headjudge/reevaluation-requests/:requestId/decision', verifySupabaseToken, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { status, notes } = req.body || {};
+    if (!requestId || isNaN(parseInt(requestId))) return res.status(400).json({ message: 'Invalid requestId' });
+    if (!['APPROVED', 'REJECTED'].includes(String(status).toUpperCase())) {
+      return res.status(400).json({ message: 'status must be APPROVED or REJECTED' });
+    }
+
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const headJudge = await prisma.headJudge.findUnique({ where: { email: userEmail } });
+    if (!headJudge) return res.status(403).json({ message: 'Only Head Judges may decide requests' });
+
+    const request = await prisma.reEvaluationRequest.findUnique({ where: { id: parseInt(requestId) } });
+    if (!request || request.headJudgeId !== headJudge.id) return res.status(404).json({ message: 'Request not found' });
+
+    const normalizedStatus = String(status).toUpperCase();
+
+    const updatedRequest = await prisma.reEvaluationRequest.update({
+      where: { id: request.id },
+      data: {
+        status: normalizedStatus,
+        notes: notes || null,
+        completedAt: new Date(),
+      },
+    });
+
+    if (normalizedStatus === 'APPROVED') {
+      await prisma.sample.update({
+        where: { id: request.sampleId },
+        data: { isLocked: false, lockedByHeadJudgeId: null, lockedAt: null },
+      });
+    }
+
+    res.json({ request: updatedRequest });
+  } catch (error) {
+    console.error('Error deciding re-evaluation request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Head Judge: lock judgement for a specific sample in an event
 app.post('/api/headjudge/events/:eventId/samples/:sampleId/lock', verifySupabaseToken, async (req, res) => {
   try {

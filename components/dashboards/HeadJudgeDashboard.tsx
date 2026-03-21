@@ -498,6 +498,48 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         setActiveTabState(tab);
         navigate(tabToPath[tab]);
     };
+
+    const fetchReevaluationRequests = useCallback(async (eventId?: string) => {
+        try {
+            setReevalLoading(true);
+            const url = eventId ? `${BACKEND_URL}/api/headjudge/reevaluation-requests?eventId=${eventId}` : `${BACKEND_URL}/api/headjudge/reevaluation-requests`;
+            const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+            if (!resp.ok) {
+                setReevalRequests([]);
+                return;
+            }
+            const data = await resp.json();
+            setReevalRequests(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('Failed to fetch re-evaluation requests', err);
+            setReevalRequests([]);
+        } finally {
+            setReevalLoading(false);
+        }
+    }, []);
+
+    const handleReevaluationDecision = useCallback(async (requestId: number, status: 'APPROVED' | 'REJECTED') => {
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/headjudge/reevaluation-requests/${requestId}/decision`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ status }),
+            });
+            if (!resp.ok) {
+                const text = await resp.text();
+                alert(`Decision failed: ${text}`);
+                return;
+            }
+            if (selectedEvent?.id) {
+                fetchReevaluationRequests(String(selectedEvent.id));
+            } else {
+                fetchReevaluationRequests();
+            }
+        } catch (err) {
+            alert(`Decision failed: ${String(err)}`);
+        }
+    }, [fetchReevaluationRequests, selectedEvent]);
     
     // Watch for URL changes (browser back/forward) and update activeTab accordingly
     useEffect(() => {
@@ -548,6 +590,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         setSelectedSample(matchingSample);
                     }
                 }
+                    const [reevalRequests, setReevalRequests] = useState<any[]>([]);
+                    const [reevalLoading, setReevalLoading] = useState(false);
             }
         }
     }, [location.pathname, assignedEvents]);
@@ -815,6 +859,12 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     useEffect(() => {
         loadSubmittedScores();
 
+        if (selectedEvent?.id) {
+            fetchReevaluationRequests(String(selectedEvent.id));
+        } else {
+            fetchReevaluationRequests();
+        }
+
         const handler = (e: Event) => {
             try {
                 const ce = e as CustomEvent;
@@ -854,7 +904,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
 
         window.addEventListener('headjudge:decision-saved', handler as EventListener);
         return () => window.removeEventListener('headjudge:decision-saved', handler as EventListener);
-    }, [selectedEvent, loadSubmittedScores]);
+    }, [selectedEvent, loadSubmittedScores, fetchReevaluationRequests]);
 
     const samplesForEvent = useMemo(() => {
         if (!selectedEvent) return [];
@@ -1011,6 +1061,37 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                         <span>Back to Events</span>
                                     </Button>
                                     <h3 className="text-2xl font-extrabold text-primary">Adjudicate Samples: {selectedEvent.name}</h3>
+                                </div>
+
+                                <div className="mb-6">
+                                    <h4 className="text-lg font-semibold text-gray-800 mb-3">Re-evaluation Requests</h4>
+                                    {reevalLoading ? (
+                                        <p className="text-sm text-gray-500">Loading requests...</p>
+                                    ) : reevalRequests.length === 0 ? (
+                                        <p className="text-sm text-gray-500">No re-evaluation requests for this event.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {reevalRequests.map((req: any) => (
+                                                <div key={req.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-gray-800">Sample: {req.sample?.blindCode || req.sampleId}</div>
+                                                        <div className="text-xs text-gray-600">Status: {req.status}</div>
+                                                        {req.reason && <div className="text-xs text-gray-600 mt-1">Reason: {req.reason}</div>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {req.status === 'PENDING' ? (
+                                                            <>
+                                                                <Button size="sm" className="bg-green-600 text-white" onClick={() => handleReevaluationDecision(req.id, 'APPROVED')}>Approve</Button>
+                                                                <Button size="sm" variant="secondary" onClick={() => handleReevaluationDecision(req.id, 'REJECTED')}>Decline</Button>
+                                                            </>
+                                                        ) : (
+                                                            <span className={`text-xs font-semibold ${req.status === 'APPROVED' ? 'text-green-700' : 'text-red-600'}`}>{req.status}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

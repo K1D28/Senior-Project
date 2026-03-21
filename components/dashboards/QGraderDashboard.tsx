@@ -156,9 +156,9 @@ const DescriptorItem: React.FC<{ descriptor: Descriptor; onIntensityChange: (nam
 );
 
 // --- Cupping Form Component ---
-interface CuppingFormProps { scoreSheet: ScoreSheet; sample: CoffeeSample; onSave: (updatedSheet: ScoreSheet) => void; onBack: () => void; onAIAnalyze?: () => void; isAILoading?: boolean; isAIModalOpen?: boolean; aiAnalysis?: string; onCloseAIModal?: () => void; }
+interface CuppingFormProps { scoreSheet: ScoreSheet; sample: CoffeeSample; onSave: (updatedSheet: ScoreSheet) => void; onBack: () => void; onAIAnalyze?: () => void; isAILoading?: boolean; isAIModalOpen?: boolean; aiAnalysis?: string; onCloseAIModal?: () => void; onRequestReevaluation?: (sample: CoffeeSample, sheet: ScoreSheet) => void; isReevaluationRequested?: boolean; isReevaluationLoading?: boolean; }
 
-const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, onBack, onAIAnalyze, isAILoading, isAIModalOpen, aiAnalysis, onCloseAIModal }) => {
+const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, onBack, onAIAnalyze, isAILoading, isAIModalOpen, aiAnalysis, onCloseAIModal, onRequestReevaluation, isReevaluationRequested, isReevaluationLoading }) => {
     const [scores, setScores] = useState<CuppingScore>(scoreSheet.scores);
     const [notes, setNotes] = useState(scoreSheet.notes);
     const [descriptors, setDescriptors] = useState<Descriptor[]>(scoreSheet.descriptors);
@@ -304,11 +304,22 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                         <p className="text-text-light">Final Score</p>
                         <p className="text-xl font-bold text-text-dark tabular-nums">{calculateFinalScore().toFixed(2)}</p>
                     </div>
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-2">
                         <div className="flex items-center space-x-1 text-text-light">
                             {saveStatus === 'saving' && <><Save size={12} className="animate-spin" /><span className="text-xs">Saving...</span></>}
                             {saveStatus === 'saved' && <><CheckCircle size={12} className="text-green-600"/><span className="text-xs">Saved</span></>}
                         </div>
+                        {scoreSheet.isSubmitted && sample.isLocked && (
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                className="text-xs py-1"
+                                disabled={isReevaluationRequested || isReevaluationLoading}
+                                onClick={() => onRequestReevaluation?.(sample, scoreSheet)}
+                            >
+                                {isReevaluationRequested ? 'Re-eval Requested' : isReevaluationLoading ? 'Requesting...' : 'Request Re-eval'}
+                            </Button>
+                        )}
                         {!scoreSheet.isSubmitted ? (
                             <Button onClick={() => handleSubmit(true)} className={`text-xs py-1 ${saveStatus === 'saving' ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={saveStatus === 'saving'}>Submit Final</Button>
                         ) : (
@@ -347,12 +358,46 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [activeTab, setActiveTabState] = useState<'cupping' | 'leaderboard'>(() => {
         return pathToTab[location.pathname] || 'cupping';
     });
+
+    const [reevalRequestedBySample, setReevalRequestedBySample] = useState<Record<string, boolean>>({});
+    const [reevalLoadingSampleId, setReevalLoadingSampleId] = useState<string | null>(null);
     
     // Function for when user clicks a tab button - updates state AND navigates URL
     const handleTabClick = (tab: 'cupping' | 'leaderboard') => {
         setActiveTabState(tab);
         navigate(tabToPath[tab]);
     };
+
+    const handleRequestReevaluation = useCallback(async (sample: CoffeeSample, sheet: ScoreSheet) => {
+        const sampleKey = String(sample.id);
+        if (reevalRequestedBySample[sampleKey]) return;
+
+        const reason = window.prompt('Reason for re-evaluation (optional):', '');
+        if (reason === null) return;
+
+        setReevalLoadingSampleId(sampleKey);
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/qgrader/reevaluation-requests`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                body: JSON.stringify({ sampleId: parseInt(sampleKey), cuppingEventId: parseInt(sheet.eventId), reason }),
+            });
+
+            if (!resp.ok) {
+                const text = await resp.text();
+                alert(`Request failed: ${text}`);
+                return;
+            }
+
+            setReevalRequestedBySample(prev => ({ ...prev, [sampleKey]: true }));
+            alert('Re-evaluation request sent to the Head Judge.');
+        } catch (err) {
+            alert(`Request failed: ${String(err)}`);
+        } finally {
+            setReevalLoadingSampleId(null);
+        }
+    }, [reevalRequestedBySample]);
     
     // Watch for URL changes (browser back/forward) and update activeTab accordingly
     useEffect(() => {
@@ -792,6 +837,9 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                         isAIModalOpen={isAIModalOpen} 
                                         aiAnalysis={aiAnalysis} 
                                         onCloseAIModal={() => setIsAIModalOpen(false)} 
+                                        onRequestReevaluation={handleRequestReevaluation}
+                                        isReevaluationRequested={!!reevalRequestedBySample[String(selectedSample.id)]}
+                                        isReevaluationLoading={reevalLoadingSampleId === String(selectedSample.id)}
                                     />
                                 </div>
                             </Modal>
