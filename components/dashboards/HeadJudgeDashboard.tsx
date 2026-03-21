@@ -391,7 +391,7 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                                     <label className="text-xs font-semibold text-gray-700 capitalize">{score}</label>
                                     <div className="flex items-center gap-2">
                                         <input type="range" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
-                                        <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores].toFixed(2)} onChange={(e) => {
+                                        <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => {
                                           const val = parseFloat(e.target.value);
                                           if (!isNaN(val) && val >= 0 && val <= 10) setAdjustedScores({...adjustedScores, [score]: val});
                                         }} className="w-14 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
@@ -403,7 +403,7 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                                     <label className="text-xs font-semibold text-gray-700 capitalize">{score === 'cleanCup' ? 'Clean Cup' : score === 'uniformity' ? 'Uniformity' : score === 'sweetness' ? 'Sweetness' : 'Overall'}</label>
                                     <div className="flex items-center gap-2">
                                         <input type="range" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
-                                        <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores].toFixed(2)} onChange={(e) => {
+                                        <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => {
                                           const val = parseFloat(e.target.value);
                                           if (!isNaN(val) && val >= 0 && val <= 10) setAdjustedScores({...adjustedScores, [score]: val});
                                         }} className="w-14 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
