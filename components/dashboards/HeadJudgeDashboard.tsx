@@ -561,6 +561,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
+    const [reevalRequests, setReevalRequests] = useState<any[]>([]);
+    const [reevalLoading, setReevalLoading] = useState(false);
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
     useEffect(() => {
@@ -590,8 +592,6 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         setSelectedSample(matchingSample);
                     }
                 }
-                    const [reevalRequests, setReevalRequests] = useState<any[]>([]);
-                    const [reevalLoading, setReevalLoading] = useState(false);
             }
         }
     }, [location.pathname, assignedEvents]);
