@@ -259,6 +259,14 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
             avgScores[attr] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : (attr === 'uniformity' || attr === 'cleanCup' || attr === 'sweetness' ? 10 : 6);
         });
         
+        // Scale the averaged scores so their sum matches avgScore
+        const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
+        const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
+        
+        Object.keys(avgScores).forEach(attr => {
+            avgScores[attr] = avgScores[attr] * scaleFactor;
+        });
+        
         return avgScores as any;
     });
     
@@ -283,6 +291,14 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
             attributes.forEach(attr => {
                 const values = scoresForSample.map(s => s.scores[attr]);
                 avgScores[attr] = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : (attr === 'uniformity' || attr === 'cleanCup' || attr === 'sweetness' ? 10 : 6);
+            });
+            
+            // Scale the averaged scores so their sum matches avgScore
+            const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
+            const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
+            
+            Object.keys(avgScores).forEach(attr => {
+                avgScores[attr] = avgScores[attr] * scaleFactor;
             });
             
             setAdjustedScores(avgScores as any);
