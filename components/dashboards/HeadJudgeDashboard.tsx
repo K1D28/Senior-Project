@@ -498,7 +498,7 @@ const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appDa
                 </div>
                 <div className="xl:col-span-1">
                     <div className="sticky top-24">
-                        <FinalizationPanel sample={sample} avgScore={overallStats.average} descriptorProfile={descriptorProfile} onUpdateAdjudication={(data) => onUpdateAdjudication(sample.id, data)} onBack={onBack} aiAnalysis={aiAnalysis}/>
+                        <FinalizationPanel sample={sample} avgScore={overallStats.average} descriptorProfile={descriptorProfile} onUpdateAdjudication={(data) => onUpdateAdjudication(sample.id, data)} onBack={onBack} aiAnalysis={aiAnalysis} appData={appData} event={event}/>
                     </div>
                 </div>
             </div>
