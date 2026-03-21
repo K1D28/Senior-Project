@@ -196,6 +196,29 @@ function serializeEvent(event) {
   return normalized;
 }
 
+// Helper: Calculate event status
+// Returns: 'in-progress', 'complete' (all samples locked), or 'revealed'
+async function getEventStatus(eventId) {
+  const event = await prisma.cuppingEvent.findUnique({
+    where: { id: eventId },
+    include: { samples: true }
+  });
+  
+  if (!event) return null;
+  
+  if (event.isResultsRevealed) return 'revealed';
+  
+  // Check if all samples are locked
+  const totalSamples = event.samples.filter(s => s.sampleType !== 'CALIBRATION').length;
+  const lockedSamples = event.samples.filter(s => s.sampleType !== 'CALIBRATION' && s.isLocked).length;
+  
+  if (totalSamples > 0 && lockedSamples >= totalSamples) {
+    return 'complete';
+  }
+  
+  return 'in-progress';
+}
+
 // Helper: Generate blind code from event name and random digits
 // Format: First letters of event name words + random 4 digits
 // Example: "Championship Coffee Cup" -> "CCC-8472"
@@ -1137,6 +1160,32 @@ app.get('/api/admin-data', verifySupabaseToken, verifyRole('ADMIN'), async (req,
       console.error('Prisma error meta:', JSON.stringify(error.meta, null, 2)); // Log Prisma-specific error metadata
     }
     res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Get all cupping events with their status (for Admin dashboard)
+app.get('/api/admin/events-with-status', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  try {
+    const events = await prisma.cuppingEvent.findMany({
+      include: { samples: true },
+      orderBy: { date: 'desc' }
+    });
+
+    // Calculate status for each event
+    const eventsWithStatus = await Promise.all(
+      events.map(async (event) => {
+        const status = await getEventStatus(event.id);
+        return {
+          ...event,
+          status
+        };
+      })
+    );
+
+    res.json(eventsWithStatus);
+  } catch (error) {
+    console.error('Error fetching events with status:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 });
 
@@ -2687,16 +2736,9 @@ app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async
 
     const updatedSample = await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: sampleUpdateData });
 
-    // If lock was requested, check whether to reveal event results
+    // Note: Results are NO LONGER automatically revealed when all samples are locked.
+    // Head Judge must manually reveal results using the separate reveal endpoint.
     let revealed = false;
-    if (lock) {
-      const totalSamples = await prisma.sample.count({ where: { cuppingEventId: sample.cuppingEventId } });
-      const lockedSamples = await prisma.sample.count({ where: { cuppingEventId: sample.cuppingEventId, isLocked: true } });
-      if (totalSamples > 0 && lockedSamples >= totalSamples) {
-        await prisma.cuppingEvent.update({ where: { id: sample.cuppingEventId }, data: { isResultsRevealed: true } });
-        revealed = true;
-      }
-    }
 
     res.json({ decision, sample: updatedSample, resultsRevealed: revealed });
   } catch (error) {
@@ -2753,6 +2795,34 @@ app.get('/api/headjudge/events/:eventId/scores', verifySupabaseToken, async (req
     res.json(scores);
   } catch (error) {
     console.error('Error fetching head judge event scores:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin: Manually reveal results for an event (only after adjudication is complete)
+app.post('/api/admin/events/:eventId/reveal-results', verifySupabaseToken, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userEmail = req.user?.email;
+    if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+    const admin = await prisma.admin.findUnique({ where: { email: userEmail } });
+    if (!admin) return res.status(403).json({ message: 'Only Admins may reveal results' });
+
+    // Get the event
+    const event = await prisma.cuppingEvent.findUnique({ where: { id: parseInt(eventId) } });
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    // Reveal results
+    const updatedEvent = await prisma.cuppingEvent.update({
+      where: { id: parseInt(eventId) },
+      data: { isResultsRevealed: true }
+    });
+
+    console.log(`Admin ${userEmail} revealed results for event ${eventId}`);
+    res.json({ message: 'Results revealed successfully', event: updatedEvent });
+  } catch (error) {
+    console.error('Error revealing results:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

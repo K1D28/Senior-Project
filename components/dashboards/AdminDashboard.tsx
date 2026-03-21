@@ -299,6 +299,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     useEffect(() => {
         fetchData();
+        fetchEventStatuses();
     }, []);
 
     useEffect(() => {
@@ -416,6 +417,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     //     [appData.events]);
 
     const [eventFilter, setEventFilter] = useState<string>('all');
+    const [eventStatuses, setEventStatuses] = useState<Record<string, string>>({});
 
     const toggleEventExpansion = (eventId: string) => {
         setExpandedEventIds(prev => {
@@ -901,7 +903,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const handleRevealResults = async (eventId: string) => {
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`${BACKEND_URL}/api/cupping-events/${eventId}/reveal-results`, {}, {
+            await axios.post(`${BACKEND_URL}/api/admin/events/${eventId}/reveal-results`, {}, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -918,6 +920,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             console.error('Error revealing results:', error);
             alert('Failed to reveal results');
         }
+    };
+
+    const fetchEventStatuses = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${BACKEND_URL}/api/admin/events-with-status`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const statuses: Record<string, string> = {};
+            response.data.forEach((event: any) => {
+                statuses[String(event.id)] = event.status;
+            });
+            setEventStatuses(statuses);
+        } catch (error) {
+            console.error('Error fetching event statuses:', error);
+        }
+    };
+
+    const getEventStatus = (eventId: string) => {
+        return eventStatuses[String(eventId)] || 'in-progress';
+    };
+
+    const getStatusBadge = (status: string) => {
+        const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+            'in-progress': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏳ In Progress' },
+            'complete': { bg: 'bg-blue-100', text: 'text-blue-800', label: '✓ Complete' },
+            'revealed': { bg: 'bg-green-100', text: 'text-green-800', label: '✅ Revealed' },
+        };
+        const config = statusConfig[status] || statusConfig['in-progress'];
+        return (
+            <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${config.bg} ${config.text}`}>
+                {config.label}
+            </span>
+        );
     };
 
     const renderActions = (event: CuppingEvent) => (
@@ -1137,39 +1175,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             </td>
                                             <td className="p-4 text-center">
                                                 <div className="space-y-2">
-                                                    {!event.isResultsRevealed ? (
-                                                        <>
-                                                            <div className="flex items-center justify-center gap-2">
-                                                                <select 
-                                                                    value={event.status || 'In Progress'} 
-                                                                    onChange={(e) => {
-                                                                        const newEvents = appData.events.map(ev => 
-                                                                            ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
-                                                                        );
-                                                                        setAppData({ ...appData, events: newEvents });
-                                                                    }}
-                                                                    className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
-                                                                >
-                                                                    <option value="In Progress">In Progress</option>
-                                                                    <option value="Complete">Complete</option>
-                                                                </select>
-                                                            </div>
-                                                            {event.status === 'Complete' && (
-                                                                <div className="flex flex-col items-center gap-1">
-                                                                    <p className="text-xs text-gray-600">Ready to reveal results?</p>
-                                                                    <button 
-                                                                        onClick={() => handleRevealResults(event.id)}
-                                                                        className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600"
-                                                                    >
-                                                                        Reveal Results
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    ) : (
-                                                        <span className="inline-block px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">
-                                                            ✓ Revealed
-                                                        </span>
+                                                    {getStatusBadge(getEventStatus(event.id))}
+                                                    {getEventStatus(event.id) === 'complete' && (
+                                                        <button 
+                                                            onClick={() => handleRevealResults(event.id)}
+                                                            className="block w-full px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                                                        >
+                                                            Reveal Results
+                                                        </button>
                                                     )}
                                                 </div>
                                             </td>
@@ -1217,34 +1230,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             </div>
                                         </div>
                                         <div className="flex-shrink-0 flex flex-col items-end gap-2">
-                                            {!event.isResultsRevealed ? (
-                                                <>
-                                                    <select 
-                                                        value={event.status || 'In Progress'} 
-                                                        onChange={(e) => {
-                                                            const newEvents = appData.events.map(ev => 
-                                                                ev.id === event.id ? { ...ev, status: e.target.value as 'In Progress' | 'Complete' } : ev
-                                                            );
-                                                            setAppData({ ...appData, events: newEvents });
-                                                        }}
-                                                        className="px-2 py-1 text-xs font-semibold border border-gray-300 rounded bg-white"
-                                                    >
-                                                        <option value="In Progress">In Progress</option>
-                                                        <option value="Complete">Complete</option>
-                                                    </select>
-                                                    {event.status === 'Complete' && (
-                                                        <button 
-                                                            onClick={() => handleRevealResults(event.id)}
-                                                            className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 whitespace-nowrap"
-                                                        >
-                                                            Reveal Results
-                                                        </button>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <span className="inline-block px-3 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800 whitespace-nowrap">
-                                                    ✓ Revealed
-                                                </span>
+                                            {getStatusBadge(getEventStatus(event.id))}
+                                            {getEventStatus(event.id) === 'complete' && (
+                                                <button 
+                                                    onClick={() => handleRevealResults(event.id)}
+                                                    className="px-2 py-1 text-xs font-bold bg-green-500 text-white rounded hover:bg-green-600 whitespace-nowrap"
+                                                >
+                                                    Reveal Results
+                                                </button>
                                             )}
                                         </div>
                                     </div>
