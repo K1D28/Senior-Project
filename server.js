@@ -2640,6 +2640,19 @@ app.post('/api/headjudge/reevaluation-requests/:requestId/decision', verifySupab
         where: { id: request.sampleId },
         data: { isLocked: false, lockedByHeadJudgeId: null, lockedAt: null },
       });
+      
+      // Reset the Q Grader's score submission flag so they can re-evaluate and resubmit
+      const qGraderScore = await prisma.qGraderScore.findFirst({
+        where: { sampleId: request.sampleId },
+        include: { qGrader: true }
+      });
+      if (qGraderScore) {
+        await prisma.qGraderScore.update({
+          where: { id: qGraderScore.id },
+          data: { isSubmitted: false }
+        });
+        console.log(`Reset isSubmitted for Q Grader ${qGraderScore.qGrader.email} on sample ${request.sampleId}`);
+      }
     }
 
     res.json({ request: updatedRequest });
