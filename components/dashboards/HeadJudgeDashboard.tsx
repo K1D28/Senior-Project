@@ -493,6 +493,22 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         return pathToTab[location.pathname] || 'adjudicate';
     });
     
+    // Declare all state first (before callbacks that use them)
+    const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
+    const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
+    const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+    const [leaderboardEvents, setLeaderboardEvents] = useState<CuppingEvent[]>([]);
+    const [leaderboardSamples, setLeaderboardSamples] = useState<CoffeeSample[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+    const [fetchedScores, setFetchedScores] = useState<ScoreSheet[]>([]);
+    const [fetchedGraders, setFetchedGraders] = useState<User[]>([]);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [aiAnalysis, setAiAnalysis] = useState<string>('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [reevalRequests, setReevalRequests] = useState<any[]>([]);
+    const [reevalLoading, setReevalLoading] = useState(false);
+    
     // Function for when user clicks a tab button - updates state AND navigates URL
     const handleTabClick = (tab: 'adjudicate' | 'leaderboard') => {
         setActiveTabState(tab);
@@ -548,21 +564,6 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             setActiveTabState(tabFromUrl);
         }
     }, [location.pathname]);
-
-    const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
-    const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
-    const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
-    const [leaderboardEvents, setLeaderboardEvents] = useState<CuppingEvent[]>([]);
-    const [leaderboardSamples, setLeaderboardSamples] = useState<CoffeeSample[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
-    const [fetchedScores, setFetchedScores] = useState<ScoreSheet[]>([]);
-    const [fetchedGraders, setFetchedGraders] = useState<User[]>([]);
-    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-    const [aiAnalysis, setAiAnalysis] = useState<string>('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const [reevalRequests, setReevalRequests] = useState<any[]>([]);
-    const [reevalLoading, setReevalLoading] = useState(false);
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
     useEffect(() => {
