@@ -2544,7 +2544,6 @@ app.post('/api/qgrader/reevaluation-requests', verifySupabaseToken, async (req, 
 
     const sample = await prisma.sample.findUnique({ where: { id: sampId } });
     if (!sample || sample.cuppingEventId !== eventId) return res.status(404).json({ message: 'Sample not found for this event' });
-    if (!sample.isLocked) return res.status(400).json({ message: 'Sample is not locked; re-evaluation is not required' });
 
     const submittedScore = await prisma.qGraderScore.findFirst({ where: { sampleId: sampId, qGraderId: qGrader.id, isSubmitted: true } });
     if (!submittedScore) return res.status(403).json({ message: 'You must submit your score before requesting re-evaluation' });

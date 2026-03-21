@@ -309,7 +309,7 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                             {saveStatus === 'saving' && <><Save size={12} className="animate-spin" /><span className="text-xs">Saving...</span></>}
                             {saveStatus === 'saved' && <><CheckCircle size={12} className="text-green-600"/><span className="text-xs">Saved</span></>}
                         </div>
-                        {scoreSheet.isSubmitted && sample.isLocked && (
+                        {scoreSheet.isSubmitted && (
                             <Button
                                 size="sm"
                                 variant="secondary"
