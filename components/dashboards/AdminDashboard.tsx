@@ -915,6 +915,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     event.id === eventId ? { ...event, isResultsRevealed: true } : event
                 ),
             }));
+            // Update the eventStatuses to reflect the revealed status
+            setEventStatuses((prevStatuses) => ({
+                ...prevStatuses,
+                [eventId]: 'revealed'
+            }));
             alert('Results revealed successfully');
         } catch (error) {
             console.error('Error revealing results:', error);
