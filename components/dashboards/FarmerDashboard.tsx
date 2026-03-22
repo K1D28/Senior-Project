@@ -836,7 +836,6 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                             <p className="font-semibold text-text">Click to upload CSV file</p>
                                             <p className="text-sm text-text-light mt-1">or drag and drop</p>
                                         </div>
-                                        <Button type="button" className="mt-2">Select CSV File</Button>
                                     </label>
                                 </div>
                             </Card>
