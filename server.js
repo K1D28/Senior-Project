@@ -907,11 +907,11 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
     return res.status(400).json({ message: 'Invalid or missing farmName' });
   }
 
-  // Validate sampleType if provided (FARMER_REGISTERED, PROXY_SUBMISSION, or CALIBRATION)
-  const validSampleTypes = ['FARMER_REGISTERED', 'PROXY_SUBMISSION', 'CALIBRATION'];
+  // Validate sampleType if provided (FARMER_REGISTERED, FARMER_DIRECTREGISTERED, PROXY_SUBMISSION, or CALIBRATION)
+  const validSampleTypes = ['FARMER_REGISTERED', 'FARMER_DIRECTREGISTERED', 'PROXY_SUBMISSION', 'CALIBRATION'];
   const finalSampleType = sampleType && validSampleTypes.includes(sampleType) ? sampleType : 'FARMER_REGISTERED';
 
-  // farmerId is required for FARMER_REGISTERED and PROXY_SUBMISSION, but optional for CALIBRATION
+  // farmerId is required for FARMER_REGISTERED, FARMER_DIRECTREGISTERED, and PROXY_SUBMISSION, but optional for CALIBRATION
   const isCalibrationType = finalSampleType === 'CALIBRATION';
   
   if (!isCalibrationType && (!farmerId || typeof farmerId !== 'number')) {
@@ -937,11 +937,11 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
   }
 
   try {
-    // For farmer-registered samples, set blindCode to null and status to PENDING (will be generated when approved)
+    // For farmer-registered samples (both FARMER_REGISTERED and FARMER_DIRECTREGISTERED), set blindCode to null and status to PENDING
     // For calibration and proxy samples (admin-added), auto-generate blindCode and set to APPROVED
-    const isAdminAdded = finalSampleType !== 'FARMER_REGISTERED';
-    const blindCode = isAdminAdded ? crypto.randomUUID() : null;
-    const approvalStatus = isAdminAdded ? 'APPROVED' : 'PENDING';
+    const isFarmerRegistered = finalSampleType === 'FARMER_REGISTERED' || finalSampleType === 'FARMER_DIRECTREGISTERED';
+    const blindCode = !isFarmerRegistered ? crypto.randomUUID() : null;
+    const approvalStatus = !isFarmerRegistered ? 'APPROVED' : 'PENDING';
 
     const sample = await prisma.sample.create({
       data: {
