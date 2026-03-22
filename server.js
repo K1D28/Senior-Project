@@ -995,17 +995,21 @@ app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
       return res.status(404).json({ message: 'Sample not found' });
     }
 
-    // Only approve PENDING farmer-registered samples
-    if (sample.approvalStatus !== 'PENDING' || sample.sampleType !== 'FARMER_REGISTERED') {
+    // Only approve PENDING farmer-registered samples (both FARMER_REGISTERED and FARMER_DIRECTREGISTERED)
+    if (sample.approvalStatus !== 'PENDING' || (sample.sampleType !== 'FARMER_REGISTERED' && sample.sampleType !== 'FARMER_DIRECTREGISTERED')) {
       return res.status(400).json({ message: 'Only pending farmer-registered samples can be approved' });
     }
 
-    // Approve the sample - blind code will be assigned when admin adds it to an event
+    // For FARMER_DIRECTREGISTERED (directly added to event), generate blind code immediately
+    // For FARMER_REGISTERED (manual registration), blind code will be assigned when admin adds it to an event
+    const isDirectRegistered = sample.sampleType === 'FARMER_DIRECTREGISTERED';
+    const blindCode = isDirectRegistered ? crypto.randomUUID() : null;
+    
     const approvedSample = await prisma.sample.update({
       where: { id: parseInt(id) },
       data: {
         approvalStatus: 'APPROVED',
-        // blindCode is NOT assigned here - will be generated when added to event
+        ...(blindCode && { blindCode }), // Only set blindCode for FARMER_DIRECTREGISTERED
         approvedByAdminId: admin.id,
         approvalDate: new Date(),
       },
@@ -1034,8 +1038,8 @@ app.post('/api/samples/:id/decline', verifySupabaseToken, async (req, res) => {
       return res.status(404).json({ message: 'Sample not found' });
     }
 
-    // Only decline PENDING farmer-registered samples
-    if (sample.approvalStatus !== 'PENDING' || sample.sampleType !== 'FARMER_REGISTERED') {
+    // Only decline PENDING farmer-registered samples (both FARMER_REGISTERED and FARMER_DIRECTREGISTERED)
+    if (sample.approvalStatus !== 'PENDING' || (sample.sampleType !== 'FARMER_REGISTERED' && sample.sampleType !== 'FARMER_DIRECTREGISTERED')) {
       return res.status(400).json({ message: 'Only pending farmer-registered samples can be declined' });
     }
 

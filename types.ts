@@ -61,7 +61,7 @@ export interface CoffeeSample {
   processingMethod: string;
   variety: string;
   moisture?: number;
-  sampleType?: 'FARMER_REGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION'; // Type of sample
+  sampleType?: 'FARMER_REGISTERED' | 'FARMER_DIRECTREGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION'; // Type of sample
   approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Approval status for farmer samples
   approvedByAdminId?: string | null;
   approvalDate?: string | null;

@@ -792,10 +792,10 @@ function App() {
         id: `sample-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         farmerId: currentUser.id,
         blindCode: 'PENDING', // Backend will assign this
-        sampleType: 'FARMER_REGISTERED', // Mark as farmer-registered sample
+        sampleType: 'FARMER_DIRECTREGISTERED', // Mark as farmer-directly-registered sample (submitted to event)
     };
 
-    // Submit the sample directly (no need to register as participant first)
+    // Submit the sample directly to the event (no need to register as participant first)
     fetch(`${BACKEND_URL}/api/samples`, {
       method: 'POST',
       headers: {
@@ -812,7 +812,7 @@ function App() {
         altitude: sampleData.altitude,
         moisture: sampleData.moisture,
         cuppingEventId: parseInt(eventId),
-        sampleType: 'FARMER_REGISTERED',
+        sampleType: 'FARMER_DIRECTREGISTERED',
       }),
     })
     .then(response => {

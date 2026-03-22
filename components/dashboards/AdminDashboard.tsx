@@ -634,13 +634,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             if (response.ok) {
                 const approvedSample = await response.json();
                 console.log('Sample approved:', approvedSample);
-                alert('Sample approved! Blind code will be assigned when you add it to an event.');
+                
+                // Different messages based on sample type
+                const message = approvedSample.sampleType === 'FARMER_DIRECTREGISTERED'
+                    ? `Sample approved! Blind code assigned: ${approvedSample.blindCode}`
+                    : 'Sample approved! Blind code will be assigned when you add it to an event.';
+                alert(message);
+                
                 // Update local appData
                 setAppData(prevData => ({
                     ...prevData,
                     samples: prevData.samples.map(s => 
                         s.id === String(sampleId) 
-                            ? { ...s, approvalStatus: 'APPROVED' }
+                            ? { 
+                                ...s, 
+                                approvalStatus: 'APPROVED',
+                                // Update blindCode only if it was assigned (FARMER_DIRECTREGISTERED)
+                                ...(approvedSample.blindCode && { blindCode: approvedSample.blindCode })
+                              }
                             : s
                     )
                 }));
@@ -1382,20 +1393,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${
                                                 sample.sampleType === 'CALIBRATION' ? 'bg-purple-100 text-purple-800' :
                                                 sample.sampleType === 'FARMER_REGISTERED' ? 'bg-blue-100 text-blue-800' :
+                                                sample.sampleType === 'FARMER_DIRECTREGISTERED' ? 'bg-green-100 text-green-800' :
                                                 'bg-orange-100 text-orange-800'
                                             }`}>
-                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : '👤 Admin'}
+                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer (Manual)' : sample.sampleType === 'FARMER_DIRECTREGISTERED' ? '🚜 Farmer (Direct)' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : '👤 Admin'}
                                             </span>
                                         </td>
                                         <td className="p-2">
                                             <span 
                                                 onClick={() => {
-                                                    if (isPending && sample.sampleType === 'FARMER_REGISTERED') {
+                                                    if (isPending && (sample.sampleType === 'FARMER_REGISTERED' || sample.sampleType === 'FARMER_DIRECTREGISTERED')) {
                                                         handleOpenApprovalModal(sample);
                                                     }
                                                 }}
                                                 className={`px-2 py-1 rounded text-xs font-semibold transition-all ${
-                                                    isPending && sample.sampleType === 'FARMER_REGISTERED' ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer' :
+                                                    isPending && (sample.sampleType === 'FARMER_REGISTERED' || sample.sampleType === 'FARMER_DIRECTREGISTERED') ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer' :
                                                     sample.approvalStatus === 'APPROVED' ? 'bg-green-100 text-green-800' :
                                                     isRejected ? 'bg-red-100 text-red-800' :
                                                     'bg-gray-100 text-gray-800'
@@ -1759,7 +1771,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     </div>
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                         <p className="text-xs font-semibold text-amber-900">Note:</p>
-                        <p className="text-xs text-amber-800 mt-1">Once approved, add this sample to an event to assign a blind code.</p>
+                        {sampleForApproval.sampleType === 'FARMER_DIRECTREGISTERED' ? (
+                            <p className="text-xs text-amber-800 mt-1">Blind code will be assigned immediately upon approval (already added to event).</p>
+                        ) : (
+                            <p className="text-xs text-amber-800 mt-1">Once approved, add this sample to an event to assign a blind code.</p>
+                        )}
                     </div>
                     <div className="flex gap-3 justify-end pt-4 border-t border-border">
                         <Button 
