@@ -769,8 +769,93 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                     {activeTab === 'RegisterSample' && (
                         <div className="space-y-6">
                             <h3 className="text-2xl font-bold text-primary">Register a Coffee Sample</h3>
-                            <Card>
-                                <p className="text-sm text-text-light mb-6">Register your coffee samples anytime. They can be assigned to events later when they become available.</p>
+                            
+                            {/* CSV Upload Section */}
+                            <Card title="Upload Samples from CSV">
+                                <p className="text-sm text-text-light mb-4">Upload a CSV file with multiple samples. Required columns: Farm Name, Variety, Region, Processing Method. Optional: Altitude, Moisture</p>
+                                <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
+                                    <input 
+                                        type="file" 
+                                        accept=".csv" 
+                                        id="csvUpload"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const reader = new FileReader();
+                                                reader.onload = (event) => {
+                                                    const csv = event.target?.result as string;
+                                                    // Parse CSV and register samples
+                                                    const lines = csv.split('\n').filter(line => line.trim());
+                                                    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                                                    
+                                                    const farmNameIdx = headers.findIndex(h => h === 'farm name');
+                                                    const varietyIdx = headers.findIndex(h => h === 'variety');
+                                                    const regionIdx = headers.findIndex(h => h === 'region');
+                                                    const methodIdx = headers.findIndex(h => h === 'processing method');
+                                                    const altitudeIdx = headers.findIndex(h => h === 'altitude');
+                                                    const moistureIdx = headers.findIndex(h => h === 'moisture');
+                                                    
+                                                    if (farmNameIdx === -1 || varietyIdx === -1 || regionIdx === -1 || methodIdx === -1) {
+                                                        alert('CSV must contain: Farm Name, Variety, Region, Processing Method');
+                                                        return;
+                                                    }
+                                                    
+                                                    let successCount = 0;
+                                                    for (let i = 1; i < lines.length; i++) {
+                                                        const values = lines[i].split(',').map(v => v.trim());
+                                                        if (values[farmNameIdx] && values[varietyIdx] && values[regionIdx] && values[methodIdx]) {
+                                                            const data: NewSampleRegistrationData = {
+                                                                farmName: values[farmNameIdx],
+                                                                variety: values[varietyIdx],
+                                                                region: values[regionIdx],
+                                                                processingMethod: values[methodIdx],
+                                                                altitude: altitudeIdx !== -1 ? Number(values[altitudeIdx]) || 0 : 0,
+                                                                moisture: moistureIdx !== -1 ? Number(values[moistureIdx]) || undefined : undefined,
+                                                            };
+                                                            if (farmerDatabaseId) {
+                                                                onRegisterSampleWithoutEvent?.(data, farmerDatabaseId);
+                                                                successCount++;
+                                                            }
+                                                        }
+                                                    }
+                                                    alert(`Successfully registered ${successCount} samples from CSV`);
+                                                    setTimeout(() => {
+                                                        setRefreshKey(prev => prev + 1);
+                                                    }, 500);
+                                                    // Reset file input
+                                                    e.target.value = '';
+                                                };
+                                                reader.readAsText(file);
+                                            }
+                                        }}
+                                    />
+                                    <label htmlFor="csvUpload" className="cursor-pointer flex flex-col items-center gap-3">
+                                        <DownloadCloud size={32} className="text-primary" />
+                                        <div>
+                                            <p className="font-semibold text-text">Click to upload CSV file</p>
+                                            <p className="text-sm text-text-light mt-1">or drag and drop</p>
+                                        </div>
+                                        <Button type="button" className="mt-2">Select CSV File</Button>
+                                    </label>
+                                </div>
+                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold text-blue-900 mb-1">Need a template?</p>
+                                        <p className="text-xs text-blue-800">Download the sample CSV file to see the correct format for 2 or more samples.</p>
+                                    </div>
+                                    <a href="/sample_registration.csv" download className="ml-4 flex-shrink-0">
+                                        <Button variant="secondary" className="flex items-center gap-2">
+                                            <Download size={16} />
+                                            Download Template
+                                        </Button>
+                                    </a>
+                                </div>
+                            </Card>
+
+                            {/* Manual Registration Form */}
+                            <Card title="Manual Sample Registration">
+                                <p className="text-sm text-text-light mb-6">Or register samples one by one manually.</p>
                                 <form onSubmit={(e) => {
                                     e.preventDefault();
                                     if (!sampleData.farmName || !sampleData.region || !sampleData.variety || !sampleData.processingMethod) {
