@@ -2626,15 +2626,6 @@ app.post('/api/headjudge/reevaluation-requests/:requestId/decision', verifySupab
 
     const normalizedStatus = String(status).toUpperCase();
 
-    const updatedRequest = await prisma.reEvaluationRequest.update({
-      where: { id: request.id },
-      data: {
-        status: normalizedStatus,
-        notes: notes || null,
-        completedAt: new Date(),
-      },
-    });
-
     if (normalizedStatus === 'APPROVED') {
       await prisma.sample.update({
         where: { id: request.sampleId },
@@ -2655,7 +2646,12 @@ app.post('/api/headjudge/reevaluation-requests/:requestId/decision', verifySupab
       }
     }
 
-    res.json({ request: updatedRequest });
+    // Delete the request after decision is made (whether approved or rejected)
+    await prisma.reEvaluationRequest.delete({
+      where: { id: request.id }
+    });
+
+    res.json({ message: `Request ${normalizedStatus}`, requestId: request.id });
   } catch (error) {
     console.error('Error deciding re-evaluation request:', error);
     res.status(500).json({ message: 'Internal server error' });
