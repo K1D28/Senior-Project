@@ -873,7 +873,6 @@ function App() {
     .then(response => {
       if (response.ok) {
         console.log('Sample registered successfully without event');
-        alert('Sample registered successfully! It can be assigned to events later.');
       } else {
         alert('Failed to register sample');
       }

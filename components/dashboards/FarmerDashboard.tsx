@@ -839,18 +839,6 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                         <Button type="button" className="mt-2">Select CSV File</Button>
                                     </label>
                                 </div>
-                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                                    <div>
-                                        <p className="text-xs font-semibold text-blue-900 mb-1">Need a template?</p>
-                                        <p className="text-xs text-blue-800">Download the sample CSV file to see the correct format for 2 or more samples.</p>
-                                    </div>
-                                    <a href="/sample_registration.csv" download className="ml-4 flex-shrink-0">
-                                        <Button variant="secondary" className="flex items-center gap-2">
-                                            <Download size={16} />
-                                            Download Template
-                                        </Button>
-                                    </a>
-                                </div>
                             </Card>
 
                             {/* Manual Registration Form */}
