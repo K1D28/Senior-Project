@@ -794,6 +794,8 @@ function App() {
         blindCode: 'PENDING', // Backend will assign this
         sampleType: 'FARMER_DIRECTREGISTERED', // Mark as farmer-directly-registered sample (submitted to event)
     };
+    
+    console.log('registerForEvent: Submitting sample as FARMER_DIRECTREGISTERED to event', eventId);
 
     // Submit the sample directly to the event (no need to register as participant first)
     fetch(`${BACKEND_URL}/api/samples`, {
