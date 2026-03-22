@@ -690,7 +690,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                 {/* Navigation Menu */}
                 <nav className="flex flex-col p-4 gap-2 flex-1">
                     <TabButton tab="dashboard" label="My Dashboard" icon={Coffee} activeTab={activeTab} setActiveTab={handleTabClick} />
-                    <TabButton tab="events" label="Upcoming Events" icon={Calendar} activeTab={activeTab} setActiveTab={handleTabClick} />
+                    <TabButton tab="events" label="Participate in Event" icon={Calendar} activeTab={activeTab} setActiveTab={handleTabClick} />
                     <TabButton tab="RegisterSample" label="Register Sample" icon={PlusCircle} activeTab={activeTab} setActiveTab={handleTabClick} />
                     <div className="mt-auto">
                         <TabButton tab="leaderboard" label="Leaderboard" icon={Trophy} activeTab={activeTab} setActiveTab={handleTabClick} />
@@ -727,7 +727,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                     {activeTab === 'dashboard' && <DashboardView />}
                     {activeTab === 'events' && (
                         <div className="space-y-6">
-                            <h3 className="text-2xl font-bold text-primary">Register for an Event</h3>
+                            <h3 className="text-2xl font-bold text-primary">Participate in Event</h3>
                             {upcomingEvents.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {upcomingEvents.map(event => {
@@ -748,7 +748,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                                     <div className="pt-3">
                                                         <Button onClick={() => handleOpenRegisterModal(event)} className="w-full flex justify-center items-center space-x-2 bg-primary text-white hover:bg-primary/90">
                                                             <PlusCircle size={16} />
-                                                            <span>Register New Sample</span>
+                                                            <span>Participate in Event</span>
                                                         </Button>
                                                     </div>
                                                 </div>
