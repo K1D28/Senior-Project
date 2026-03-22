@@ -853,7 +853,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
 
                             {/* Manual Registration Form */}
                             <Card title="Manual Sample Registration (Required Approval by Admin)">
-                                <p className="text-sm text-text-light mb-6">Or register samples one by one manually.</p>
+                                <p className="text-sm text-text-light mb-6"><strong>These Samples will be not assigned to the event. Require Admin to be assigned to event</strong></p>
                                 <form onSubmit={(e) => {
                                     e.preventDefault();
                                     if (!sampleData.farmName || !sampleData.region || !sampleData.variety || !sampleData.processingMethod) {
