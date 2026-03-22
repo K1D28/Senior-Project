@@ -634,13 +634,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             if (response.ok) {
                 const approvedSample = await response.json();
                 console.log('Sample approved:', approvedSample);
-                alert('Sample approved! Blind code assigned: ' + approvedSample.blindCode);
+                alert('Sample approved! Blind code will be assigned when you add it to an event.');
                 // Update local appData
                 setAppData(prevData => ({
                     ...prevData,
                     samples: prevData.samples.map(s => 
                         s.id === String(sampleId) 
-                            ? { ...s, approvalStatus: 'APPROVED', blindCode: approvedSample.blindCode }
+                            ? { ...s, approvalStatus: 'APPROVED' }
                             : s
                     )
                 }));
@@ -1756,6 +1756,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                         <p className="text-sm text-gray-600 mb-2"><strong>Region:</strong> {sampleForApproval.region}</p>
                         <p className="text-sm text-gray-600 mb-2"><strong>Processing Method:</strong> {sampleForApproval.processingMethod}</p>
                         <p className="text-sm text-gray-600"><strong>Altitude:</strong> {sampleForApproval.altitude}m</p>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-amber-900">Note:</p>
+                        <p className="text-xs text-amber-800 mt-1">Once approved, add this sample to an event to assign a blind code.</p>
                     </div>
                     <div className="flex gap-3 justify-end pt-4 border-t border-border">
                         <Button 
