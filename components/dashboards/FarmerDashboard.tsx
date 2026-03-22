@@ -222,8 +222,15 @@ const RegistrationModal: React.FC<{
     };
     
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Register for: ${event.name}`}>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal isOpen={isOpen} onClose={onClose} title={`Participate in: ${event.name}`}>
+            <div className="space-y-4">
+                {/* Approval Notice */}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-900">Note:</p>
+                    <p className="text-xs text-blue-800 mt-1">All sample submissions will require approval from the admin before participation.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
                  <p className="text-sm text-text-light">Enter the details for the coffee sample you wish to submit. Some fields have been pre-filled from your last submission.</p>
                  <div>
                     <Label htmlFor="farmName">Farm Name</Label>
@@ -261,7 +268,8 @@ const RegistrationModal: React.FC<{
                     <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
                     <Button type="submit">Submit Registration</Button>
                 </div>
-            </form>
+                </form>
+            </div>
         </Modal>
     );
 };
@@ -737,6 +745,9 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                                 <div className="space-y-3">
                                                     <p className="text-sm text-text-light">{event.description}</p>
                                                     <p className="text-sm font-medium"><strong className="text-text-dark">Date:</strong> {event.date ? new Date(event.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'TBD'}</p>
+                                                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                                        <p className="text-xs text-amber-900"><strong>Note:</strong> All submissions require admin approval</p>
+                                                    </div>
                                                     {farmerSamplesInEvent.length > 0 && (
                                                         <div className="pt-3 mt-3 border-t border-border">
                                                             <h4 className="font-semibold text-sm">Your Submissions:</h4>
@@ -841,7 +852,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                             </Card>
 
                             {/* Manual Registration Form */}
-                            <Card title="Manual Sample Registration">
+                            <Card title="Manual Sample Registration (Required Approval by Admin)">
                                 <p className="text-sm text-text-light mb-6">Or register samples one by one manually.</p>
                                 <form onSubmit={(e) => {
                                     e.preventDefault();
