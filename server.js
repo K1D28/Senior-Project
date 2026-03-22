@@ -1000,10 +1000,10 @@ app.post('/api/samples/:id/approve', verifySupabaseToken, async (req, res) => {
       return res.status(400).json({ message: 'Only pending farmer-registered samples can be approved' });
     }
 
-    // For FARMER_DIRECTREGISTERED (directly added to event), generate blind code immediately
+    // For FARMER_DIRECTREGISTERED (directly added to event), generate blind code immediately using event name
     // For FARMER_REGISTERED (manual registration), blind code will be assigned when admin adds it to an event
     const isDirectRegistered = sample.sampleType === 'FARMER_DIRECTREGISTERED';
-    const blindCode = isDirectRegistered ? crypto.randomUUID() : null;
+    const blindCode = isDirectRegistered && sample.cuppingEvent ? generateBlindCode(sample.cuppingEvent.name) : null;
     
     const approvedSample = await prisma.sample.update({
       where: { id: parseInt(id) },
