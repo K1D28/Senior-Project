@@ -772,8 +772,8 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                             
                             {/* CSV Upload Section */}
                             <Card title="Upload Samples from CSV">
-                                <p className="text-sm text-text-light mb-4">Upload a CSV file with multiple samples. Required columns: Farm Name, Variety, Region, Processing Method. Optional: Altitude, Moisture</p>
-                                <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
+                                <p className="text-xs text-text-light mb-3">Upload a CSV file with multiple samples. Required: Farm Name, Variety, Region, Processing Method</p>
+                                <div className="border-2 border-dashed border-primary rounded-lg p-4 text-center bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
                                     <input 
                                         type="file" 
                                         accept=".csv" 
@@ -830,11 +830,11 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                             }
                                         }}
                                     />
-                                    <label htmlFor="csvUpload" className="cursor-pointer flex flex-col items-center gap-3">
-                                        <DownloadCloud size={32} className="text-primary" />
+                                    <label htmlFor="csvUpload" className="cursor-pointer flex flex-col items-center gap-2">
+                                        <DownloadCloud size={24} className="text-primary" />
                                         <div>
-                                            <p className="font-semibold text-text">Click to upload CSV file</p>
-                                            <p className="text-sm text-text-light mt-1">or drag and drop</p>
+                                            <p className="text-sm font-semibold text-text">Click to upload CSV</p>
+                                            <p className="text-xs text-text-light">or drag and drop</p>
                                         </div>
                                     </label>
                                 </div>
