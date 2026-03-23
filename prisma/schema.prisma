@@ -109,7 +109,7 @@ model Sample {
   variety               String
   processingMethod      String
   altitude              Float // Added altitude field
-  moisture              Float // Added moisture field
+  moisture              Float? // Optional moisture field
   sampleType            String        @default("FARMER_REGISTERED") // FARMER_REGISTERED, FARMER_DIRECTREGISTERED, PROXY_SUBMISSION, or CALIBRATION
   approvalStatus        String        @default("PENDING") // PENDING, APPROVED, REJECTED - for farmer-registered samples
   approvedByAdminId     Int?
