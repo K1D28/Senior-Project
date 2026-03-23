@@ -904,6 +904,7 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
 
   // Validation
   if (!farmName || typeof farmName !== 'string') {
+    console.error('Validation failed: farmName', { farmName, type: typeof farmName });
     return res.status(400).json({ message: 'Invalid or missing farmName' });
   }
 
@@ -932,8 +933,9 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
   if (typeof altitude !== 'number' || altitude <= 0) {
     return res.status(400).json({ message: 'Invalid or missing altitude' });
   }
-  if (typeof moisture !== 'number' || moisture <= 0) {
-    return res.status(400).json({ message: 'Invalid or missing moisture' });
+  // Moisture is optional - can be undefined or 0, but if provided must be a valid number
+  if (moisture !== undefined && moisture !== null && (typeof moisture !== 'number' || moisture < 0)) {
+    return res.status(400).json({ message: 'Moisture must be a valid number >= 0' });
   }
 
   try {
