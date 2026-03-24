@@ -214,8 +214,9 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                     alert('Each sample must have a valid altitude greater than 0.');
                     return;
                 }
-                if (typeof sample.moisture !== 'number' || sample.moisture <= 0) {
-                    alert('Each sample must have a valid moisture level greater than 0.');
+                // Moisture is optional - allow undefined, null, or any non-negative number
+                if (sample.moisture !== undefined && sample.moisture !== null && (typeof sample.moisture !== 'number' || sample.moisture < 0)) {
+                    alert('Moisture must be a valid number greater than or equal to 0.');
                     return;
                 }
             }
