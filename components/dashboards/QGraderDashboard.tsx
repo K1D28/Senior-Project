@@ -239,9 +239,14 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
                                 <div className="flex items-center gap-2">
                                     <input type="range" min="0" max="10" step="0.01" value={scores[key]} onChange={(e) => handleScoreChange(key, parseFloat(e.target.value))} className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" disabled={scoreSheet.isSubmitted} />
                                     <input type="number" min="0" max="10" step="0.01" value={scores[key]} onChange={(e) => {
-                                      const val = parseFloat(e.target.value);
-                                      if (!isNaN(val) && val >= 0 && val <= 10) handleScoreChange(key, val);
-                                    }} className="w-12 px-2 py-1 text-xs border border-border rounded text-right font-semibold text-primary focus:ring-primary focus:border-primary" disabled={scoreSheet.isSubmitted} />
+                                      const val = e.target.value;
+                                      if (val === '') {
+                                        handleScoreChange(key, 0);
+                                      } else {
+                                        const numVal = parseFloat(val);
+                                        if (!isNaN(numVal) && numVal >= 0 && numVal <= 10) handleScoreChange(key, numVal);
+                                      }
+                                    }} className="w-16 px-2 py-1 text-xs border border-border rounded text-right font-semibold text-primary focus:ring-primary focus:border-primary" disabled={scoreSheet.isSubmitted} />
                                 </div>
                             </div>
                         ))}

@@ -392,9 +392,14 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                                     <div className="flex items-center gap-2">
                                         <input type="range" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
                                         <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => {
-                                          const val = parseFloat(e.target.value);
-                                          if (!isNaN(val) && val >= 0 && val <= 10) setAdjustedScores({...adjustedScores, [score]: val});
-                                        }} className="w-14 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
+                                          const val = e.target.value;
+                                          if (val === '') {
+                                            setAdjustedScores({...adjustedScores, [score]: 0});
+                                          } else {
+                                            const numVal = parseFloat(val);
+                                            if (!isNaN(numVal) && numVal >= 0 && numVal <= 10) setAdjustedScores({...adjustedScores, [score]: numVal});
+                                          }
+                                        }} className="w-16 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
                                     </div>
                                 </div>
                             ))}
@@ -404,9 +409,14 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                                     <div className="flex items-center gap-2">
                                         <input type="range" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => setAdjustedScores({...adjustedScores, [score]: parseFloat(e.target.value)})} className="flex-1" />
                                         <input type="number" min="0" max="10" step="0.01" value={adjustedScores[score as keyof typeof adjustedScores]} onChange={(e) => {
-                                          const val = parseFloat(e.target.value);
-                                          if (!isNaN(val) && val >= 0 && val <= 10) setAdjustedScores({...adjustedScores, [score]: val});
-                                        }} className="w-14 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
+                                          const val = e.target.value;
+                                          if (val === '') {
+                                            setAdjustedScores({...adjustedScores, [score]: 0});
+                                          } else {
+                                            const numVal = parseFloat(val);
+                                            if (!isNaN(numVal) && numVal >= 0 && numVal <= 10) setAdjustedScores({...adjustedScores, [score]: numVal});
+                                          }
+                                        }} className="w-16 px-2 py-1 text-xs border border-border rounded text-right font-bold text-primary focus:ring-primary focus:border-primary" />
                                     </div>
                                 </div>
                             ))}
