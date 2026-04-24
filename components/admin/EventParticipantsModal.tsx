@@ -71,8 +71,18 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
 
     useEffect(() => {
         if (isOpen && event) {
-            setAssignedQGraderIds(event.assignedQGraderIds || []);
-            setAssignedHeadJudgeIds(event.assignedHeadJudgeIds || []);
+            const directQ = Array.isArray(event.assignedQGraderIds)
+                ? event.assignedQGraderIds.map((id: any) => String(id))
+                : [];
+            const directH = Array.isArray(event.assignedHeadJudgeIds)
+                ? event.assignedHeadJudgeIds.map((id: any) => String(id))
+                : [];
+
+            // Fallback to participant relations if assigned* arrays are missing/empty
+            const fromParticipants = extractAssignedIdsFromParticipants((event as any).participants || []);
+
+            setAssignedQGraderIds(directQ.length > 0 ? directQ : fromParticipants.qIds);
+            setAssignedHeadJudgeIds(directH.length > 0 ? directH : fromParticipants.hIds);
         }
     }, [isOpen, event]);
 
