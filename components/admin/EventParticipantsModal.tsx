@@ -105,6 +105,22 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
         };
     };
 
+    const normalizeAssignedIdsFromResponse = (payload: any) => {
+        const participantIds = extractAssignedIdsFromParticipants(payload?.participants || []);
+
+        const qFromAssignedArray = Array.isArray(payload?.assignedQGraderIds)
+            ? payload.assignedQGraderIds.map((id: any) => String(id))
+            : [];
+        const hFromAssignedArray = Array.isArray(payload?.assignedHeadJudgeIds)
+            ? payload.assignedHeadJudgeIds.map((id: any) => String(id))
+            : [];
+
+        return {
+            qIds: qFromAssignedArray.length > 0 ? qFromAssignedArray : participantIds.qIds,
+            hIds: hFromAssignedArray.length > 0 ? hFromAssignedArray : participantIds.hIds,
+        };
+    };
+
     if (!event) return null;
 
     const assignedHeadJudges = assignedHeadJudgeIds
@@ -139,47 +155,12 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
         }
     };
     
-    const handleRemoveParticipant = async (role: 'qGrader' | 'headJudge', userId: string) => {
-        // Optimistic UI update: remove locally first
+    const handleRemoveParticipant = (role: 'qGrader' | 'headJudge', userId: string) => {
+        // Only update local draft state; persist when user clicks Save Changes.
         if (role === 'headJudge') {
             setAssignedHeadJudgeIds(prev => prev.filter(id => id !== userId));
         } else {
             setAssignedQGraderIds(prev => prev.filter(id => id !== userId));
-        }
-
-        // Then persist change to server immediately
-        try {
-            const updatedQ = (role === 'qGrader' ? assignedQGraderIds.filter(id => id !== userId) : assignedQGraderIds)
-                .map(id => parseInt(id, 10));
-            const updatedH = (role === 'headJudge' ? assignedHeadJudgeIds.filter(id => id !== userId) : assignedHeadJudgeIds)
-                .map(id => parseInt(id, 10));
-
-            const response = await axios.put(`${BACKEND_URL}/api/cupping-events/${event?.id}/participants`, {
-                assignedQGraderIds: updatedQ,
-                assignedHeadJudgeIds: updatedH,
-            }, { withCredentials: true });
-
-            // Update local state from response to keep in sync (server returns participants array)
-            const { qIds, hIds } = extractAssignedIdsFromParticipants(response.data?.participants || []);
-            setAssignedQGraderIds(qIds);
-            setAssignedHeadJudgeIds(hIds);
-
-            onUpdate({
-                eventId: event!.id,
-                assignedQGraderIds: qIds,
-                assignedHeadJudgeIds: hIds,
-            });
-        } catch (err) {
-            console.error('Failed to unassign participant:', err);
-            // Revert optimistic change on failure by refetching current participants from server
-            try {
-                const resp = await axios.get(`/api/cupping-events/${event?.id}`);
-                const evt = resp.data;
-                setAssignedQGraderIds(evt.assignedQGraderIds || []);
-                setAssignedHeadJudgeIds(evt.assignedHeadJudgeIds || []);
-            } catch (fetchErr) {
-                console.error('Failed to refresh participants after failed unassign:', fetchErr);
-            }
         }
     };
     
@@ -203,7 +184,7 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             console.log('Updated participants:', response.data); // Debugging log
 
             // Update the frontend state with the latest data from the backend
-            const { qIds, hIds } = extractAssignedIdsFromParticipants(response.data?.participants || []);
+            const { qIds, hIds } = normalizeAssignedIdsFromResponse(response.data);
             setAssignedQGraderIds(qIds);
             setAssignedHeadJudgeIds(hIds);
 
