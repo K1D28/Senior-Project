@@ -210,6 +210,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     const [activeTab, setActiveTabState] = useState<Tab>(() => {
         return pathToTab[location.pathname] || 'events';
     });
+    const [isEventsLoading, setIsEventsLoading] = useState(true);
     
     // Function for when user clicks a tab button - updates state AND navigates URL
     const handleTabClick = (tab: Tab) => {
@@ -228,6 +229,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     
     const fetchData = async () => {
         try {
+            setIsEventsLoading(true);
             const token = localStorage.getItem('token'); // Retrieve token from localStorage
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -294,6 +296,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         } catch (error) {
             console.error('Error fetching data:', error);
             alert('An error occurred while fetching data. Please try again later.');
+        } finally {
+            setIsEventsLoading(false);
         }
     };
 
@@ -1162,7 +1166,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredEvents.map((event, idx) => {
+                            {isEventsLoading ? (
+                                <tr>
+                                    <td colSpan={8} className="p-8 text-center text-text-light">Loading events...</td>
+                                </tr>
+                            ) : filteredEvents.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="p-8 text-center text-text-light">No events match the current filter.</td>
+                                </tr>
+                            ) : filteredEvents.map((event, idx) => {
                                 const isExpanded = expandedEventIds.has(event.id);
                                 return (
                                     <>
@@ -1324,14 +1336,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                             </div>
                         );
                     })}
-                    {filteredEvents.length === 0 && (
+                    {isEventsLoading ? (
+                        <div className="text-center py-12">
+                            <p className="text-lg text-gray-400 font-semibold">Loading events...</p>
+                        </div>
+                    ) : filteredEvents.length === 0 && (
                         <div className="text-center py-12">
                             <p className="text-lg text-gray-400 font-semibold">No events match the current filter</p>
                         </div>
                     )}
                 </div>
 
-                {filteredEvents.length === 0 && <p className="hidden md:block text-center p-8 text-text-light">No events match the current filter.</p>}
+                {!isEventsLoading && filteredEvents.length === 0 && <p className="hidden md:block text-center p-8 text-text-light">No events match the current filter.</p>}
             </Card>
         )}
 

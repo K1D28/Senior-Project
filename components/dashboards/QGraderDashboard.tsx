@@ -617,6 +617,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
     const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+    const [isEventsLoading, setIsEventsLoading] = useState(true);
     const [bulkImportEventId, setBulkImportEventId] = useState('');
     const [bulkImportFileName, setBulkImportFileName] = useState('');
     const [bulkImportRows, setBulkImportRows] = useState<BulkImportPreviewRow[]>([]);
@@ -690,6 +691,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     useEffect(() => {
         const fetchAssignedEvents = async () => {
             try {
+                setIsEventsLoading(true);
                 const response = await fetch(`${BACKEND_URL}/api/cupping-events/qgrader`, {
                     method: 'GET',
                     credentials: 'include',
@@ -710,6 +712,8 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                 }
             } catch (error) {
                 console.error('Error fetching Q Grader events:', error);
+            } finally {
+                setIsEventsLoading(false);
             }
         };
         fetchAssignedEvents();
@@ -1005,7 +1009,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-2xl font-extrabold text-primary">Cupping Events</h3>
                                     <div className="text-sm text-gray-600 bg-blue-50 px-3 py-1 rounded-full font-semibold">
-                                        {assignedEvents.length} event{assignedEvents.length !== 1 ? 's' : ''}
+                                        {isEventsLoading ? 'Loading events...' : `${assignedEvents.length} event${assignedEvents.length !== 1 ? 's' : ''}`}
                                     </div>
                                 </div>
 
@@ -1022,7 +1026,13 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {assignedEvents.length > 0 ? (
+                                            {isEventsLoading ? (
+                                                <tr>
+                                                    <td colSpan={5} className="p-8 text-center text-gray-600">
+                                                        Loading events...
+                                                    </td>
+                                                </tr>
+                                            ) : assignedEvents.length > 0 ? (
                                                 assignedEvents.map((event, idx) => (
                                                     <tr key={event.id} className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                                                         <td className="p-4 font-semibold text-primary">{event.name}</td>
@@ -1096,6 +1106,10 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                 </div>
                                             </div>
                                         ))
+                                    ) : isEventsLoading ? (
+                                        <div className="text-center p-8">
+                                            <p className="text-gray-600">Loading events...</p>
+                                        </div>
                                     ) : (
                                         <div className="text-center p-8">
                                             <p className="text-gray-600">You have no cupping events assigned at this time.</p>

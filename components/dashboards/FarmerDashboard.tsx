@@ -736,7 +736,14 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                     {activeTab === 'events' && (
                         <div className="space-y-6">
                             <h3 className="text-2xl font-bold text-primary">Participate in Event</h3>
-                            {upcomingEvents.length > 0 ? (
+                            {loadingEvents ? (
+                                <Card>
+                                    <div className="text-center p-8">
+                                        <Calendar size={40} className="mx-auto text-text-light mb-4"/>
+                                        <p className="text-text-light">Loading events...</p>
+                                    </div>
+                                </Card>
+                            ) : upcomingEvents.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     {upcomingEvents.map(event => {
                                         const farmerSamplesInEvent = farmerSamples.filter(s => event.sampleIds.includes(s.id));
