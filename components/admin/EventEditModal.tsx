@@ -156,6 +156,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                         id="processingMethods"
                         name="processingMethods"
                         multiple
+                        size={5}
                         value={formData.processingMethods}
                         onChange={(e) =>
                             handleArrayChange(
@@ -177,6 +178,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                         id="tags"
                         name="tags"
                         multiple
+                        size={4}
                         value={formData.tags}
                         onChange={(e) =>
                             handleArrayChange(
