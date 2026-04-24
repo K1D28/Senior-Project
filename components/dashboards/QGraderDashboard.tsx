@@ -6,7 +6,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Modal } from '../ui/Modal';
-import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock, Trophy, LogOut, Sparkles, BarChart2 } from 'lucide-react';
+import { CheckCircle, FileClock, Minus, Plus, Save, Coffee, ChevronLeft, X, Lock, Trophy, LogOut, Sparkles, BarChart2, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 
 // FIX: Add type definitions for SpeechRecognition API to the global window object to resolve TypeScript errors.
@@ -131,6 +131,200 @@ const FLAVOR_CATEGORIES: Record<string, string[]> = {
     'Nutty/Cocoa': ['Almond', 'Hazelnut', 'Peanut', 'Chocolate', 'Dark Chocolate'],
     'Spices': ['Cinnamon', 'Clove', 'Nutmeg', 'Anise', 'Pepper'],
     'Green/Veg': ['Grassy', 'Herbal', 'Pea', 'Hay-like'],
+};
+
+const BULK_SCORE_FIELDS: { key: keyof Omit<CuppingScore, 'taints' | 'faults' | 'finalScore'>; label: string }[] = [
+    { key: 'fragrance', label: 'Fragrance/Aroma' },
+    { key: 'flavor', label: 'Flavor' },
+    { key: 'aftertaste', label: 'Aftertaste' },
+    { key: 'acidity', label: 'Acidity' },
+    { key: 'body', label: 'Body' },
+    { key: 'balance', label: 'Balance' },
+    { key: 'uniformity', label: 'Uniformity' },
+    { key: 'cleanCup', label: 'Clean Cup' },
+    { key: 'sweetness', label: 'Sweetness' },
+    { key: 'overall', label: 'Overall' },
+];
+
+type BulkImportFieldKey = keyof Omit<CuppingScore, 'taints' | 'faults' | 'finalScore'>;
+
+interface BulkImportPreviewRow {
+    rowNumber: number;
+    sampleReference: string;
+    matchedSampleId: string | null;
+    matchedBlindCode: string | null;
+    values: Record<BulkImportFieldKey, number>;
+    notes: string;
+    validationErrors: string[];
+    importStatus: 'pending' | 'success' | 'error';
+    importMessage?: string;
+}
+
+const normalizeCsvHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const parseCsvText = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        const nextCharacter = text[index + 1];
+
+        if (character === '"') {
+            if (insideQuotes && nextCharacter === '"') {
+                currentCell += '"';
+                index += 1;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+            continue;
+        }
+
+        if (character === ',' && !insideQuotes) {
+            currentRow.push(currentCell.trim());
+            currentCell = '';
+            continue;
+        }
+
+        if ((character === '\n' || character === '\r') && !insideQuotes) {
+            if (character === '\r' && nextCharacter === '\n') {
+                index += 1;
+            }
+            currentRow.push(currentCell.trim());
+            if (currentRow.some(cell => cell.trim() !== '')) {
+                rows.push(currentRow);
+            }
+            currentRow = [];
+            currentCell = '';
+            continue;
+        }
+
+        currentCell += character;
+    }
+
+    currentRow.push(currentCell.trim());
+    if (currentRow.some(cell => cell.trim() !== '')) {
+        rows.push(currentRow);
+    }
+
+    return rows;
+};
+
+const buildCsvHeaderMap = (headers: string[]) => {
+    const headerMap = new Map<string, number>();
+    headers.forEach((header, index) => {
+        headerMap.set(normalizeCsvHeader(header), index);
+    });
+    return headerMap;
+};
+
+const getCsvCell = (row: string[], headerMap: Map<string, number>, candidates: string[]) => {
+    for (const candidate of candidates) {
+        const index = headerMap.get(normalizeCsvHeader(candidate));
+        if (index !== undefined) {
+            return row[index]?.trim() ?? '';
+        }
+    }
+    return '';
+};
+
+const scoreFieldCandidates: Record<BulkImportFieldKey, string[]> = {
+    fragrance: ['Fragrance', 'Fragrance/Aroma', 'Fragrance Aroma'],
+    flavor: ['Flavor'],
+    aftertaste: ['Aftertaste'],
+    acidity: ['Acidity'],
+    body: ['Body'],
+    balance: ['Balance'],
+    uniformity: ['Uniformity'],
+    cleanCup: ['Clean Cup', 'CleanCup'],
+    sweetness: ['Sweetness'],
+    overall: ['Overall'],
+};
+
+const sampleReferenceCandidates = ['Sample ID', 'SampleId', 'sample_id', 'sample'];
+const notesCandidates = ['Notes', 'Note', 'Comments', 'Comment', 'Tasting Notes', 'TastingNotes'];
+
+const resolveSampleMatch = (reference: string, samples: CoffeeSample[]) => {
+    const normalizedReference = reference.trim();
+    return samples.find(sample => {
+        const sampleId = String(sample.id).trim();
+        const blindCode = String(sample.blindCode || '').trim();
+        return sampleId === normalizedReference || blindCode === normalizedReference || blindCode.toLowerCase() === normalizedReference.toLowerCase();
+    }) || null;
+};
+
+const calculateFinalScoreFromValues = (values: Record<BulkImportFieldKey, number>) =>
+    BULK_SCORE_FIELDS.reduce((total, field) => total + Number(values[field.key] ?? 0), 0);
+
+const parseBulkScoreCsv = (text: string, samples: CoffeeSample[]) => {
+    const rows = parseCsvText(text);
+    if (rows.length === 0) {
+        return { rows: [] as BulkImportPreviewRow[], errors: ['The CSV file is empty.'] };
+    }
+
+    const [headerRow, ...dataRows] = rows;
+    const headerMap = buildCsvHeaderMap(headerRow);
+    const parsedRows: BulkImportPreviewRow[] = [];
+    const encounteredSamples = new Set<string>();
+
+    dataRows.forEach((row, index) => {
+        const rowNumber = index + 2;
+        const sampleReference = getCsvCell(row, headerMap, sampleReferenceCandidates);
+        const notes = getCsvCell(row, headerMap, notesCandidates);
+        const validationErrors: string[] = [];
+
+        if (!sampleReference) {
+            validationErrors.push('Missing Sample ID.');
+        }
+
+        const matchedSample = sampleReference ? resolveSampleMatch(sampleReference, samples) : null;
+        if (!matchedSample) {
+            validationErrors.push(`Sample "${sampleReference || 'unknown'}" was not found in the selected event.`);
+        }
+
+        const values = {} as Record<BulkImportFieldKey, number>;
+        BULK_SCORE_FIELDS.forEach(field => {
+            const rawValue = getCsvCell(row, headerMap, scoreFieldCandidates[field.key]);
+            if (rawValue === '') {
+                validationErrors.push(`Missing ${field.label}.`);
+                values[field.key] = Number.NaN;
+                return;
+            }
+
+            const parsedValue = Number(rawValue);
+            if (Number.isNaN(parsedValue)) {
+                validationErrors.push(`${field.label} must be a number.`);
+                values[field.key] = Number.NaN;
+                return;
+            }
+            if (parsedValue < 0 || parsedValue > 10) {
+                validationErrors.push(`${field.label} must be between 0 and 10.`);
+            }
+            values[field.key] = parsedValue;
+        });
+
+        const normalizedSampleKey = matchedSample ? String(matchedSample.id) : sampleReference.toLowerCase();
+        if (normalizedSampleKey && encounteredSamples.has(normalizedSampleKey)) {
+            validationErrors.push(`Duplicate sample entry for "${sampleReference}" in the CSV.`);
+        } else if (normalizedSampleKey) {
+            encounteredSamples.add(normalizedSampleKey);
+        }
+
+        parsedRows.push({
+            rowNumber,
+            sampleReference,
+            matchedSampleId: matchedSample ? String(matchedSample.id) : null,
+            matchedBlindCode: matchedSample?.blindCode ? String(matchedSample.blindCode) : null,
+            values,
+            notes,
+            validationErrors,
+            importStatus: 'pending',
+        });
+    });
+
+    return { rows: parsedRows, errors: [] as string[] };
 };
 
 type SampleStatus = 'Not Started' | 'Submitted' | 'Finalized';
@@ -353,20 +547,22 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const location = useLocation();
     
     // Map URL paths to tab names
-    const pathToTab: { [key: string]: 'cupping' | 'leaderboard' } = {
+    const pathToTab: { [key: string]: 'cupping' | 'leaderboard' | 'bulk-import' } = {
         '/qgrader-dashboard': 'cupping',
         '/qgrader-dashboard/cuppingevents': 'cupping',
         '/qgrader-dashboard/leaderboard': 'leaderboard',
+        '/qgrader-dashboard/bulk-import': 'bulk-import',
     };
     
     // Map tab names to URL paths
-    const tabToPath: { [key in 'cupping' | 'leaderboard']: string } = {
+    const tabToPath: { [key in 'cupping' | 'leaderboard' | 'bulk-import']: string } = {
         cupping: '/qgrader-dashboard/cuppingevents',
         leaderboard: '/qgrader-dashboard/leaderboard',
+        'bulk-import': '/qgrader-dashboard/bulk-import',
     };
     
     // Initialize activeTab from URL or default to 'cupping'
-    const [activeTab, setActiveTabState] = useState<'cupping' | 'leaderboard'>(() => {
+    const [activeTab, setActiveTabState] = useState<'cupping' | 'leaderboard' | 'bulk-import'>(() => {
         return pathToTab[location.pathname] || 'cupping';
     });
 
@@ -374,7 +570,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [reevalLoadingSampleId, setReevalLoadingSampleId] = useState<string | null>(null);
     
     // Function for when user clicks a tab button - updates state AND navigates URL
-    const handleTabClick = (tab: 'cupping' | 'leaderboard') => {
+    const handleTabClick = (tab: 'cupping' | 'leaderboard' | 'bulk-import') => {
         setActiveTabState(tab);
         navigate(tabToPath[tab]);
     };
@@ -421,6 +617,11 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     const [selectedEvent, setSelectedEvent] = useState<CuppingEvent | null>(null);
     const [selectedSample, setSelectedSample] = useState<CoffeeSample | null>(null);
     const [assignedEvents, setAssignedEvents] = useState<CuppingEvent[]>([]);
+    const [bulkImportEventId, setBulkImportEventId] = useState('');
+    const [bulkImportFileName, setBulkImportFileName] = useState('');
+    const [bulkImportRows, setBulkImportRows] = useState<BulkImportPreviewRow[]>([]);
+    const [bulkImportErrors, setBulkImportErrors] = useState<string[]>([]);
+    const [bulkImportStatus, setBulkImportStatus] = useState<{ processing: boolean; completed: boolean; successCount: number; errorCount: number }>({ processing: false, completed: false, successCount: 0, errorCount: 0 });
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [aiLoading, setAiLoading] = useState(false);
@@ -431,6 +632,29 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
     useEffect(() => {
         setAiAnalysis('');
     }, [selectedSample?.id, selectedSample?.blindCode]);
+
+    const bulkImportEvent = useMemo(() => assignedEvents.find(event => String(event.id) === bulkImportEventId) || null, [assignedEvents, bulkImportEventId]);
+    const bulkImportSamples = useMemo(() => {
+        if (!bulkImportEvent) return [];
+        const sampleObjects = (bulkImportEvent as any).sampleObjects || (bulkImportEvent as any).samples || [];
+        if (sampleObjects.length > 0) {
+            return sampleObjects.map((sample: any) => ({ ...sample, id: String(sample.id) })) as CoffeeSample[];
+        }
+        return appData.samples.filter(sample => bulkImportEvent.sampleIds.map(id => String(id)).includes(String(sample.id)));
+    }, [appData.samples, bulkImportEvent]);
+
+    useEffect(() => {
+        if (activeTab !== 'bulk-import') return;
+        setSelectedEvent(null);
+        setSelectedSample(null);
+    }, [activeTab]);
+
+    useEffect(() => {
+        setBulkImportRows([]);
+        setBulkImportErrors([]);
+        setBulkImportFileName('');
+        setBulkImportStatus({ processing: false, completed: false, successCount: 0, errorCount: 0 });
+    }, [bulkImportEventId]);
 
     // Handle URL parameters to restore selected event and sample
     useEffect(() => {
@@ -516,6 +740,94 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         };
         fetchLeaderboardData();
     }, []);
+
+    const handleBulkImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!bulkImportEvent) {
+            alert('Please select an event before uploading a CSV file.');
+            event.target.value = '';
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            const { rows, errors } = parseBulkScoreCsv(text, bulkImportSamples);
+            setBulkImportFileName(file.name);
+            setBulkImportRows(rows);
+            setBulkImportErrors(errors);
+            setBulkImportStatus({ processing: false, completed: false, successCount: 0, errorCount: rows.filter(row => row.validationErrors.length > 0).length });
+        } catch (error) {
+            console.error('Failed to parse CSV:', error);
+            setBulkImportRows([]);
+            setBulkImportErrors([`Could not read ${file.name}.`]);
+            setBulkImportFileName(file.name);
+        } finally {
+            event.target.value = '';
+        }
+    }, [bulkImportEvent, bulkImportSamples]);
+
+    const handleBulkImportSubmit = useCallback(async () => {
+        if (!bulkImportEvent) {
+            alert('Select an event first.');
+            return;
+        }
+
+        const eligibleRows = bulkImportRows.filter(row => row.validationErrors.length === 0 && row.matchedSampleId);
+        if (eligibleRows.length === 0) {
+            alert('Upload a valid CSV with at least one matching sample before importing.');
+            return;
+        }
+
+        setBulkImportStatus({ processing: true, completed: false, successCount: 0, errorCount: bulkImportRows.length - eligibleRows.length });
+
+        let successCount = 0;
+        let errorCount = bulkImportRows.length - eligibleRows.length;
+        const nextRows: BulkImportPreviewRow[] = [];
+
+        for (const row of bulkImportRows) {
+            if (row.validationErrors.length > 0 || !row.matchedSampleId) {
+                nextRows.push({ ...row, importStatus: 'error', importMessage: row.validationErrors[0] || 'Row could not be imported.' });
+                continue;
+            }
+
+            const updatedSheet: ScoreSheet = {
+                id: `bulk-${bulkImportEvent.id}-${row.matchedSampleId}-${currentUser.id}`,
+                eventId: String(bulkImportEvent.id),
+                qGraderId: currentUser.id,
+                sampleId: row.matchedSampleId,
+                isSubmitted: true,
+                notes: row.notes,
+                descriptors: [],
+                scores: {
+                    ...row.values,
+                    taints: 0,
+                    faults: 0,
+                    finalScore: calculateFinalScoreFromValues(row.values),
+                },
+            };
+
+            try {
+                const saveResult = await Promise.resolve(onUpdateScoreSheet(updatedSheet) as unknown as Promise<{ ok?: boolean; message?: string }> | { ok?: boolean; message?: string } | void);
+                const wasSuccessful = typeof saveResult === 'object' && saveResult !== null && 'ok' in saveResult ? Boolean(saveResult.ok) : true;
+
+                if (wasSuccessful) {
+                    successCount += 1;
+                    nextRows.push({ ...row, importStatus: 'success', importMessage: `Saved for sample ${row.matchedBlindCode || row.matchedSampleId}.` });
+                } else {
+                    errorCount += 1;
+                    nextRows.push({ ...row, importStatus: 'error', importMessage: (saveResult && typeof saveResult === 'object' && 'message' in saveResult && saveResult.message) ? String(saveResult.message) : 'Backend rejected this score.' });
+                }
+            } catch (error) {
+                errorCount += 1;
+                nextRows.push({ ...row, importStatus: 'error', importMessage: error instanceof Error ? error.message : 'Failed to save score.' });
+            }
+        }
+
+        setBulkImportRows(nextRows);
+        setBulkImportStatus({ processing: false, completed: true, successCount, errorCount });
+    }, [bulkImportEvent, bulkImportRows, currentUser.id, onUpdateScoreSheet]);
 
     // Samples come from the server as `sampleObjects` on each event. Do not use appData.samples.
     const samplesForEvent = useMemo(() => {
@@ -638,6 +950,17 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                         >
                             <BarChart2 size={18} />
                             <span>Leaderboard</span>
+                        </button>
+                        <button
+                            onClick={() => handleTabClick('bulk-import')}
+                            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                              activeTab === 'bulk-import' 
+                                ? 'bg-primary text-white shadow-md'
+                                : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <Upload size={18} />
+                            <span>Bulk Score Import</span>
                         </button>
                     </nav>
 
@@ -936,6 +1259,125 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                     </ul>
                                                 </div>
                                             )}
+                                        </div>
+                                    </Card>
+                                )}
+                            </div>
+                        )}
+                        {activeTab === 'bulk-import' && (
+                            <div className="space-y-6 max-w-6xl">
+                                <Card>
+                                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                                        <div>
+                                            <h3 className="text-2xl font-bold text-primary">Bulk Score Import</h3>
+                                            <p className="text-sm text-gray-600 mt-1">Upload a CSV, match rows by Sample ID or blind code, and submit scores for the selected event.</p>
+                                        </div>
+                                        <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                                            <FileSpreadsheet size={14} />
+                                            CSV upload
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-semibold text-gray-700">1. Select Event</label>
+                                            <select
+                                                value={bulkImportEventId}
+                                                onChange={(e) => setBulkImportEventId(e.target.value)}
+                                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-primary focus:ring-primary"
+                                            >
+                                                <option value="">Choose a cupping event</option>
+                                                {assignedEvents.map(event => (
+                                                    <option key={event.id} value={event.id}>{event.name}</option>
+                                                ))}
+                                            </select>
+                                            {bulkImportEvent && (
+                                                <p className="text-xs text-gray-500">{bulkImportSamples.length} samples found in this event.</p>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-semibold text-gray-700">2. Upload CSV</label>
+                                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed p-6 text-sm transition-colors ${bulkImportEvent ? 'border-primary/30 bg-primary/5 hover:bg-primary/10' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
+                                                <Upload size={18} />
+                                                <span>{bulkImportFileName || 'Choose a CSV file with score rows'}</span>
+                                                <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleBulkImportFile} disabled={!bulkImportEvent} />
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {bulkImportErrors.length > 0 && (
+                                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                            {bulkImportErrors.map(error => <div key={error}>• {error}</div>)}
+                                        </div>
+                                    )}
+
+                                    {bulkImportSamples.length > 0 && bulkImportEvent && (
+                                        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                                            <div className="font-semibold text-gray-700">Accepted sample references for this event</div>
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {bulkImportSamples.slice(0, 12).map(sample => (
+                                                    <span key={sample.id} className="rounded-full bg-white px-2 py-1 border border-gray-200">
+                                                        {sample.blindCode || sample.id}
+                                                    </span>
+                                                ))}
+                                                {bulkImportSamples.length > 12 && <span className="rounded-full bg-white px-2 py-1 border border-gray-200">+{bulkImportSamples.length - 12} more</span>}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-6 flex items-center gap-3">
+                                        <Button onClick={handleBulkImportSubmit} disabled={!bulkImportEvent || bulkImportRows.length === 0 || bulkImportStatus.processing}>
+                                            {bulkImportStatus.processing ? 'Importing...' : 'Import Scores'}
+                                        </Button>
+                                        <div className="text-sm text-gray-600">
+                                            {bulkImportStatus.completed ? `${bulkImportStatus.successCount} saved, ${bulkImportStatus.errorCount} failed` : 'Rows are validated after upload.'}
+                                        </div>
+                                    </div>
+                                </Card>
+
+                                {bulkImportRows.length > 0 && (
+                                    <Card>
+                                        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+                                            <h4 className="text-lg font-bold text-gray-900">Preview</h4>
+                                            <div className="text-sm text-gray-500">{bulkImportRows.length} rows loaded</div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-border bg-background">
+                                                        <th className="py-2 px-3 text-left font-semibold">Row</th>
+                                                        <th className="py-2 px-3 text-left font-semibold">Sample</th>
+                                                        {BULK_SCORE_FIELDS.map(field => <th key={field.key} className="py-2 px-3 text-center font-semibold">{field.label}</th>)}
+                                                        <th className="py-2 px-3 text-left font-semibold">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {bulkImportRows.map(row => (
+                                                        <tr key={`${row.rowNumber}-${row.sampleReference}`} className="border-b border-border align-top">
+                                                            <td className="py-2 px-3 font-semibold">{row.rowNumber}</td>
+                                                            <td className="py-2 px-3">
+                                                                <div className="font-medium">{row.sampleReference}</div>
+                                                                <div className="text-xs text-gray-500">{row.matchedBlindCode || row.matchedSampleId || 'Unmatched'}</div>
+                                                                {row.validationErrors.length > 0 && (
+                                                                    <div className="mt-1 text-xs text-red-600 space-y-0.5">
+                                                                        {row.validationErrors.map(error => <div key={error}>• {error}</div>)}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            {BULK_SCORE_FIELDS.map(field => (
+                                                                <td key={field.key} className="py-2 px-3 text-center tabular-nums">{Number.isFinite(row.values[field.key]) ? row.values[field.key].toFixed(2) : '--'}</td>
+                                                            ))}
+                                                            <td className="py-2 px-3">
+                                                                <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${row.importStatus === 'success' ? 'bg-green-100 text-green-800' : row.importStatus === 'error' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'}`}>
+                                                                    {row.importStatus === 'success' ? <CheckCircle size={12} /> : row.importStatus === 'error' ? <AlertCircle size={12} /> : <FileSpreadsheet size={12} />}
+                                                                    <span>{row.importMessage || (row.importStatus === 'pending' ? 'Ready' : row.importStatus)}</span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </Card>
                                 )}
