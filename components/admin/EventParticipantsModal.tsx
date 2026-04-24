@@ -76,6 +76,25 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
         }
     }, [isOpen, event]);
 
+    const extractAssignedIdsFromParticipants = (participants: any[] = []) => {
+        const qIds = participants
+            .filter((p: any) => p.role === 'Q_GRADER')
+            .map((p: any) => p.qGrader?.id ?? p.qGraderId)
+            .filter((id: any) => id !== undefined && id !== null)
+            .map((id: any) => String(id));
+
+        const hIds = participants
+            .filter((p: any) => p.role === 'HEAD_JUDGE')
+            .map((p: any) => p.headJudge?.id ?? p.headJudgeId)
+            .filter((id: any) => id !== undefined && id !== null)
+            .map((id: any) => String(id));
+
+        return {
+            qIds: Array.from(new Set(qIds)),
+            hIds: Array.from(new Set(hIds)),
+        };
+    };
+
     if (!event) return null;
 
     const assignedHeadJudges = assignedHeadJudgeIds
@@ -131,21 +150,14 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             }, { withCredentials: true });
 
             // Update local state from response to keep in sync (server returns participants array)
-            setAssignedQGraderIds(response.data.participants
-                .filter((p: any) => p.role === 'Q_GRADER')
-                .map((p: any) => String(p.qGrader?.id)));
-            setAssignedHeadJudgeIds(response.data.participants
-                .filter((p: any) => p.role === 'HEAD_JUDGE')
-                .map((p: any) => String(p.headJudge?.id)));
+            const { qIds, hIds } = extractAssignedIdsFromParticipants(response.data?.participants || []);
+            setAssignedQGraderIds(qIds);
+            setAssignedHeadJudgeIds(hIds);
 
             onUpdate({
                 eventId: event!.id,
-                assignedQGraderIds: response.data.participants
-                    .filter((p: any) => p.role === 'Q_GRADER')
-                    .map((p: any) => String(p.qGrader?.id)),
-                assignedHeadJudgeIds: response.data.participants
-                    .filter((p: any) => p.role === 'HEAD_JUDGE')
-                    .map((p: any) => String(p.headJudge?.id)),
+                assignedQGraderIds: qIds,
+                assignedHeadJudgeIds: hIds,
             });
         } catch (err) {
             console.error('Failed to unassign participant:', err);
@@ -181,22 +193,14 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
             console.log('Updated participants:', response.data); // Debugging log
 
             // Update the frontend state with the latest data from the backend
-            setAssignedQGraderIds(response.data.participants
-                .filter((participant: { role: string; qGraderId?: number; qGrader?: { id: number } }) => participant.role === 'Q_GRADER')
-                .map((participant: { qGrader?: { id: number } }) => String(participant.qGrader?.id)));
-
-            setAssignedHeadJudgeIds(response.data.participants
-                .filter((participant: { role: string; headJudgeId?: number; headJudge?: { id: number } }) => participant.role === 'HEAD_JUDGE')
-                .map((participant: { headJudge?: { id: number } }) => String(participant.headJudge?.id)));
+            const { qIds, hIds } = extractAssignedIdsFromParticipants(response.data?.participants || []);
+            setAssignedQGraderIds(qIds);
+            setAssignedHeadJudgeIds(hIds);
 
             onUpdate({
                 eventId: event.id,
-                assignedQGraderIds: response.data.participants
-                    .filter((participant: { role: string; qGraderId?: number; qGrader?: { id: number } }) => participant.role === 'Q_GRADER')
-                    .map((participant: { qGrader?: { id: number } }) => String(participant.qGrader?.id)),
-                assignedHeadJudgeIds: response.data.participants
-                    .filter((participant: { role: string; headJudgeId?: number; headJudge?: { id: number } }) => participant.role === 'HEAD_JUDGE')
-                    .map((participant: { headJudge?: { id: number } }) => String(participant.headJudge?.id)),
+                assignedQGraderIds: qIds,
+                assignedHeadJudgeIds: hIds,
             });
 
             window.location.reload(); // Automatically refresh the page to fetch updated data
