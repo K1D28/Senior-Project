@@ -417,6 +417,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     //     [appData.events]);
 
     const [eventFilter, setEventFilter] = useState<string>('all');
+    const [sampleEventFilter, setSampleEventFilter] = useState<string>('all');
     const [eventStatuses, setEventStatuses] = useState<Record<string, string>>({});
 
     const toggleEventExpansion = (eventId: string) => {
@@ -797,6 +798,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         }
         return sortableItems;
     }, [appData.samples, appData.users, appData.events, sortConfig]);
+
+    const filteredSamples = useMemo(() => {
+        if (sampleEventFilter === 'all') return sortedSamples;
+
+        const selectedEvent = appData.events.find(e => e.id === sampleEventFilter);
+        if (!selectedEvent || !Array.isArray(selectedEvent.sampleIds)) return [];
+
+        const sampleIdSet = new Set(selectedEvent.sampleIds.map(id => String(id)));
+        return sortedSamples.filter(sample => sampleIdSet.has(String(sample.id)));
+    }, [sortedSamples, sampleEventFilter, appData.events]);
 
     const requestSort = (key: SortableSampleKeys) => {
         let direction: 'ascending' | 'descending' = 'ascending';
@@ -1360,11 +1371,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             <Card className="transition-smooth">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-bold">All Coffee Samples</h3>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-text-light">Filter sample by selected event:</span>
+                        <Select value={sampleEventFilter} onChange={e => setSampleEventFilter(e.target.value)}>
+                            <option value="all">All Events</option>
+                            {appData.events.map(event => (
+                                <option key={event.id} value={event.id}>{event.name}</option>
+                            ))}
+                        </Select>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left table-auto">
                         <thead>
                             <tr className="border-b border-border">
+                                <th className="p-2 w-16">#</th>
                                 <SortableHeader label="Blind Code" sortKey="blindCode" />
                                 <SortableHeader label="Region" sortKey="region" />
                                 <SortableHeader label="Processing Method" sortKey="processingMethod" />
@@ -1377,13 +1398,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedSamples.map(sample => {
+                            {filteredSamples.map((sample, index) => {
                                 const farmerName = getFarmerName(sample);
                                 const isCalibration = sample.sampleType === 'CALIBRATION';
                                 const isPending = sample.approvalStatus === 'PENDING';
                                 const isRejected = sample.approvalStatus === 'REJECTED';
                                 return (
                                     <tr key={sample.id} className="border-b border-border hover:bg-background">
+                                        <td className="p-2 font-semibold text-text-light">{index + 1}</td>
                                         <td className={`p-2 font-mono font-bold ${isCalibration ? 'text-purple-600' : 'text-primary'}`}>{sample.blindCode || '⏳ PENDING'}</td>
                                         <td className="p-2">{sample.region}</td>
                                         <td className="p-2">{sample.processingMethod}</td>
@@ -1424,6 +1446,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                     </tr>
                                 );
                             })}
+                            {filteredSamples.length === 0 && (
+                                <tr>
+                                    <td colSpan={10} className="p-4 text-center text-text-light">
+                                        No samples found for the selected event.
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
