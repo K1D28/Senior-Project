@@ -16,6 +16,7 @@ interface EventEditModalProps {
 }
 
 const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event, onUpdate }) => {
+    const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState<{
         name: string;
         date: string;
@@ -35,6 +36,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
         const loadEventData = async () => {
             if (!isOpen || !event) return;
 
+            setIsLoading(true);
             try {
                 // Fetch fresh event data from backend to ensure we have latest tags/methods
                 const token = localStorage.getItem('token');
@@ -61,16 +63,16 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                 let processingMethodsArray: string[] = [];
                 if (Array.isArray(freshEvent.processingMethods)) {
                     processingMethodsArray = freshEvent.processingMethods
-                        .map(m => typeof m === 'string' ? m : (m as any).method || '')
-                        .filter(m => m);
+                        .map((m: any) => typeof m === 'string' ? m : (m as any).method || '')
+                        .filter((m: any) => m);
                 }
 
                 // Handle tags - could be array of strings, objects with `tag` property, or undefined
                 let tagsArray: string[] = [];
                 if (Array.isArray(freshEvent.tags)) {
                     tagsArray = freshEvent.tags
-                        .map(t => typeof t === 'string' ? t : (t as any).tag || '')
-                        .filter(t => t);
+                        .map((t: any) => typeof t === 'string' ? t : (t as any).tag || '')
+                        .filter((t: any) => t);
                 }
 
                 console.log('Loaded fresh event data:', {
@@ -103,15 +105,15 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                 let processingMethodsArray: string[] = [];
                 if (Array.isArray(event.processingMethods)) {
                     processingMethodsArray = event.processingMethods
-                        .map(m => typeof m === 'string' ? m : (m as any).method || '')
-                        .filter(m => m);
+                        .map((m: any) => typeof m === 'string' ? m : (m as any).method || '')
+                        .filter((m: any) => m);
                 }
 
                 let tagsArray: string[] = [];
                 if (Array.isArray(event.tags)) {
                     tagsArray = event.tags
-                        .map(t => typeof t === 'string' ? t : (t as any).tag || '')
-                        .filter(t => t);
+                        .map((t: any) => typeof t === 'string' ? t : (t as any).tag || '')
+                        .filter((t: any) => t);
                 }
 
                 setFormData({
@@ -121,6 +123,8 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                     processingMethods: processingMethodsArray,
                     tags: tagsArray,
                 });
+            } finally {
+                setIsLoading(false);
             }
         };
 
