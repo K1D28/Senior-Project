@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
-import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import axios from 'axios';
 import { CuppingEvent } from '../../types';
@@ -151,47 +150,54 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                     />
                 </div>
                 <div>
-                    <Label htmlFor="processingMethods">Processing Methods</Label>
-                    <Select
-                        id="processingMethods"
-                        name="processingMethods"
-                        multiple
-                        size={5}
-                        value={formData.processingMethods}
-                        onChange={(e) =>
-                            handleArrayChange(
-                                'processingMethods',
-                                Array.from((e.target as HTMLSelectElement).selectedOptions, (option) => option.value)
-                            )
-                        }
-                    >
-                        <option value="Washed">Washed</option>
-                        <option value="Natural">Natural</option>
-                        <option value="Honey">Honey</option>
-                        <option value="Experimental">Experimental</option>
-                        <option value="Semi-Washed">Semi-Washed</option>
-                    </Select>
+                    <Label>Processing Methods</Label>
+                    <div className="space-y-2 p-3 border border-border rounded-md bg-background">
+                        {['Washed', 'Natural', 'Honey', 'Experimental', 'Semi-Washed'].map((method) => (
+                            <div key={method} className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id={`method-${method}`}
+                                    checked={formData.processingMethods.includes(method)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            handleArrayChange('processingMethods', [...formData.processingMethods, method]);
+                                        } else {
+                                            handleArrayChange('processingMethods', formData.processingMethods.filter(m => m !== method));
+                                        }
+                                    }}
+                                    className="w-4 h-4 rounded border-border"
+                                />
+                                <label htmlFor={`method-${method}`} className="ml-2 cursor-pointer text-sm">
+                                    {method}
+                                </label>
+                            </div>
+                        ))}
+                    </div>
                 </div>
                 <div>
-                    <Label htmlFor="tags">Event Tags</Label>
-                    <Select
-                        id="tags"
-                        name="tags"
-                        multiple
-                        size={4}
-                        value={formData.tags}
-                        onChange={(e) =>
-                            handleArrayChange(
-                                'tags',
-                                Array.from((e.target as HTMLSelectElement).selectedOptions, (option) => option.value)
-                            )
-                        }
-                    >
-                        <option value="Regional">Regional</option>
-                        <option value="Championship">Championship</option>
-                        <option value="Experimental">Experimental</option>
-                        <option value="Private QC">Private QC</option>
-                    </Select>
+                    <Label>Event Tags</Label>
+                    <div className="space-y-2 p-3 border border-border rounded-md bg-background">
+                        {['Regional', 'Championship', 'Experimental', 'Private QC'].map((tag) => (
+                            <div key={tag} className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id={`tag-${tag}`}
+                                    checked={formData.tags.includes(tag)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            handleArrayChange('tags', [...formData.tags, tag]);
+                                        } else {
+                                            handleArrayChange('tags', formData.tags.filter(t => t !== tag));
+                                        }
+                                    }}
+                                    className="w-4 h-4 rounded border-border"
+                                />
+                                <label htmlFor={`tag-${tag}`} className="ml-2 cursor-pointer text-sm">
+                                    {tag}
+                                </label>
+                            </div>
+                        ))}
+                    </div>
                 </div>
                 <div className="flex justify-end space-x-2">
                     <Button variant="secondary" onClick={onClose}>
