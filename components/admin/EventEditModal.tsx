@@ -199,6 +199,12 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Edit Event">
+            {isLoading && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-center gap-2">
+                    <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <span className="text-sm text-blue-800">Loading event data...</span>
+                </div>
+            )}
             <div className="space-y-4">
                 <div>
                     <Label htmlFor="name">Event Name</Label>
