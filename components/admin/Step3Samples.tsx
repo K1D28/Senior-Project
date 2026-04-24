@@ -14,6 +14,7 @@ interface Step3SamplesProps {
   processingMethods: string[];
   approvedSamples?: CoffeeSample[];
   eventName?: string;
+  usedSampleIds?: Set<string>;
 }
 
 const generateBlindCode = (eventName: string): string => {
@@ -32,17 +33,29 @@ const generateBlindCode = (eventName: string): string => {
     return `${acronym}-${randomDigits}`;
 };
 
-const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, processingMethods, approvedSamples = [], eventName = '' }) => {
+const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, processingMethods, approvedSamples = [], eventName = '', usedSampleIds = new Set() }) => {
     const [availableSamples, setAvailableSamples] = useState<CoffeeSample[]>([]);
+    const [usedSamples, setUsedSamples] = useState<CoffeeSample[]>([]);
 
     useEffect(() => {
         // Filter for approved samples that haven't been added to the event yet
         const selectedSampleIds = new Set(data.map(s => s.id));
+        
         const available = (approvedSamples || []).filter(
-            sample => sample.approvalStatus === 'APPROVED' && !selectedSampleIds.has(sample.id)
+            sample => sample.approvalStatus === 'APPROVED' 
+                && !selectedSampleIds.has(sample.id)
+                && !usedSampleIds.has(sample.id)
         );
+        
+        const used = (approvedSamples || []).filter(
+            sample => sample.approvalStatus === 'APPROVED' 
+                && !selectedSampleIds.has(sample.id)
+                && usedSampleIds.has(sample.id)
+        );
+        
         setAvailableSamples(available);
-    }, [approvedSamples, data]);
+        setUsedSamples(used);
+    }, [approvedSamples, data, usedSampleIds]);
 
     const handleRemoveRow = (index: number) => {
         onUpdate(data.filter((_, i) => i !== index));
@@ -121,6 +134,48 @@ const Step3Samples: React.FC<Step3SamplesProps> = ({ data, onUpdate, farmers, pr
                     </div>
                 )}
             </Card>
+
+            {/* Used Samples (Unavailable) Section */}
+            {usedSamples.length > 0 && (
+                <Card title="Used Samples (Unavailable)" className="border-2 border-orange-200 bg-orange-50">
+                    <p className="text-sm text-orange-700 mb-4">
+                        These samples are already used in other events and cannot be added to this event.
+                    </p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left table-auto opacity-60">
+                            <thead>
+                                <tr className="border-b border-orange-200 bg-orange-100">
+                                    <th className="p-2 font-semibold">Farm Name</th>
+                                    <th className="p-2 font-semibold">Farmer</th>
+                                    <th className="p-2 font-semibold">Variety</th>
+                                    <th className="p-2 font-semibold">Region</th>
+                                    <th className="p-2 font-semibold">Processing</th>
+                                    <th className="p-2 font-semibold">Altitude (m)</th>
+                                    <th className="p-2 font-semibold">Moisture (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {usedSamples.map((sample) => {
+                                    const farmer = farmers.find(f => String((f as any).id ?? (f as any).userDetails?.id ?? (f as any).userId ?? '') === String(sample.farmerId));
+                                    const farmerLabel = (farmer as any)?.name ?? (farmer as any)?.userDetails?.name ?? (farmer as any)?.email ?? sample.farmerId ?? 'Unknown';
+                                    
+                                    return (
+                                        <tr key={sample.id} className="border-b border-orange-200 bg-orange-50 text-gray-600">
+                                            <td className="p-2">{sample.farmName}</td>
+                                            <td className="p-2">{farmerLabel}</td>
+                                            <td className="p-2">{sample.variety}</td>
+                                            <td className="p-2">{sample.region}</td>
+                                            <td className="p-2">{sample.processingMethod}</td>
+                                            <td className="p-2">{sample.altitude}</td>
+                                            <td className="p-2">{sample.moisture}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
             {/* Selected Samples Section */}
             <Card title="Samples Assigned to Event">

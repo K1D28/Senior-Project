@@ -322,6 +322,10 @@ const EventCreationWizard: React.FC<EventCreationWizardProps> = ({ isOpen, onClo
                         ).filter(m => m)}
                         approvedSamples={appData.samples}
                         eventName={eventDetails.name}
+                        usedSampleIds={new Set(
+                            appData.events
+                                .flatMap((event: CuppingEvent) => event.sampleIds || [])
+                        )}
                     />
                 );
             default:
