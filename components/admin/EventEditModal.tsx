@@ -32,36 +32,99 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
 
     // Initialize form when modal opens with event data
     useEffect(() => {
-        if (isOpen && event) {
-            // Format date to YYYY-MM-DD for HTML date input
-            let formattedDate = '';
-            if (event.date) {
-                try {
-                    const dateObj = new Date(event.date);
-                    if (!isNaN(dateObj.getTime())) {
-                        formattedDate = dateObj.toISOString().split('T')[0];
+        const loadEventData = async () => {
+            if (!isOpen || !event) return;
+
+            try {
+                // Fetch fresh event data from backend to ensure we have latest tags/methods
+                const token = localStorage.getItem('token');
+                const response = await axios.get(`${BACKEND_URL}/api/cupping-events/${event.id}`, {
+                    withCredentials: true,
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                const freshEvent = response.data;
+
+                // Format date to YYYY-MM-DD for HTML date input
+                let formattedDate = '';
+                if (freshEvent.date) {
+                    try {
+                        const dateObj = new Date(freshEvent.date);
+                        if (!isNaN(dateObj.getTime())) {
+                            formattedDate = dateObj.toISOString().split('T')[0];
+                        }
+                    } catch (e) {
+                        formattedDate = freshEvent.date;
                     }
-                } catch (e) {
-                    formattedDate = event.date;
                 }
+
+                // Handle processingMethods - could be array of strings, objects with `method` property, or undefined
+                let processingMethodsArray: string[] = [];
+                if (Array.isArray(freshEvent.processingMethods)) {
+                    processingMethodsArray = freshEvent.processingMethods
+                        .map(m => typeof m === 'string' ? m : (m as any).method || '')
+                        .filter(m => m);
+                }
+
+                // Handle tags - could be array of strings, objects with `tag` property, or undefined
+                let tagsArray: string[] = [];
+                if (Array.isArray(freshEvent.tags)) {
+                    tagsArray = freshEvent.tags
+                        .map(t => typeof t === 'string' ? t : (t as any).tag || '')
+                        .filter(t => t);
+                }
+
+                console.log('Loaded fresh event data:', {
+                    processingMethods: processingMethodsArray,
+                    tags: tagsArray
+                });
+
+                setFormData({
+                    name: freshEvent.name || '',
+                    date: formattedDate,
+                    description: freshEvent.description || '',
+                    processingMethods: processingMethodsArray,
+                    tags: tagsArray,
+                });
+            } catch (error) {
+                console.error('Error loading event data:', error);
+                // Fallback to local event object if fetch fails
+                let formattedDate = '';
+                if (event.date) {
+                    try {
+                        const dateObj = new Date(event.date);
+                        if (!isNaN(dateObj.getTime())) {
+                            formattedDate = dateObj.toISOString().split('T')[0];
+                        }
+                    } catch (e) {
+                        formattedDate = event.date;
+                    }
+                }
+
+                let processingMethodsArray: string[] = [];
+                if (Array.isArray(event.processingMethods)) {
+                    processingMethodsArray = event.processingMethods
+                        .map(m => typeof m === 'string' ? m : (m as any).method || '')
+                        .filter(m => m);
+                }
+
+                let tagsArray: string[] = [];
+                if (Array.isArray(event.tags)) {
+                    tagsArray = event.tags
+                        .map(t => typeof t === 'string' ? t : (t as any).tag || '')
+                        .filter(t => t);
+                }
+
+                setFormData({
+                    name: event.name || '',
+                    date: formattedDate,
+                    description: event.description || '',
+                    processingMethods: processingMethodsArray,
+                    tags: tagsArray,
+                });
             }
+        };
 
-            const processingMethodsArray = Array.isArray(event.processingMethods) 
-                ? event.processingMethods.filter(m => typeof m === 'string')
-                : [];
-            
-            const tagsArray = Array.isArray(event.tags) 
-                ? event.tags.map(t => (typeof t === 'string' ? t : (t as any).tag || '')).filter(t => t)
-                : [];
-
-            setFormData({
-                name: event.name || '',
-                date: formattedDate,
-                description: event.description || '',
-                processingMethods: processingMethodsArray,
-                tags: tagsArray,
-            });
-        }
+        loadEventData();
     }, [event, isOpen]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
