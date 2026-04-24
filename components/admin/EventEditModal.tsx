@@ -30,18 +30,39 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
         tags: [],
     });
 
+    // Initialize form when modal opens with event data
     useEffect(() => {
-        if (event) {
+        if (isOpen && event) {
+            // Format date to YYYY-MM-DD for HTML date input
+            let formattedDate = '';
+            if (event.date) {
+                try {
+                    const dateObj = new Date(event.date);
+                    if (!isNaN(dateObj.getTime())) {
+                        formattedDate = dateObj.toISOString().split('T')[0];
+                    }
+                } catch (e) {
+                    formattedDate = event.date;
+                }
+            }
+
+            const processingMethodsArray = Array.isArray(event.processingMethods) 
+                ? event.processingMethods.filter(m => typeof m === 'string')
+                : [];
+            
+            const tagsArray = Array.isArray(event.tags) 
+                ? event.tags.map(t => (typeof t === 'string' ? t : (t as any).tag || '')).filter(t => t)
+                : [];
+
             setFormData({
                 name: event.name || '',
-                date: event.date || '',
+                date: formattedDate,
                 description: event.description || '',
-                processingMethods: event.processingMethods || [],
-                // event.tags may be an array of objects ({id, tag}) in some responses — normalize to string[]
-                tags: Array.isArray(event.tags) ? event.tags.map(t => (typeof t === 'string' ? t : (t as any).tag || '')) : [],
+                processingMethods: processingMethodsArray,
+                tags: tagsArray,
             });
         }
-    }, [event]);
+    }, [event, isOpen]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target as HTMLInputElement;
