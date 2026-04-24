@@ -70,20 +70,51 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
     }, [isOpen]);
 
     useEffect(() => {
-        if (isOpen && event) {
-            const directQ = Array.isArray(event.assignedQGraderIds)
-                ? event.assignedQGraderIds.map((id: any) => String(id))
-                : [];
-            const directH = Array.isArray(event.assignedHeadJudgeIds)
-                ? event.assignedHeadJudgeIds.map((id: any) => String(id))
-                : [];
+        const loadEventParticipants = async () => {
+            if (!isOpen || !event) return;
 
-            // Fallback to participant relations if assigned* arrays are missing/empty
-            const fromParticipants = extractAssignedIdsFromParticipants((event as any).participants || []);
+            try {
+                const token = localStorage.getItem('token');
+                // Fetch fresh event data with full participant details
+                const response = await axios.get(`${BACKEND_URL}/api/cupping-events/${event.id}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    withCredentials: true,
+                });
+                const freshEvent = response.data;
 
-            setAssignedQGraderIds(directQ.length > 0 ? directQ : fromParticipants.qIds);
-            setAssignedHeadJudgeIds(directH.length > 0 ? directH : fromParticipants.hIds);
-        }
+                // Extract from fresh event data
+                const directQ = Array.isArray(freshEvent.assignedQGraderIds)
+                    ? freshEvent.assignedQGraderIds.map((id: any) => String(id))
+                    : [];
+                const directH = Array.isArray(freshEvent.assignedHeadJudgeIds)
+                    ? freshEvent.assignedHeadJudgeIds.map((id: any) => String(id))
+                    : [];
+
+                // Fallback to participant relations
+                const fromParticipants = extractAssignedIdsFromParticipants((freshEvent as any).participants || []);
+
+                const finalQ = directQ.length > 0 ? directQ : fromParticipants.qIds;
+                const finalH = directH.length > 0 ? directH : fromParticipants.hIds;
+
+                console.log('Loaded event participants:', { finalQ, finalH, freshEvent });
+
+                setAssignedQGraderIds(finalQ);
+                setAssignedHeadJudgeIds(finalH);
+            } catch (error) {
+                console.error('Error loading event participants:', error);
+                // Fallback to local event object
+                const directQ = Array.isArray(event.assignedQGraderIds)
+                    ? event.assignedQGraderIds.map((id: any) => String(id))
+                    : [];
+                const directH = Array.isArray(event.assignedHeadJudgeIds)
+                    ? event.assignedHeadJudgeIds.map((id: any) => String(id))
+                    : [];
+                const fromParticipants = extractAssignedIdsFromParticipants((event as any).participants || []);
+                setAssignedQGraderIds(directQ.length > 0 ? directQ : fromParticipants.qIds);
+                setAssignedHeadJudgeIds(directH.length > 0 ? directH : fromParticipants.hIds);
+            }
+        };
+        loadEventParticipants();
     }, [isOpen, event]);
 
     const extractAssignedIdsFromParticipants = (participants: any[] = []) => {
@@ -172,29 +203,36 @@ const EventParticipantsModal: React.FC<EventParticipantsModalProps> = ({ isOpen,
                 return;
             }
 
+            console.log('Saving with IDs:', { assignedQGraderIds, assignedHeadJudgeIds });
+
             const response = await axios.put(`${BACKEND_URL}/api/cupping-events/${event.id}/participants`, {
                 assignedQGraderIds: assignedQGraderIds.map(id => parseInt(id, 10)),
                 assignedHeadJudgeIds: assignedHeadJudgeIds.map(id => parseInt(id, 10)),
             }, {
-                withCredentials: true, // Ensure cookies are included in the request
+                withCredentials: true,
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
-            console.log('Updated participants:', response.data); // Debugging log
+            console.log('Backend response:', response.data);
 
-            // Update the frontend state with the latest data from the backend
+            // Normalize response to get assigned IDs
             const { qIds, hIds } = normalizeAssignedIdsFromResponse(response.data);
-            setAssignedQGraderIds(qIds);
-            setAssignedHeadJudgeIds(hIds);
+            console.log('Normalized IDs from response:', { qIds, hIds });
 
+            // Update parent with fresh data
             onUpdate({
                 eventId: event.id,
                 assignedQGraderIds: qIds,
                 assignedHeadJudgeIds: hIds,
             });
 
-            window.location.reload(); // Automatically refresh the page to fetch updated data
+            // Update local state with server response
+            setAssignedQGraderIds(qIds);
+            setAssignedHeadJudgeIds(hIds);
+
+            // Close modal and let parent refetch data
+            onClose();
         } catch (error) {
             console.error('Error saving participants:', error);
         }
