@@ -37,6 +37,7 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
             if (!isOpen || !event) return;
 
             setIsLoading(true);
+            const startTime = Date.now();
             try {
                 // Fetch fresh event data from backend to ensure we have latest tags/methods
                 const token = localStorage.getItem('token');
@@ -124,7 +125,12 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                     tags: tagsArray,
                 });
             } finally {
-                setIsLoading(false);
+                // Ensure loading shows for at least 500ms for better UX
+                const elapsedTime = Date.now() - startTime;
+                const remainingDelay = Math.max(0, 500 - elapsedTime);
+                setTimeout(() => {
+                    setIsLoading(false);
+                }, remainingDelay);
             }
         };
 
