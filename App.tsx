@@ -88,6 +88,7 @@ function App() {
     scores: [],
     activityLog: [],
   });
+  const [isQGraderScoresLoading, setIsQGraderScoresLoading] = useState(false);
   const [isPublicView, setIsPublicView] = useState(false);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -390,9 +391,13 @@ function App() {
   // Load persisted QGrader scores when a Q Grader logs in
   useEffect(() => {
     if (!currentUser) return;
-    if (!currentUser.roles.includes(Role.Q_GRADER)) return;
+    if (!currentUser.roles.includes(Role.Q_GRADER)) {
+      setIsQGraderScoresLoading(false);
+      return;
+    }
 
     (async () => {
+      setIsQGraderScoresLoading(true);
       try {
         const resp = await fetch(`${BACKEND_URL}/api/qgrader/scores/mine`, { credentials: 'include', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
         if (!resp.ok) return;
@@ -426,6 +431,8 @@ function App() {
         setAppData(prev => ({ ...prev, scores: [...prev.scores.filter(s => s.qGraderId !== currentUser.id), ...mapped] }));
       } catch (err) {
         console.error('Error loading persisted QGrader scores:', err);
+      } finally {
+        setIsQGraderScoresLoading(false);
       }
     })();
   }, [currentUser]);
@@ -1218,6 +1225,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1233,6 +1241,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1248,6 +1257,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1263,6 +1273,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1278,6 +1289,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (
@@ -1293,6 +1305,7 @@ function App() {
                 currentUser={currentUser}
                 appData={appData}
                 onUpdateScoreSheet={updateScoreSheet}
+                isScoresLoading={isQGraderScoresLoading}
                 onLogout={handleLogout}
               />
             ) : (

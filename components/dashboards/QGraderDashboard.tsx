@@ -540,9 +540,9 @@ const CuppingForm: React.FC<CuppingFormProps> = ({ scoreSheet, sample, onSave, o
 };
 
 // --- Main Dashboard Component ---
-interface QGraderDashboardProps { currentUser: User; appData: AppData; onUpdateScoreSheet: (sheet: ScoreSheet) => void; onLogout: () => void; }
+interface QGraderDashboardProps { currentUser: User; appData: AppData; onUpdateScoreSheet: (sheet: ScoreSheet) => void; isScoresLoading: boolean; onLogout: () => void; }
 
-const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appData, onUpdateScoreSheet, onLogout }) => {
+const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appData, onUpdateScoreSheet, isScoresLoading, onLogout }) => {
     const navigate = useNavigate();
     const location = useLocation();
     
@@ -836,15 +836,21 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         return objs.map((s: any) => ({ ...s, id: String(s.id) })) as CoffeeSample[];
     }, [selectedEvent]);
 
+    const findExistingScoreSheet = useCallback((sampleId: string) => {
+        if (!selectedEvent) return undefined;
+        const eventIdStr = String(selectedEvent.id);
+        return appData.scores.find(s => s.sampleId === sampleId && s.qGraderId === currentUser.id && s.eventId === eventIdStr);
+    }, [appData.scores, currentUser.id, selectedEvent]);
+
     const getOrCreateScoreSheet = useCallback((sampleId: string): ScoreSheet => {
         const eventIdStr = String(selectedEvent!.id);
-        const existing = appData.scores.find(s => s.sampleId === sampleId && s.qGraderId === currentUser.id && s.eventId === eventIdStr);
+        const existing = findExistingScoreSheet(sampleId);
         if (existing) return existing;
         return {
             id: `new-${sampleId}-${currentUser.id}-${eventIdStr}`, eventId: eventIdStr, qGraderId: currentUser.id, sampleId, isSubmitted: false, notes: '', descriptors: [],
             scores: { fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6, uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6, taints: 0, faults: 0, finalScore: 76 },
         };
-    }, [appData.scores, currentUser.id, selectedEvent]);
+    }, [currentUser.id, selectedEvent, findExistingScoreSheet]);
 
     const getSampleStatus = useCallback((scoreSheet: ScoreSheet, event: CuppingEvent): SampleStatus => {
         if (event.isResultsRevealed) {
@@ -1113,10 +1119,18 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                     <ChevronLeft size={16} />
                                     <span>Back to Events</span>
                                 </Button>
+                                {isScoresLoading && (
+                                    <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                                        <FileClock size={16} className="animate-pulse" />
+                                        <span>Loading scores...</span>
+                                    </div>
+                                )}
                                 <Card title={`Sample Tray: ${selectedEvent.name}`}>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                                         {samplesForEvent.map(sample => {
                                             const scoreSheet = getOrCreateScoreSheet(sample.id);
+                                            const existingScore = findExistingScoreSheet(sample.id);
+                                            const isSampleScoreLoading = isScoresLoading && !existingScore;
                                             const status = getSampleStatus(scoreSheet, selectedEvent);
                                             const config = statusConfig[status];
                                             const isInteractive = status !== 'Finalized';
@@ -1132,10 +1146,10 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                         }}
                                                         className={`relative p-4 border-2 ${config.borderColor} rounded-lg ${isInteractive ? 'cursor-pointer hover:bg-background' : 'cursor-not-allowed opacity-75 bg-gray-50'} transition-colors duration-200 aspect-square flex flex-col justify-center items-center text-center`}
                                                     >
-                                                        <div className="absolute top-2 right-2">{config.icon}</div>
+                                                        <div className="absolute top-2 right-2">{isSampleScoreLoading ? <FileClock className="text-blue-500 animate-pulse" /> : config.icon}</div>
                                                         <p className="font-mono text-2xl md:text-3xl font-bold">{sample.blindCode}</p>
                                                         <p className={`text-sm font-semibold ${config.className}`}>
-                                                            {(status === 'Submitted' || status === 'Finalized') ? `Score: ${scoreSheet.scores.finalScore.toFixed(2)}` : config.text}
+                                                            {isSampleScoreLoading ? 'Loading score...' : ((status === 'Submitted' || status === 'Finalized') ? `Score: ${scoreSheet.scores.finalScore.toFixed(2)}` : config.text)}
                                                         </p>
                                                     </div>
                                                 </div>
