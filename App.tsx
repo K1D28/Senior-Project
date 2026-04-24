@@ -615,13 +615,22 @@ function App() {
   const updateEventDetails = useCallback(async (eventId: string, updateData: EventDetailsUpdateData) => {
     try {
         // Update the backend
-        console.log('Payload for updating event details:', updateData); // Debugging log
-        await axios.put(`/api/cupping-events/${eventId}`, updateData);
+        console.log('Payload for updating event details:', updateData);
+        const token = localStorage.getItem('token');
+        await axios.put(`${BACKEND_URL}/api/cupping-events/${eventId}`, updateData, {
+            withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
 
         // Re-fetch the updated event data
-        console.log('Fetching cupping event with ID:', eventId); // Debugging log
-        const response = await axios.get(`/api/cupping-events/${eventId}`);
+        console.log('Fetching cupping event with ID:', eventId);
+        const response = await axios.get(`${BACKEND_URL}/api/cupping-events/${eventId}`, {
+            withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         const updatedEvent = response.data;
+
+        console.log('Updated event data:', updatedEvent);
 
         // Update the local state
         setAppData(prevData => ({

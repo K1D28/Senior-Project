@@ -103,18 +103,27 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                 processingMethods: formData.processingMethods,
                 tags: Array.isArray(formData.tags) ? formData.tags.map(t => typeof t === 'string' ? t : (t as any).tag) : undefined,
             };
+            
+            console.log('Sending payload:', payload);
+            
             const token = localStorage.getItem('token');
             const response = await axios.put(`${BACKEND_URL}/api/cupping-events/${event.id}`, payload, {
                 withCredentials: true,
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
-            // Notify parent to update state using the updated server response or payload
+            
+            console.log('Update response:', response.data);
+            
+            // Notify parent to update state using the updated server response
             onUpdate(event.id, payload);
+            
+            alert('Event updated successfully!');
             onClose();
         } catch (err: unknown) {
             let message = String(err);
             if (axios.isAxiosError(err)) {
                 message = err.response?.data?.message || err.message;
+                console.error('Error response:', err.response?.data);
             }
             console.error('Error updating event:', message);
             alert(`Failed to update event: ${message}`);
