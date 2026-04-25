@@ -231,7 +231,7 @@ const getCsvCell = (row: string[], headerMap: Map<string, number>, candidates: s
 };
 
 const scoreFieldCandidates: Record<BulkImportFieldKey, string[]> = {
-    fragrance: ['Fragrance', 'Fragrance/Aroma', 'Fragrance Aroma'],
+    fragrance: ['Fragrance', 'Frangrance', 'Fragrance/Aroma', 'Fragrance Aroma'],
     flavor: ['Flavor'],
     aftertaste: ['Aftertaste'],
     acidity: ['Acidity'],
@@ -270,7 +270,7 @@ const parseBulkScoreCsv = (text: string, samples: CoffeeSample[]) => {
     const encounteredSamples = new Set<string>();
 
     dataRows.forEach((row, index) => {
-        const rowNumber = index + 2;
+        const rowNumber = index + 1;
         const sampleReference = getCsvCell(row, headerMap, sampleReferenceCandidates);
         const notes = getCsvCell(row, headerMap, notesCandidates);
         const validationErrors: string[] = [];

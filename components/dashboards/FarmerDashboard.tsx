@@ -186,6 +186,33 @@ const getGradeFromScore = (score: number) => {
     return 'Below Specialty';
 };
 
+const clampScore = (value: number) => Math.min(100, Math.max(1, value));
+
+const toValidScore = (value: unknown): number | null => {
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value)) return null;
+        return clampScore(value);
+    }
+
+    if (typeof value === 'string') {
+        const cleaned = value.trim().replace(/[^0-9.-]/g, '');
+        if (!cleaned) return null;
+        const parsed = Number(cleaned);
+        if (!Number.isFinite(parsed)) return null;
+        return clampScore(parsed);
+    }
+
+    return null;
+};
+
+const isEventEnded = (event: CuppingEvent) => {
+    const status = String(event.status || '').toLowerCase();
+    if (status === 'complete') return true;
+    if (event.isResultsRevealed) return true;
+    const eventDate = new Date(event.date);
+    return Number.isFinite(eventDate.getTime()) ? eventDate.getTime() < Date.now() : false;
+};
+
 const RegistrationModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -503,19 +530,26 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     return [...latestRevealedEvent.samples].sort((a, b) => (b.adjudicatedFinalScore ?? 0) - (a.adjudicatedFinalScore ?? 0))[0];
   }, [latestRevealedEvent]);
 
-  const performanceData = useMemo(() => {
-    return farmerSamples
-      .filter(s => s.adjudicatedFinalScore && s.sampleType !== 'CALIBRATION')
-      .map(s => {
-        const event = appData.events.find(e => e.sampleIds.includes(s.id));
-        return {
-          name: event ? new Date(event.date).getFullYear().toString() : 'Unknown',
-          date: event ? event.date : '1970-01-01',
-          score: s.adjudicatedFinalScore,
-        };
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [farmerSamples, appData.events]);
+    const performanceData = useMemo(() => {
+        return allEventsWithFarmerSamples
+            .filter(event => isEventEnded(event))
+            .flatMap(event => {
+                const eventName = event.name || new Date(event.date).getFullYear().toString();
+                return event.samples
+                    .filter(sample => sample.sampleType !== 'CALIBRATION')
+                    .map(sample => {
+                        const score = toValidScore(sample.adjudicatedFinalScore);
+                        if (score === null) return null;
+                        return {
+                            name: eventName,
+                            date: event.date,
+                            score,
+                        };
+                    })
+                    .filter((row): row is { name: string; date: string; score: number } => row !== null);
+            })
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }, [allEventsWithFarmerSamples]);
   
   const earnedBadges = useMemo(() => {
     const badges: Record<string, { name: string; icon: React.ElementType; color: string; count: number; description: string }> = {};
@@ -617,7 +651,16 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                 <Card>
                     <div className="flex items-center space-x-2 mb-4"><TrendingUp className="text-primary" /><h3 className="text-xl font-bold">Your Performance Over Time</h3></div>
                     <div className="w-full h-64">
-                        <ResponsiveContainer><LineChart data={performanceData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={['dataMin - 1', 'dataMax + 1']} /><Tooltip /><Legend /><Line type="monotone" dataKey="score" stroke="#FF7600" strokeWidth={2} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer>
+                        <ResponsiveContainer>
+                            <LineChart data={performanceData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis domain={[1, 100]} allowDecimals={false} tickFormatter={(value) => `${Math.round(Number(value) || 0)}`} />
+                                <Tooltip formatter={(value) => [Number(value).toFixed(2), 'Score']} />
+                                <Legend />
+                                <Line type="monotone" dataKey="score" stroke="#FF7600" strokeWidth={2} activeDot={{ r: 8 }} name="Score" />
+                            </LineChart>
+                        </ResponsiveContainer>
                     </div>
                 </Card>
             )}
