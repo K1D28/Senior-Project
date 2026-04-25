@@ -209,8 +209,7 @@ const isEventEnded = (event: CuppingEvent) => {
     const status = String(event.status || '').toLowerCase();
     if (status === 'complete') return true;
     if (event.isResultsRevealed) return true;
-    const eventDate = new Date(event.date);
-    return Number.isFinite(eventDate.getTime()) ? eventDate.getTime() < Date.now() : false;
+    return false;
 };
 
 const RegistrationModal: React.FC<{

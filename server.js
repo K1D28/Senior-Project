@@ -2349,6 +2349,63 @@ function calculateTotal(attrs, defects = 0) {
   return sum - Number(defects || 0);
 }
 
+function calculateGradeFromScore(score) {
+  if (typeof score !== 'number' || Number.isNaN(score)) return null;
+  if (score >= 90) return 'Outstanding';
+  if (score >= 85) return 'Excellent';
+  if (score >= 80) return 'Specialty';
+  return 'Below Specialty';
+}
+
+// Canonical score recomputation for a sample:
+// 1) If at least one Head Judge final score exists -> use average of Head Judge final scores.
+// 2) Otherwise use average of submitted Q Grader totals.
+// 3) If none exist -> null.
+async function recalculateSampleAdjudicatedScore(sampleId) {
+  const numericSampleId = parseInt(sampleId);
+
+  const headJudgeDecisions = await prisma.headJudgeDecision.findMany({
+    where: {
+      sampleId: numericSampleId,
+      finalScore: { not: null },
+    },
+  });
+
+  if (headJudgeDecisions.length > 0) {
+    const headJudgeAvg = headJudgeDecisions.reduce((acc, decision) => acc + Number(decision.finalScore || 0), 0) / headJudgeDecisions.length;
+    return {
+      score: headJudgeAvg,
+      source: 'HEAD_JUDGE_AVG',
+      count: headJudgeDecisions.length,
+      grade: calculateGradeFromScore(headJudgeAvg),
+    };
+  }
+
+  const submittedQGraderScores = await prisma.qGraderScore.findMany({
+    where: {
+      sampleId: numericSampleId,
+      isSubmitted: true,
+    },
+  });
+
+  if (submittedQGraderScores.length > 0) {
+    const qGraderAvg = submittedQGraderScores.reduce((acc, score) => acc + Number(score.total || 0), 0) / submittedQGraderScores.length;
+    return {
+      score: qGraderAvg,
+      source: 'Q_GRADER_SUBMITTED_AVG',
+      count: submittedQGraderScores.length,
+      grade: calculateGradeFromScore(qGraderAvg),
+    };
+  }
+
+  return {
+    score: null,
+    source: 'NONE',
+    count: 0,
+    grade: null,
+  };
+}
+
 // Submit or update a Q Grader score for a sample
 app.post('/api/qgrader/scores', verifySupabaseToken, async (req, res) => {
   try {
@@ -2450,20 +2507,22 @@ app.post('/api/qgrader/scores', verifySupabaseToken, async (req, res) => {
       });
     }
 
-    // Recalculate adjudicatedFinalScore for the sample as the average of all QGrader totals
-    const scores = await prisma.qGraderScore.findMany({ where: { sampleId: parseInt(sampleId) } });
-    const avg = scores.length > 0 ? scores.reduce((acc, s) => acc + Number(s.total || 0), 0) / scores.length : null;
-    if (avg !== null) {
-      await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: { adjudicatedFinalScore: avg } });
-    }
-    
     // Respect per-grader finalization: if the request indicates the grader is finalizing, set isSubmitted
     const { isSubmitted: submitFlag } = req.body;
     if (submitFlag) {
       await prisma.qGraderScore.update({ where: { id: score.id }, data: { isSubmitted: true, submittedAt: new Date() } });
     }
 
-    res.json({ score, adjudicatedFinalScore: avg });
+    const recalculated = await recalculateSampleAdjudicatedScore(sampleId);
+    await prisma.sample.update({
+      where: { id: parseInt(sampleId) },
+      data: {
+        adjudicatedFinalScore: recalculated.score,
+        ...(recalculated.grade ? { gradeLevel: recalculated.grade } : {}),
+      }
+    });
+
+    res.json({ score, adjudicatedFinalScore: recalculated.score, adjudicationSource: recalculated.source, adjudicationCount: recalculated.count });
   } catch (error) {
     console.error('Error saving Q Grader score:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -2734,7 +2793,6 @@ app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async
 
     // Update the Sample record with adjudication summary fields
     const sampleUpdateData = {
-      adjudicatedFinalScore: finalScore ?? sample.adjudicatedFinalScore,
       gradeLevel: gradeLevel ?? sample.gradeLevel,
       headJudgeNotes: notes ?? sample.headJudgeNotes,
       adjudicationJustification: notes ?? sample.adjudicationJustification,
@@ -2748,13 +2806,22 @@ app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async
       sampleUpdateData.lockedAt = new Date();
     }
 
-    const updatedSample = await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: sampleUpdateData });
+    await prisma.sample.update({ where: { id: parseInt(sampleId) }, data: sampleUpdateData });
+
+    const recalculated = await recalculateSampleAdjudicatedScore(sampleId);
+    const updatedSample = await prisma.sample.update({
+      where: { id: parseInt(sampleId) },
+      data: {
+        adjudicatedFinalScore: recalculated.score,
+        ...(recalculated.grade ? { gradeLevel: recalculated.grade } : {}),
+      }
+    });
 
     // Note: Results are NO LONGER automatically revealed when all samples are locked.
     // Head Judge must manually reveal results using the separate reveal endpoint.
     let revealed = false;
 
-    res.json({ decision, sample: updatedSample, resultsRevealed: revealed });
+    res.json({ decision, sample: updatedSample, resultsRevealed: revealed, adjudicationSource: recalculated.source, adjudicationCount: recalculated.count });
   } catch (error) {
     console.error('Error saving head judge decision:', error);
     res.status(500).json({ message: 'Internal server error' });
