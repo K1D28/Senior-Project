@@ -1285,13 +1285,19 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         throw new Error(`Paper-based sample "${sample.farmName}" must have linked farmer or offline farmer name`);
       }
       
-      if (sample.id && sample.id !== '') {
-        // Existing sample - just collect its ID
-        existingSampleIds.push(parseInt(sample.id, 10));
+      // Only numeric IDs represent existing DB samples.
+      // Client-side temporary IDs (e.g. "offline-...") must be treated as new samples.
+      const sampleIdRaw = sample?.id;
+      const sampleIdStr = typeof sampleIdRaw === 'string' ? sampleIdRaw.trim() : String(sampleIdRaw ?? '').trim();
+      const hasNumericId = /^\d+$/.test(sampleIdStr);
+
+      if (hasNumericId) {
+        // Existing sample - just collect its DB ID
+        existingSampleIds.push(parseInt(sampleIdStr, 10));
       } else {
         // New sample - add to create list
         newSamples.push({
-          blindCode: generateBlindCode(name), // Generate blind code from event name + random digits
+          blindCode: sample.blindCode || generateBlindCode(name), // Keep provided code when available
           farmerId: farmerId,
           offlineFarmerName: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerName ? String(sample.offlineFarmerName).trim() : null) : null,
           offlineFarmerTag: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerTag ? String(sample.offlineFarmerTag).trim() : null) : null,
