@@ -9,7 +9,7 @@ import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Modal } from '../ui/Modal';
-import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles, BarChart2 } from 'lucide-react';
+import { ChevronLeft, Edit, CheckCircle, Award, Flag, TrendingUp, TrendingDown, ClipboardPaste, AlertTriangle, LogOut, Coffee, Trophy, Sparkles, BarChart2, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Coffee Cup Logo with Continuous Evaporation Animation
@@ -158,6 +158,198 @@ const defaultScoreAdjustments: ScoreAdjustments = {
     overall: 6,
 };
 
+const BULK_SCORE_FIELDS: { key: keyof ScoreAdjustments; label: string }[] = [
+    { key: 'fragrance', label: 'Fragrance/Aroma' },
+    { key: 'flavor', label: 'Flavor' },
+    { key: 'aftertaste', label: 'Aftertaste' },
+    { key: 'acidity', label: 'Acidity' },
+    { key: 'body', label: 'Body' },
+    { key: 'balance', label: 'Balance' },
+    { key: 'uniformity', label: 'Uniformity' },
+    { key: 'cleanCup', label: 'Clean Cup' },
+    { key: 'sweetness', label: 'Sweetness' },
+    { key: 'overall', label: 'Overall' },
+];
+
+interface BulkImportPreviewRow {
+    rowNumber: number;
+    sampleReference: string;
+    matchedSampleId: string | null;
+    matchedBlindCode: string | null;
+    values: Record<keyof ScoreAdjustments, number>;
+    notes: string;
+    validationErrors: string[];
+    importStatus: 'pending' | 'success' | 'error';
+    importMessage?: string;
+}
+
+const normalizeCsvHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const parseCsvText = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let insideQuotes = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        const nextCharacter = text[index + 1];
+
+        if (character === '"') {
+            if (insideQuotes && nextCharacter === '"') {
+                currentCell += '"';
+                index += 1;
+            } else {
+                insideQuotes = !insideQuotes;
+            }
+            continue;
+        }
+
+        if (character === ',' && !insideQuotes) {
+            currentRow.push(currentCell.trim());
+            currentCell = '';
+            continue;
+        }
+
+        if ((character === '\n' || character === '\r') && !insideQuotes) {
+            if (character === '\r' && nextCharacter === '\n') {
+                index += 1;
+            }
+            currentRow.push(currentCell.trim());
+            if (currentRow.some(cell => cell.trim() !== '')) {
+                rows.push(currentRow);
+            }
+            currentRow = [];
+            currentCell = '';
+            continue;
+        }
+
+        currentCell += character;
+    }
+
+    currentRow.push(currentCell.trim());
+    if (currentRow.some(cell => cell.trim() !== '')) {
+        rows.push(currentRow);
+    }
+
+    return rows;
+};
+
+const buildCsvHeaderMap = (headers: string[]) => {
+    const headerMap = new Map<string, number>();
+    headers.forEach((header, index) => {
+        headerMap.set(normalizeCsvHeader(header), index);
+    });
+    return headerMap;
+};
+
+const getCsvCell = (row: string[], headerMap: Map<string, number>, candidates: string[]) => {
+    for (const candidate of candidates) {
+        const index = headerMap.get(normalizeCsvHeader(candidate));
+        if (index !== undefined) {
+            return row[index]?.trim() ?? '';
+        }
+    }
+    return '';
+};
+
+const scoreFieldCandidates: Record<keyof ScoreAdjustments, string[]> = {
+    fragrance: ['Fragrance', 'Frangrance', 'Fragrance/Aroma', 'Fragrance Aroma'],
+    flavor: ['Flavor'],
+    aftertaste: ['Aftertaste'],
+    acidity: ['Acidity'],
+    body: ['Body'],
+    balance: ['Balance'],
+    uniformity: ['Uniformity'],
+    cleanCup: ['Clean Cup', 'CleanCup'],
+    sweetness: ['Sweetness'],
+    overall: ['Overall'],
+};
+
+const sampleReferenceCandidates = ['Sample ID', 'SampleId', 'sample_id', 'sample'];
+const notesCandidates = ['Notes', 'Note', 'Comments', 'Comment', 'Tasting Notes', 'TastingNotes'];
+
+const resolveSampleMatch = (reference: string, samples: CoffeeSample[]) => {
+    const normalizedReference = reference.trim();
+    return samples.find(sample => {
+        const sampleId = String(sample.id).trim();
+        const blindCode = String(sample.blindCode || '').trim();
+        return sampleId === normalizedReference || blindCode === normalizedReference || blindCode.toLowerCase() === normalizedReference.toLowerCase();
+    }) || null;
+};
+
+const calculateFinalScoreFromValues = (values: Record<keyof ScoreAdjustments, number>) =>
+    BULK_SCORE_FIELDS.reduce((total, field) => total + Number(values[field.key] ?? 0), 0);
+
+const parseBulkScoreCsv = (text: string, samples: CoffeeSample[]) => {
+    const rows = parseCsvText(text);
+    if (rows.length === 0) {
+        return { rows: [] as BulkImportPreviewRow[], errors: ['The CSV file is empty.'] };
+    }
+
+    const [headerRow, ...dataRows] = rows;
+    const headerMap = buildCsvHeaderMap(headerRow);
+    const parsedRows: BulkImportPreviewRow[] = [];
+    const encounteredSamples = new Set<string>();
+
+    dataRows.forEach((row, index) => {
+        const rowNumber = index + 1;
+        const sampleReference = getCsvCell(row, headerMap, sampleReferenceCandidates);
+        const notes = getCsvCell(row, headerMap, notesCandidates);
+        const validationErrors: string[] = [];
+
+        if (!sampleReference) {
+            validationErrors.push('Missing Sample ID.');
+        }
+
+        const matchedSample = sampleReference ? resolveSampleMatch(sampleReference, samples) : null;
+        if (!matchedSample) {
+            validationErrors.push(`Sample "${sampleReference || 'unknown'}" was not found in the selected event.`);
+        }
+
+        const values = {} as Record<keyof ScoreAdjustments, number>;
+        BULK_SCORE_FIELDS.forEach(field => {
+            const rawValue = getCsvCell(row, headerMap, scoreFieldCandidates[field.key]);
+            if (rawValue === '') {
+                validationErrors.push(`Missing ${field.label}.`);
+                values[field.key] = Number.NaN;
+                return;
+            }
+
+            const parsedValue = Number(rawValue);
+            if (Number.isNaN(parsedValue)) {
+                validationErrors.push(`${field.label} must be a number.`);
+                values[field.key] = Number.NaN;
+                return;
+            }
+            if (parsedValue < 0 || parsedValue > 10) {
+                validationErrors.push(`${field.label} must be between 0 and 10.`);
+            }
+            values[field.key] = parsedValue;
+        });
+
+        const normalizedSampleKey = matchedSample ? String(matchedSample.id) : sampleReference.toLowerCase();
+        if (normalizedSampleKey && encounteredSamples.has(normalizedSampleKey)) {
+            validationErrors.push(`Duplicate sample entry for "${sampleReference}" in the CSV.`);
+        } else if (normalizedSampleKey) {
+            encounteredSamples.add(normalizedSampleKey);
+        }
+
+        parsedRows.push({
+            rowNumber,
+            sampleReference,
+            matchedSampleId: matchedSample ? String(matchedSample.id) : null,
+            matchedBlindCode: matchedSample?.blindCode ? String(matchedSample.blindCode) : null,
+            values,
+            notes,
+            validationErrors,
+            importStatus: 'pending',
+        });
+    });
+
+    return { rows: parsedRows, errors: [] as string[] };
+};
+
 // --- Sub-components for the Cockpit ---
 
 const AtAGlanceMetrics: React.FC<{ sample: CoffeeSample, stats: any, graderCount: number }> = ({ sample, stats, graderCount }) => {
@@ -167,7 +359,7 @@ const AtAGlanceMetrics: React.FC<{ sample: CoffeeSample, stats: any, graderCount
                 <div><p className="text-sm text-text-light">Avg. Total Score</p><p className="text-2xl font-bold">{stats.average.toFixed(2)}</p></div>
                 <div><p className="text-sm text-text-light">Std. Deviation</p><p className="text-2xl font-bold">{stats.stdDev.toFixed(2)}</p></div>
                 <div><p className="text-sm text-text-light">Score Range</p><p className="text-2xl font-bold">{`${stats.range[0].toFixed(2)} - ${stats.range[1].toFixed(2)}`}</p></div>
-                <div><p className="text-sm text-text-light">Graders</p><p className="text-2xl font-bold">{graderCount}</p></div>
+                <div><p className="text-sm text-text-light">QGraders/HeadJudge</p><p className="text-2xl font-bold">{graderCount}</p></div>
                 <div><p className="text-sm text-text-light">Initial Grade</p><p className="text-xl font-bold text-primary">{getGradeFromScore(stats.average)}</p></div>
             </div>
         </Card>
@@ -474,20 +666,22 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const location = useLocation();
     
     // Map URL paths to tab names
-    const pathToTab: { [key: string]: 'adjudicate' | 'leaderboard' } = {
+    const pathToTab: { [key: string]: 'adjudicate' | 'leaderboard' | 'bulk-import' } = {
         '/headjudge-dashboard': 'adjudicate',
         '/headjudge-dashboard/adjudicate': 'adjudicate',
         '/headjudge-dashboard/leaderboard': 'leaderboard',
+        '/headjudge-dashboard/bulk-import': 'bulk-import',
     };
     
     // Map tab names to URL paths
-    const tabToPath: { [key in 'adjudicate' | 'leaderboard']: string } = {
+    const tabToPath: { [key in 'adjudicate' | 'leaderboard' | 'bulk-import']: string } = {
         adjudicate: '/headjudge-dashboard/adjudicate',
         leaderboard: '/headjudge-dashboard/leaderboard',
+        'bulk-import': '/headjudge-dashboard/bulk-import',
     };
     
     // Initialize activeTab from URL or default to 'adjudicate'
-    const [activeTab, setActiveTabState] = useState<'adjudicate' | 'leaderboard'>(() => {
+    const [activeTab, setActiveTabState] = useState<'adjudicate' | 'leaderboard' | 'bulk-import'>(() => {
         return pathToTab[location.pathname] || 'adjudicate';
     });
     
@@ -506,12 +700,94 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
     const [aiLoading, setAiLoading] = useState(false);
     const [reevalRequests, setReevalRequests] = useState<any[]>([]);
     const [reevalLoading, setReevalLoading] = useState(false);
+    const [bulkImportRows, setBulkImportRows] = useState<BulkImportPreviewRow[]>([]);
+    const [bulkImportErrors, setBulkImportErrors] = useState<string[]>([]);
+    const [bulkImportFileName, setBulkImportFileName] = useState<string>('');
+    const [bulkImportStatus, setBulkImportStatus] = useState<{ processing: boolean; completed: boolean; successCount: number; errorCount: number }>({ processing: false, completed: false, successCount: 0, errorCount: 0 });
     
     // Function for when user clicks a tab button - updates state AND navigates URL
-    const handleTabClick = (tab: 'adjudicate' | 'leaderboard') => {
+    const handleTabClick = (tab: 'adjudicate' | 'leaderboard' | 'bulk-import') => {
         setActiveTabState(tab);
         navigate(tabToPath[tab]);
     };
+
+    const resetBulkImportState = useCallback(() => {
+        setBulkImportRows([]);
+        setBulkImportErrors([]);
+        setBulkImportFileName('');
+        setBulkImportStatus({ processing: false, completed: false, successCount: 0, errorCount: 0 });
+    }, []);
+
+    const handleBulkImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>, samples: CoffeeSample[]) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const { rows, errors } = parseBulkScoreCsv(text, samples);
+            setBulkImportFileName(file.name);
+            setBulkImportRows(rows);
+            setBulkImportErrors(errors);
+            setBulkImportStatus({ processing: false, completed: false, successCount: 0, errorCount: rows.filter(row => row.validationErrors.length > 0).length });
+        } catch (error) {
+            console.error('Failed to parse CSV:', error);
+            setBulkImportFileName(file.name);
+            setBulkImportRows([]);
+            setBulkImportErrors(['Unable to parse CSV. Please check the file format and try again.']);
+            setBulkImportStatus({ processing: false, completed: false, successCount: 0, errorCount: 1 });
+        }
+    }, []);
+
+    const handleBulkImportSubmit = useCallback(async () => {
+        if (!selectedEvent) {
+            alert('Please select an event first.');
+            return;
+        }
+
+        const eligibleRows = bulkImportRows.filter(row => row.validationErrors.length === 0 && row.matchedSampleId);
+        if (eligibleRows.length === 0) {
+            alert('Upload a valid CSV with at least one matching sample before importing.');
+            return;
+        }
+
+        setBulkImportStatus({ processing: true, completed: false, successCount: 0, errorCount: bulkImportRows.length - eligibleRows.length });
+
+        let successCount = 0;
+        let errorCount = bulkImportRows.length - eligibleRows.length;
+        const nextRows: BulkImportPreviewRow[] = [];
+
+        for (const row of bulkImportRows) {
+            if (row.validationErrors.length > 0 || !row.matchedSampleId) {
+                nextRows.push({ ...row, importStatus: 'error', importMessage: row.validationErrors[0] || 'Row could not be imported.' });
+                continue;
+            }
+
+            try {
+                const finalScore = calculateFinalScoreFromValues(row.values);
+                onUpdateAdjudication(row.matchedSampleId, {
+                    score: finalScore,
+                    grade: getGradeFromScore(finalScore),
+                    notes: row.notes,
+                    scores: row.values,
+                    lock: false,
+                    flagged: false,
+                });
+
+                successCount += 1;
+                nextRows.push({ ...row, importStatus: 'success', importMessage: `Submitted for sample ${row.matchedBlindCode || row.matchedSampleId} (not locked).` });
+            } catch (error) {
+                errorCount += 1;
+                nextRows.push({ ...row, importStatus: 'error', importMessage: error instanceof Error ? error.message : 'Failed to save score.' });
+            }
+        }
+
+        setBulkImportRows(nextRows);
+        setBulkImportStatus({ processing: false, completed: true, successCount, errorCount });
+
+        window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('headjudge:decision-saved', { detail: { eventId: selectedEvent.id } }));
+        }, 600);
+    }, [selectedEvent, bulkImportRows, onUpdateAdjudication]);
 
     const fetchReevaluationRequests = useCallback(async (eventId?: string) => {
         try {
@@ -562,6 +838,11 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             setActiveTabState(tabFromUrl);
         }
     }, [location.pathname]);
+
+    useEffect(() => {
+        if (activeTab !== 'bulk-import') return;
+        resetBulkImportState();
+    }, [activeTab, selectedEvent?.id, resetBulkImportState]);
 
     // Clear AI analysis when switching samples to keep analysis isolated per sample
     useEffect(() => {
@@ -1068,6 +1349,17 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 <Trophy size={18} />
                                 <span>Leaderboard</span>
                             </button>
+                            <button
+                                onClick={() => handleTabClick('bulk-import')}
+                                className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                                  activeTab === 'bulk-import'
+                                    ? 'bg-primary text-white'
+                                    : 'text-black'
+                                }`}
+                            >
+                                <Upload size={18} />
+                                <span>Bulk Import</span>
+                            </button>
                         </nav>
 
                         {/* Head Judge Profile */}
@@ -1107,63 +1399,147 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                     <h3 className="text-2xl font-extrabold text-primary">Adjudicate Samples: {selectedEvent.name}</h3>
                                 </div>
 
-                                <div className="mb-6">
-                                    <h4 className="text-lg font-semibold text-gray-800 mb-3">Re-evaluation Requests</h4>
-                                    {reevalLoading ? (
-                                        <p className="text-sm text-gray-500">Loading requests...</p>
-                                    ) : reevalRequests.length === 0 ? (
-                                        <p className="text-sm text-gray-500">No re-evaluation requests for this event.</p>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {reevalRequests.map((req: any) => (
-                                                <div key={req.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                                    <div>
-                                                        <div className="text-sm font-semibold text-gray-800">Sample: {req.sample?.blindCode || req.sampleId}</div>
-                                                        <div className="text-xs text-gray-600">Status: {req.status}</div>
-                                                        {req.reason && <div className="text-xs text-gray-600 mt-1">Reason: {req.reason}</div>}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {req.status === 'PENDING' ? (
-                                                            <>
-                                                                <Button size="sm" className="bg-green-600 text-white" onClick={() => handleReevaluationDecision(req.id, 'APPROVED')}>Approve</Button>
-                                                                <Button size="sm" variant="secondary" onClick={() => handleReevaluationDecision(req.id, 'REJECTED')}>Decline</Button>
-                                                            </>
-                                                        ) : (
-                                                            <span className={`text-xs font-semibold ${req.status === 'APPROVED' ? 'text-green-700' : 'text-red-600'}`}>{req.status}</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                {activeTab === 'bulk-import' ? (
+                                    <div className="space-y-6">
+                                        <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
+                                            <h4 className="text-lg font-semibold text-gray-900">Bulk Score Import</h4>
+                                            <p className="text-sm text-gray-700 mt-1">Upload a CSV to submit Head Judge scores for this event. Scores are saved only — judgement remains unlocked until you lock it manually from each sample.</p>
                                         </div>
-                                    )}
-                                </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                    {samplesForEvent.map(sample => {
-                                        const relevantScores = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === selectedEvent.id && s.isSubmitted);
-                                        const { average } = calculateStats(relevantScores.map(s => s.scores.finalScore));
-
-                                        return (
-                                            <div key={sample.id} className="space-y-0">
-                                                <div 
-                                                    onClick={() => {
-                                                        setSelectedSample(sample);
-                                                        navigate(`/headjudge-dashboard/adjudicate/${encodeURIComponent(selectedEvent.name)}/${encodeURIComponent(sample.blindCode || '')}`);
-                                                    }}
-                                                    className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm flex flex-col justify-between h-full"
-                                                >
-                                                    {sample.adjudicatedFinalScore && <span className="absolute top-2 right-2 text-green-600" title="Finalized"><CheckCircle size={18}/></span>}
-                                                    {sample.flaggedForDiscussion && <span className="absolute top-2 left-2 text-yellow-600" title="Flagged for Discussion"><Flag size={18}/></span>}
-                                                    <div className="flex-1 flex flex-col justify-center">
-                                                        <p className="font-mono text-xl font-bold text-gray-800">{sample.blindCode}</p>
-                                                        <p className="text-sm font-semibold text-primary">{relevantScores.length > 0 ? `${average.toFixed(2)} avg` : 'No Scores'}</p>
-                                                        <p className="text-xs text-text-light">{relevantScores.length} / {selectedEvent.assignedQGraderIds.length} scores in</p>
-                                                    </div>
-                                                </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                            <div className="md:col-span-2">
+                                                <label className="text-sm font-semibold text-gray-700">Upload CSV</label>
+                                                <label className="mt-2 flex items-center justify-between border border-dashed border-primary/40 bg-white rounded-lg px-4 py-3 cursor-pointer hover:border-primary transition-colors">
+                                                    <span className="text-sm text-gray-700 truncate">{bulkImportFileName || 'Choose a CSV file with score rows'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept=".csv,text/csv"
+                                                        className="hidden"
+                                                        onChange={(e) => handleBulkImportFile(e, samplesForEvent)}
+                                                        disabled={bulkImportStatus.processing}
+                                                    />
+                                                    <span className="inline-flex items-center gap-2 text-primary text-sm font-semibold"><Upload size={16} /> Browse</span>
+                                                </label>
                                             </div>
-                                        )
-                                    })}
-                                </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button onClick={handleBulkImportSubmit} disabled={bulkImportRows.length === 0 || bulkImportStatus.processing}>
+                                                    {bulkImportStatus.processing ? 'Importing...' : 'Import Scores'}
+                                                </Button>
+                                                <Button variant="secondary" onClick={resetBulkImportState} disabled={bulkImportStatus.processing}>Clear</Button>
+                                            </div>
+                                        </div>
+
+                                        {(bulkImportErrors.length > 0 || bulkImportStatus.completed) && (
+                                            <div className="space-y-2">
+                                                {bulkImportErrors.map((error, idx) => (
+                                                    <div key={idx} className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2 flex items-center gap-2"><AlertCircle size={14} />{error}</div>
+                                                ))}
+                                                {bulkImportStatus.completed && (
+                                                    <p className="text-sm text-gray-700">{bulkImportStatus.successCount} saved, {bulkImportStatus.errorCount} failed.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {bulkImportRows.length > 0 && (
+                                            <div className="overflow-x-auto border border-border rounded-lg">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-border bg-background">
+                                                            <th className="py-2 px-3 text-left font-semibold">Row</th>
+                                                            <th className="py-2 px-3 text-left font-semibold">Sample</th>
+                                                            {BULK_SCORE_FIELDS.map(field => (
+                                                                <th key={field.key} className="py-2 px-3 text-center font-semibold">{field.label}</th>
+                                                            ))}
+                                                            <th className="py-2 px-3 text-left font-semibold">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {bulkImportRows.map(row => (
+                                                            <tr key={`${row.rowNumber}-${row.sampleReference}`} className="border-b border-border last:border-b-0">
+                                                                <td className="py-2 px-3 tabular-nums">{row.rowNumber}</td>
+                                                                <td className="py-2 px-3">
+                                                                    <div className="font-semibold">{row.matchedBlindCode || row.sampleReference || '--'}</div>
+                                                                    {row.validationErrors.length > 0 && <p className="text-xs text-red-600">{row.validationErrors[0]}</p>}
+                                                                </td>
+                                                                {BULK_SCORE_FIELDS.map(field => (
+                                                                    <td key={field.key} className="py-2 px-3 text-center tabular-nums">{Number.isFinite(row.values[field.key]) ? row.values[field.key].toFixed(2) : '--'}</td>
+                                                                ))}
+                                                                <td className="py-2 px-3">
+                                                                    <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${row.importStatus === 'success' ? 'bg-green-100 text-green-800' : row.importStatus === 'error' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'}`}>
+                                                                        {row.importStatus === 'success' ? <CheckCircle size={12} /> : row.importStatus === 'error' ? <AlertCircle size={12} /> : <FileSpreadsheet size={12} />}
+                                                                        <span>{row.importMessage || (row.importStatus === 'pending' ? 'Ready' : row.importStatus)}</span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="mb-6">
+                                            <h4 className="text-lg font-semibold text-gray-800 mb-3">Re-evaluation Requests</h4>
+                                            {reevalLoading ? (
+                                                <p className="text-sm text-gray-500">Loading requests...</p>
+                                            ) : reevalRequests.length === 0 ? (
+                                                <p className="text-sm text-gray-500">No re-evaluation requests for this event.</p>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {reevalRequests.map((req: any) => (
+                                                        <div key={req.id} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-gray-800">Sample: {req.sample?.blindCode || req.sampleId}</div>
+                                                                <div className="text-xs text-gray-600">Status: {req.status}</div>
+                                                                {req.reason && <div className="text-xs text-gray-600 mt-1">Reason: {req.reason}</div>}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {req.status === 'PENDING' ? (
+                                                                    <>
+                                                                        <Button size="sm" className="bg-green-600 text-white" onClick={() => handleReevaluationDecision(req.id, 'APPROVED')}>Approve</Button>
+                                                                        <Button size="sm" variant="secondary" onClick={() => handleReevaluationDecision(req.id, 'REJECTED')}>Decline</Button>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className={`text-xs font-semibold ${req.status === 'APPROVED' ? 'text-green-700' : 'text-red-600'}`}>{req.status}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            {samplesForEvent.map(sample => {
+                                                const relevantScores = mergedAppData.scores.filter(s => s.sampleId === sample.id && s.eventId === selectedEvent.id && s.isSubmitted);
+                                                const totalAssigned = (selectedEvent.assignedQGraderIds?.length || 0) + (selectedEvent.assignedHeadJudgeIds?.length || 0);
+                                                const submittedCount = Math.min(relevantScores.length, totalAssigned);
+                                                const { average } = calculateStats(relevantScores.map(s => s.scores.finalScore));
+
+                                                return (
+                                                    <div key={sample.id} className="space-y-0">
+                                                        <div 
+                                                            onClick={() => {
+                                                                setSelectedSample(sample);
+                                                                navigate(`/headjudge-dashboard/adjudicate/${encodeURIComponent(selectedEvent.name)}/${encodeURIComponent(sample.blindCode || '')}`);
+                                                            }}
+                                                            className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm flex flex-col justify-between h-full"
+                                                        >
+                                                            {Boolean(sample.isLocked) && <span className="absolute top-2 right-2 text-green-600" title="Judgement Locked"><CheckCircle size={18}/></span>}
+                                                            {sample.flaggedForDiscussion && <span className="absolute top-2 left-2 text-yellow-600" title="Flagged for Discussion"><Flag size={18}/></span>}
+                                                            <div className="flex-1 flex flex-col justify-center">
+                                                                <p className="font-mono text-xl font-bold text-gray-800">{sample.blindCode}</p>
+                                                                <p className="text-sm font-semibold text-primary">{relevantScores.length > 0 ? `${average.toFixed(2)} avg` : 'No Scores'}</p>
+                                                                <p className="text-xs text-text-light">{submittedCount} / {totalAssigned} scores in</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </>
+                                )}
                             </Card>
                         </div>
                     </div>
@@ -1214,6 +1590,21 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         >
                             <Trophy size={18} />
                             <span>Leaderboard</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                handleTabClick('bulk-import');
+                                setSelectedEvent(null);
+                                setSelectedSample(null);
+                            }}
+                            className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
+                              activeTab === 'bulk-import'
+                                ? 'bg-primary text-white'
+                                : 'text-gray-700 hover:text-black'
+                            }`}
+                        >
+                            <Upload size={18} />
+                            <span>Bulk Import</span>
                         </button>
                     </nav>
 
@@ -1445,6 +1836,27 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                     </Card>
                                 )}
                             </div>
+                        )}
+                        {activeTab === 'bulk-import' && (
+                            <Card>
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-bold text-primary">Bulk Score Import</h3>
+                                    <p className="text-sm text-gray-600">Choose an event below to open its bulk import screen. Imported Head Judge scores are saved without auto-locking judgements.</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {assignedEvents.length > 0 ? assignedEvents.map(event => (
+                                            <div key={event.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="font-semibold text-gray-900">{event.name}</p>
+                                                    <p className="text-xs text-gray-500">{event.sampleIds?.length || 0} samples</p>
+                                                </div>
+                                                <Button onClick={() => setSelectedEvent(event)} size="sm" className="bg-primary text-white hover:bg-primary/90">Open Import</Button>
+                                            </div>
+                                        )) : (
+                                            <p className="text-sm text-gray-500">No assigned events available for import.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </Card>
                         )}
                     </div>
                 </div>
