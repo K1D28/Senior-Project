@@ -460,6 +460,22 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
     
     // Head Judge score sheet values start from a neutral baseline.
     const [adjustedScores, setAdjustedScores] = useState<ScoreAdjustments>(defaultScoreAdjustments);
+
+    const existingHeadJudgeScore = useMemo(() => {
+        if (!appData || !event) return null;
+
+        const submittedForSample = appData.scores.filter(
+            s => String(s.sampleId) === String(sample.id) && String(s.eventId) === String(event.id) && s.isSubmitted
+        );
+
+        const submittedByHeadJudge = submittedForSample.filter(s => {
+            const scorer = appData.users.find(u => String(u.id) === String(s.qGraderId));
+            return Boolean(scorer?.roles?.includes(Role.HEAD_JUDGE));
+        });
+
+        if (submittedByHeadJudge.length === 0) return null;
+        return submittedByHeadJudge[submittedByHeadJudge.length - 1];
+    }, [appData, event, sample.id]);
     
     // Calculate final score based on adjusted scores (same formula as Q Grader)
     const calculatedFinalScore = useMemo(() => {
@@ -467,12 +483,30 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         return sum;
     }, [adjustedScores]);
 
-    // Reset form state when sample changes (by blind code)
+    // Reset form state when sample changes and prefill from any saved Head Judge decision
     useEffect(() => {
-        setAdjustedScores(defaultScoreAdjustments);
-        setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
-        setHeadJudgeNotes(sample.headJudgeNotes || '');
-    }, [sample.id, sample.blindCode, appData, event, avgScore]);
+        const fromExisting = existingHeadJudgeScore?.scores;
+        const nextScores: ScoreAdjustments = fromExisting
+            ? {
+                fragrance: Number(fromExisting.fragrance ?? defaultScoreAdjustments.fragrance),
+                flavor: Number(fromExisting.flavor ?? defaultScoreAdjustments.flavor),
+                aftertaste: Number(fromExisting.aftertaste ?? defaultScoreAdjustments.aftertaste),
+                acidity: Number(fromExisting.acidity ?? defaultScoreAdjustments.acidity),
+                body: Number(fromExisting.body ?? defaultScoreAdjustments.body),
+                balance: Number(fromExisting.balance ?? defaultScoreAdjustments.balance),
+                uniformity: Number(fromExisting.uniformity ?? defaultScoreAdjustments.uniformity),
+                cleanCup: Number(fromExisting.cleanCup ?? defaultScoreAdjustments.cleanCup),
+                sweetness: Number(fromExisting.sweetness ?? defaultScoreAdjustments.sweetness),
+                overall: Number(fromExisting.overall ?? defaultScoreAdjustments.overall),
+            }
+            : defaultScoreAdjustments;
+
+        setAdjustedScores(nextScores);
+
+        const resolvedFinalScore = existingHeadJudgeScore?.scores?.finalScore ?? avgScore;
+        setGradeLevel(sample.gradeLevel || getGradeFromScore(Number(resolvedFinalScore)));
+        setHeadJudgeNotes(sample.headJudgeNotes || existingHeadJudgeScore?.notes || '');
+    }, [sample.id, sample.blindCode, sample.gradeLevel, sample.headJudgeNotes, avgScore, existingHeadJudgeScore]);
 
     // Auto-fill final notes for farmer when AI analysis is received
     useEffect(() => {
