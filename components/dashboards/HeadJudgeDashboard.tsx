@@ -132,6 +132,32 @@ const getGradeFromScore = (score: number) => {
     return 'Below Specialty';
 };
 
+type ScoreAdjustments = {
+    fragrance: number;
+    flavor: number;
+    aftertaste: number;
+    acidity: number;
+    body: number;
+    balance: number;
+    uniformity: number;
+    cleanCup: number;
+    sweetness: number;
+    overall: number;
+};
+
+const defaultScoreAdjustments: ScoreAdjustments = {
+    fragrance: 6,
+    flavor: 6,
+    aftertaste: 6,
+    acidity: 6,
+    body: 6,
+    balance: 6,
+    uniformity: 10,
+    cleanCup: 10,
+    sweetness: 10,
+    overall: 6,
+};
+
 // --- Sub-components for the Cockpit ---
 
 const AtAGlanceMetrics: React.FC<{ sample: CoffeeSample, stats: any, graderCount: number }> = ({ sample, stats, graderCount }) => {
@@ -242,26 +268,20 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
     const [headJudgeNotes, setHeadJudgeNotes] = useState<string>(sample.headJudgeNotes || '');
     
     // Initialize adjusted scores from Q Grader averages
-    const [adjustedScores, setAdjustedScores] = useState(() => {
+    const [adjustedScores, setAdjustedScores] = useState<ScoreAdjustments>(() => {
         if (!appData || !event) {
-            return {
-                fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
-                uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
-            };
+            return defaultScoreAdjustments;
         }
         
         const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
         
         if (scoresForSample.length === 0) {
-            return {
-                fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
-                uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
-            };
+            return defaultScoreAdjustments;
         }
         
         const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
         
-        const avgScores: Record<string, number> = {};
+        const avgScores: ScoreAdjustments = { ...defaultScoreAdjustments };
         attributes.forEach(attr => {
             const values = scoresForSample.map(s => s.scores[attr]);
             avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
@@ -272,11 +292,11 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
         const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
         const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
         
-        Object.keys(avgScores).forEach(attr => {
+        attributes.forEach(attr => {
             avgScores[attr] = avgScores[attr] * scaleFactor;
         });
         
-        return avgScores as any;
+        return avgScores;
     });
     
     // Calculate final score based on adjusted scores (same formula as Q Grader)
@@ -288,22 +308,16 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
     // Reset form state when sample changes (by blind code)
     useEffect(() => {
         if (!appData || !event) {
-            setAdjustedScores({
-                fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
-                uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
-            });
+            setAdjustedScores(defaultScoreAdjustments);
         } else {
             const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
             
             if (scoresForSample.length === 0) {
-                setAdjustedScores({
-                    fragrance: 6, flavor: 6, aftertaste: 6, acidity: 6, body: 6, balance: 6,
-                    uniformity: 10, cleanCup: 10, sweetness: 10, overall: 6
-                });
+                setAdjustedScores(defaultScoreAdjustments);
             } else {
                 const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
                 
-                const avgScores: Record<string, number> = {};
+                const avgScores: ScoreAdjustments = { ...defaultScoreAdjustments };
                 attributes.forEach(attr => {
                     const values = scoresForSample.map(s => s.scores[attr]);
                     avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
@@ -313,11 +327,11 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                 const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
                 const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
                 
-                Object.keys(avgScores).forEach(attr => {
+                attributes.forEach(attr => {
                     avgScores[attr] = avgScores[attr] * scaleFactor;
                 });
                 
-                setAdjustedScores(avgScores as any);
+                setAdjustedScores(avgScores);
             }
         }
         setJustification(sample.adjudicationJustification || '');
@@ -738,7 +752,10 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         const fetchLeaderboardData = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const headers: Record<string, string> = {};
+                if (token) {
+                    headers.Authorization = `Bearer ${token}`;
+                }
                 
                 const [eventsResponse, samplesResponse] = await Promise.all([
                     fetch(`${BACKEND_URL}/api/cupping-events`, { method: 'GET', credentials: 'include', headers }),
@@ -769,7 +786,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
             // Get Q Grader scores for this sample
             const sampleScores = fetchedScores.filter(s => s.sampleId === String(selectedSample.id));
             console.log('Found scores:', sampleScores.length);
-            const avgScores = {};
+            const avgScores: Record<string, number> = {};
             
             if (sampleScores.length > 0) {
                 const scoreKeys = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'];
@@ -1372,7 +1389,6 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                         {activeTab === 'leaderboard' && (
                         <div className="space-y-6">
                                 <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
-                                {console.log('HeadJudge Leaderboard Debug:', { eventsCount: leaderboardEvents.length, revealedCount: leaderboardEvents.filter(e => e.isResultsRevealed).length, revealedWithSamples: leaderboardEvents.filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0).length, events: leaderboardEvents.map(e => ({ name: e.name, revealed: e.isResultsRevealed, sampleCount: e.sampleIds?.length ?? 0 })) })}
                                 {leaderboardEvents.length > 0 && leaderboardEvents.some(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0) ? (
                                     leaderboardEvents
                                       .filter(e => e.isResultsRevealed && (e.sampleIds?.length ?? 0) > 0)

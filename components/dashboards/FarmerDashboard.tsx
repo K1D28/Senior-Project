@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, CoffeeSample, CuppingEvent } from '../../types';
 import { AppData } from '../../data';
-import { NewSampleRegistrationData } from '../../App';
+import { NewSampleRegistrationData, SubmissionResult } from '../../App';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -140,10 +140,15 @@ const CoffeeCupLogo: React.FC<{ size?: number }> = ({ size = 48 }) => {
 interface FarmerDashboardProps {
   currentUser: User;
   appData: AppData;
-  onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
-  onRegisterSampleWithoutEvent?: (sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => void;
+    onRegisterForEvent: (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => Promise<SubmissionResult>;
+    onRegisterSampleWithoutEvent?: (sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => Promise<SubmissionResult>;
   onLogout: () => void;
 }
+
+type FarmerNotification = {
+    type: 'success' | 'error';
+    message: string;
+};
 
 type Tab = 'dashboard' | 'events' | 'RegisterSample' | 'leaderboard';
 
@@ -358,6 +363,12 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
   const [farmerDatabaseId, setFarmerDatabaseId] = useState<number | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+    const [notification, setNotification] = useState<FarmerNotification | null>(null);
+
+    const showNotification = (type: FarmerNotification['type'], message: string) => {
+        setNotification({ type, message });
+        setTimeout(() => setNotification(null), 3000);
+    };
 
   // First, fetch the farmer's database ID
   useEffect(() => {
@@ -510,15 +521,22 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     setSelectedEventForRegistration(null);
   };
 
-  const handleRegisterSubmit = (sampleData: NewSampleRegistrationData) => {
-      if(selectedEventForRegistration && farmerDatabaseId) {
-          onRegisterForEvent(selectedEventForRegistration.id, sampleData, farmerDatabaseId);
-          // Trigger a refresh of events to show the newly submitted sample
-          setTimeout(() => {
-            setRefreshKey(prev => prev + 1);
-          }, 500);
-      }
-      handleCloseRegisterModal();
+    const handleRegisterSubmit = async (sampleData: NewSampleRegistrationData) => {
+            if (!selectedEventForRegistration || !farmerDatabaseId) {
+                    showNotification('error', 'Unable to submit sample. Please try again.');
+                    return;
+            }
+
+            const result = await onRegisterForEvent(selectedEventForRegistration.id, sampleData, farmerDatabaseId);
+            showNotification(result.ok ? 'success' : 'error', result.message);
+
+            if (result.ok) {
+                    // Trigger a refresh of events to show the newly submitted sample
+                    setTimeout(() => {
+                        setRefreshKey(prev => prev + 1);
+                    }, 500);
+                    handleCloseRegisterModal();
+            }
   };
 
 
@@ -673,7 +691,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                         {event.samples.length === 0 ? (
                             <div className="pt-4 first:pt-0">
                                 <div className="rounded-lg border border-dashed border-border bg-background p-4">
-                                    <p className="font-semibold text-text-dark">No samples assigned to this event yet.</p>
+                                    <p className="font-semibold text-text-dark">No samples assigned to this event.</p>
                                 </div>
                             </div>
                         ) : event.samples.map(sample => {
@@ -730,6 +748,14 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
     <>
     <style>{transitionStyles}</style>
     <div className="fixed inset-0 bg-white flex flex-col">
+        {notification && (
+            <div className="fixed top-4 right-4 z-50">
+                <div className={`min-w-[260px] max-w-sm rounded-lg border px-4 py-3 shadow-lg ${notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
+                    <p className="font-semibold">{notification.type === 'success' ? 'Success' : 'Submission Failed'}</p>
+                    <p className="text-sm mt-1">{notification.message}</p>
+                </div>
+            </div>
+        )}
         {/* Main Layout with Sidebar */}
         <div className="flex flex-1 overflow-hidden">
             {/* Left Sidebar Menu */}
@@ -909,7 +935,7 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                             {/* Manual Registration Form */}
                             <Card title="Manual Sample Registration (Required Approval by Admin)">
                                 <p className="text-sm text-text-light mb-6"><strong>These Samples will be not assigned to the event. Require Admin to be assigned to event</strong></p>
-                                <form onSubmit={(e) => {
+                                <form onSubmit={async (e) => {
                                     e.preventDefault();
                                     if (!sampleData.farmName || !sampleData.region || !sampleData.variety || !sampleData.processingMethod) {
                                         alert("Please fill out all required fields.");
@@ -917,18 +943,27 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                                     }
                                     // Call register without event context
                                     if (farmerDatabaseId) {
-                                        onRegisterSampleWithoutEvent?.(sampleData, farmerDatabaseId);
-                                        setSampleData({
-                                            farmName: '',
-                                            region: '',
-                                            altitude: 0,
-                                            processingMethod: '',
-                                            variety: '',
-                                            moisture: undefined,
-                                        });
-                                        setTimeout(() => {
-                                            setRefreshKey(prev => prev + 1);
-                                        }, 500);
+                                        const result = await onRegisterSampleWithoutEvent?.(sampleData, farmerDatabaseId);
+                                        if (!result) {
+                                            showNotification('error', 'Sample registration is unavailable.');
+                                            return;
+                                        }
+
+                                        showNotification(result.ok ? 'success' : 'error', result.message);
+
+                                        if (result.ok) {
+                                            setSampleData({
+                                                farmName: '',
+                                                region: '',
+                                                altitude: 0,
+                                                processingMethod: '',
+                                                variety: '',
+                                                moisture: undefined,
+                                            });
+                                            setTimeout(() => {
+                                                setRefreshKey(prev => prev + 1);
+                                            }, 500);
+                                        }
                                     }
                                 }} className="space-y-4">
                                     <div>

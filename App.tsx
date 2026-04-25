@@ -55,6 +55,11 @@ export interface NewSampleRegistrationData {
     moisture?: number;
 }
 
+export interface SubmissionResult {
+  ok: boolean;
+  message: string;
+}
+
 export interface EventSamplesUpdateData {
   eventId: string;
   samples: CoffeeSample[]; // Full list of samples for the event, new ones will not have an ID
@@ -800,105 +805,96 @@ function App() {
     })();
   }, [currentUser]);
   
-  const registerForEvent = useCallback((eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => {
-    if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;
+  const registerForEvent = useCallback(async (eventId: string, sampleData: NewSampleRegistrationData, farmerDatabaseId: number): Promise<SubmissionResult> => {
+    if (!currentUser || !currentUser.roles.includes(Role.FARMER)) {
+      return { ok: false, message: 'Only farmers can submit samples.' };
+    }
 
-    const newSample: CoffeeSample = {
-        ...sampleData,
-        id: `sample-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        farmerId: currentUser.id,
-        blindCode: 'PENDING', // Backend will assign this
-        sampleType: 'FARMER_DIRECTREGISTERED', // Mark as farmer-directly-registered sample (submitted to event)
-    };
-    
     console.log('registerForEvent: Submitting sample as FARMER_DIRECTREGISTERED to event', eventId);
 
-    // Submit the sample directly to the event (no need to register as participant first)
-    fetch(`${BACKEND_URL}/api/samples`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        farmName: sampleData.farmName,
-        farmerId: farmerDatabaseId,
-        region: sampleData.region,
-        variety: sampleData.variety,
-        processingMethod: sampleData.processingMethod,
-        altitude: sampleData.altitude,
-        moisture: sampleData.moisture,
-        cuppingEventId: parseInt(eventId),
-        sampleType: 'FARMER_DIRECTREGISTERED',
-      }),
-    })
-    .then(response => {
-      if (response.ok) {
-        console.log('Sample registered successfully');
-        // Update local state
-        setAppData(prevData => {
-          const updatedEvents = prevData.events.map(event => {
-            if (event.id === eventId) {
-              return {
-                ...event,
-                sampleIds: [...event.sampleIds, newSample.id],
-              };
-            }
-            return event;
-          });
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/samples`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          farmName: sampleData.farmName,
+          farmerId: farmerDatabaseId,
+          region: sampleData.region,
+          variety: sampleData.variety,
+          processingMethod: sampleData.processingMethod,
+          altitude: sampleData.altitude,
+          moisture: sampleData.moisture,
+          cuppingEventId: parseInt(eventId),
+          sampleType: 'FARMER_DIRECTREGISTERED',
+        }),
+      });
 
-          return {
-            ...prevData,
-            samples: [...prevData.samples, newSample],
-            events: updatedEvents,
-          };
-        });
-        alert('Sample registered successfully!');
-      } else {
-        alert('Failed to register sample');
+      if (!response.ok) {
+        let message = 'Failed to submit sample to event.';
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.message) message = String(errorBody.message);
+        } catch {
+          // ignore parse errors
+        }
+        return { ok: false, message };
       }
-    })
-    .catch(error => {
+
+      console.log('Sample registered successfully');
+      return { ok: true, message: 'Sample submitted to event successfully.' };
+    } catch (error) {
       console.error('Error registering sample:', error);
-      alert('Error registering sample');
-    });
+      return { ok: false, message: 'Network error while submitting sample to event.' };
+    }
   }, [currentUser]);
 
-  const registerSampleWithoutEvent = useCallback((sampleData: NewSampleRegistrationData, farmerDatabaseId: number) => {
-    if (!currentUser || !currentUser.roles.includes(Role.FARMER)) return;
+  const registerSampleWithoutEvent = useCallback(async (sampleData: NewSampleRegistrationData, farmerDatabaseId: number): Promise<SubmissionResult> => {
+    if (!currentUser || !currentUser.roles.includes(Role.FARMER)) {
+      return { ok: false, message: 'Only farmers can register samples.' };
+    }
 
-    // Submit sample without blind code and without event assignment
-    fetch(`${BACKEND_URL}/api/samples`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        farmName: sampleData.farmName,
-        farmerId: farmerDatabaseId,
-        region: sampleData.region,
-        variety: sampleData.variety,
-        processingMethod: sampleData.processingMethod,
-        altitude: sampleData.altitude,
-        moisture: sampleData.moisture,
-        sampleType: 'FARMER_REGISTERED',
-        // No cuppingEventId - sample is not assigned to any event yet
-      }),
-    })
-    .then(response => {
-      if (response.ok) {
-        console.log('Sample registered successfully without event');
-      } else {
-        alert('Failed to register sample');
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/samples`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          farmName: sampleData.farmName,
+          farmerId: farmerDatabaseId,
+          region: sampleData.region,
+          variety: sampleData.variety,
+          processingMethod: sampleData.processingMethod,
+          altitude: sampleData.altitude,
+          moisture: sampleData.moisture,
+          sampleType: 'FARMER_REGISTERED',
+          // No cuppingEventId - sample is not assigned to any event yet
+        }),
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to register sample.';
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.message) message = String(errorBody.message);
+        } catch {
+          // ignore parse errors
+        }
+        return { ok: false, message };
       }
-    })
-    .catch(error => {
+
+      console.log('Sample registered successfully without event');
+      return { ok: true, message: 'Sample registered successfully.' };
+    } catch (error) {
       console.error('Error registering sample:', error);
-      alert('Error registering sample');
-    });
+      return { ok: false, message: 'Network error while registering sample.' };
+    }
   }, [currentUser]);
 
   const renderDashboard = () => {
