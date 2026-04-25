@@ -51,9 +51,12 @@ export interface ActivityLog {
 
 export interface CoffeeSample {
   id: string;
-  farmerId: string;
+  farmerId: string | null;
   // Optional name included by the /api/samples endpoint to avoid repeated lookups
   farmerName?: string | null;
+  offlineFarmerName?: string | null;
+  offlineFarmerTag?: string | null;
+  offlineSubmissionRef?: string | null;
   blindCode?: string | null;
   farmName: string;
   region: string;
@@ -61,7 +64,7 @@ export interface CoffeeSample {
   processingMethod: string;
   variety: string;
   moisture?: number;
-  sampleType?: 'FARMER_REGISTERED' | 'FARMER_DIRECTREGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION'; // Type of sample
+  sampleType?: 'FARMER_REGISTERED' | 'FARMER_DIRECTREGISTERED' | 'PROXY_SUBMISSION' | 'CALIBRATION' | 'PAPER_BASED_OFFLINE'; // Type of sample
   approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED'; // Approval status for farmer samples
   approvedByAdminId?: string | null;
   approvalDate?: string | null;

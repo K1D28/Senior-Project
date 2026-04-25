@@ -105,6 +105,9 @@ model Sample {
   blindCode             String? // Optional - null for pending farmer samples, UUID when approved
   farmName              String
   farmerId              Int?          // Optional for CALIBRATION samples, required for others
+  offlineFarmerName     String?       // Admin-entered farmer name for paper/offline submission
+  offlineFarmerTag      String?       // Optional tag/code for offline farmer grouping
+  offlineSubmissionRef  String?       // Optional paper form reference number
   region                String?
   variety               String
   processingMethod      String

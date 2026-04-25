@@ -900,7 +900,7 @@ app.get('/api/samples', verifySupabaseToken, async (req, res) => {
 });
 
 app.post('/api/samples', verifySupabaseToken, async (req, res) => {
-  const { farmName, farmerId, region, variety, processingMethod, altitude, moisture, cuppingEventId, sampleType } = req.body;
+  const { farmName, farmerId, region, variety, processingMethod, altitude, moisture, cuppingEventId, sampleType, offlineFarmerName, offlineFarmerTag, offlineSubmissionRef } = req.body;
 
   // Validation
   if (!farmName || typeof farmName !== 'string') {
@@ -908,15 +908,20 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
     return res.status(400).json({ message: 'Invalid or missing farmName' });
   }
 
-  // Validate sampleType if provided (FARMER_REGISTERED, FARMER_DIRECTREGISTERED, PROXY_SUBMISSION, or CALIBRATION)
-  const validSampleTypes = ['FARMER_REGISTERED', 'FARMER_DIRECTREGISTERED', 'PROXY_SUBMISSION', 'CALIBRATION'];
+  // Validate sampleType if provided (FARMER_REGISTERED, FARMER_DIRECTREGISTERED, PROXY_SUBMISSION, CALIBRATION, PAPER_BASED_OFFLINE)
+  const validSampleTypes = ['FARMER_REGISTERED', 'FARMER_DIRECTREGISTERED', 'PROXY_SUBMISSION', 'CALIBRATION', 'PAPER_BASED_OFFLINE'];
   const finalSampleType = sampleType && validSampleTypes.includes(sampleType) ? sampleType : 'FARMER_REGISTERED';
 
-  // farmerId is required for FARMER_REGISTERED, FARMER_DIRECTREGISTERED, and PROXY_SUBMISSION, but optional for CALIBRATION
+  // farmerId is optional for CALIBRATION and PAPER_BASED_OFFLINE
   const isCalibrationType = finalSampleType === 'CALIBRATION';
+  const isPaperOfflineType = finalSampleType === 'PAPER_BASED_OFFLINE';
   
-  if (!isCalibrationType && (!farmerId || typeof farmerId !== 'number')) {
+  if (!isCalibrationType && !isPaperOfflineType && (!farmerId || typeof farmerId !== 'number')) {
     return res.status(400).json({ message: 'Invalid or missing farmerId' });
+  }
+
+  if (isPaperOfflineType && (!offlineFarmerName || String(offlineFarmerName).trim() === '') && (!farmerId || typeof farmerId !== 'number')) {
+    return res.status(400).json({ message: 'Paper-based samples require linked farmerId or offlineFarmerName' });
   }
 
   const normalizedRegion = region && region.trim() !== '' ? region : null;
@@ -949,7 +954,10 @@ app.post('/api/samples', verifySupabaseToken, async (req, res) => {
       data: {
         blindCode,
         farmName,
-        farmerId: isCalibrationType ? null : farmerId, // Use null for calibration samples
+        farmerId: (isCalibrationType || isPaperOfflineType) ? (farmerId || null) : farmerId,
+        offlineFarmerName: isPaperOfflineType ? (offlineFarmerName ? String(offlineFarmerName).trim() : null) : null,
+        offlineFarmerTag: isPaperOfflineType ? (offlineFarmerTag ? String(offlineFarmerTag).trim() : null) : null,
+        offlineSubmissionRef: isPaperOfflineType ? (offlineSubmissionRef ? String(offlineSubmissionRef).trim() : null) : null,
         region: normalizedRegion,
         variety,
         processingMethod,
@@ -1264,9 +1272,17 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
     const newSamples = [];
 
     (samples || []).forEach(sample => {
+      const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
       const farmerId = sample.farmerId ? parseInt(sample.farmerId, 10) : null;
-      if (!farmerId || isNaN(farmerId) || farmerId <= 0) {
-        throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
+      const isPaperOfflineType = sampleType === 'PAPER_BASED_OFFLINE';
+      const hasOfflineName = !!String(sample.offlineFarmerName || '').trim();
+
+      if (!isPaperOfflineType) {
+        if (!farmerId || isNaN(farmerId) || farmerId <= 0) {
+          throw new Error(`Sample "${sample.farmName}" must have a valid farmer ID`);
+        }
+      } else if ((!farmerId || isNaN(farmerId) || farmerId <= 0) && !hasOfflineName) {
+        throw new Error(`Paper-based sample "${sample.farmName}" must have linked farmer or offline farmer name`);
       }
       
       if (sample.id && sample.id !== '') {
@@ -1277,13 +1293,16 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
         newSamples.push({
           blindCode: generateBlindCode(name), // Generate blind code from event name + random digits
           farmerId: farmerId,
+          offlineFarmerName: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerName ? String(sample.offlineFarmerName).trim() : null) : null,
+          offlineFarmerTag: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerTag ? String(sample.offlineFarmerTag).trim() : null) : null,
+          offlineSubmissionRef: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineSubmissionRef ? String(sample.offlineSubmissionRef).trim() : null) : null,
           processingMethod: sample.processingMethod,
           farmName: sample.farmName,
           variety: sample.variety,
           region: sample.region,
           altitude: sample.altitude,
           moisture: sample.moisture,
-          sampleType: 'PROXY_SUBMISSION',
+          sampleType: sampleType,
           approvalStatus: 'APPROVED', // Admin-created samples are automatically approved
         });
       }
@@ -2197,11 +2216,16 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
         const missingFields = [];
         if (!sample.farmName) missingFields.push('farmName');
         
-        // farmerId is optional for CALIBRATION samples, required for others
+        // farmerId is optional for CALIBRATION and PAPER_BASED_OFFLINE samples, required for others
         const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
-        if (sampleType !== 'CALIBRATION' && (!sample.farmerId || isNaN(parseInt(sample.farmerId)))) {
+      const hasLinkedFarmer = !!(sample.farmerId && !isNaN(parseInt(sample.farmerId)));
+      const hasOfflineName = !!String(sample.offlineFarmerName || '').trim();
+        if (sampleType !== 'CALIBRATION' && sampleType !== 'PAPER_BASED_OFFLINE' && (!sample.farmerId || isNaN(parseInt(sample.farmerId)))) {
             missingFields.push('farmerId');
         }
+      if (sampleType === 'PAPER_BASED_OFFLINE' && !hasLinkedFarmer && !hasOfflineName) {
+        missingFields.push('farmerId|offlineFarmerName');
+      }
         
         if (!sample.region) missingFields.push('region');
         if (!sample.variety) missingFields.push('variety');
@@ -2225,7 +2249,12 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
         const createdSamples = await Promise.all(
             samples.map(sample => {
                 const sampleType = sample.sampleType || 'PROXY_SUBMISSION';
-                const finalFarmerId = sampleType === 'CALIBRATION' ? null : parseInt(sample.farmerId);
+                const hasLinkedFarmer = !!(sample.farmerId && !isNaN(parseInt(sample.farmerId)));
+                const hasOfflineName = !!String(sample.offlineFarmerName || '').trim();
+                if (sampleType === 'PAPER_BASED_OFFLINE' && !hasLinkedFarmer && !hasOfflineName) {
+                    throw new Error(`Paper-based sample "${sample.farmName || 'Unknown'}" must have linked farmer or offline farmer name`);
+                }
+              const finalFarmerId = (sampleType === 'CALIBRATION' || sampleType === 'PAPER_BASED_OFFLINE') ? (sample.farmerId ? parseInt(sample.farmerId) : null) : parseInt(sample.farmerId);
                 // Admin-added samples are automatically approved with generated blind codes
                 const blindCode = generateBlindCode(event.name);
                 const approvalStatus = 'APPROVED';
@@ -2241,6 +2270,9 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
                         altitude: sample.altitude,
                         moisture: sample.moisture,
                         farmerId: finalFarmerId,
+                        offlineFarmerName: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerName ? String(sample.offlineFarmerName).trim() : null) : null,
+                        offlineFarmerTag: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineFarmerTag ? String(sample.offlineFarmerTag).trim() : null) : null,
+                        offlineSubmissionRef: sampleType === 'PAPER_BASED_OFFLINE' ? (sample.offlineSubmissionRef ? String(sample.offlineSubmissionRef).trim() : null) : null,
                         sampleType: sampleType,
                         cuppingEventId: parseInt(id),
                         blindCode,
@@ -2251,6 +2283,9 @@ app.post('/api/cupping-events/:id/samples', verifySupabaseToken, async (req, res
                         blindCode: true,
                         farmName: true,
                         farmerId: true,
+                        offlineFarmerName: true,
+                        offlineFarmerTag: true,
+                        offlineSubmissionRef: true,
                         region: true,
                         variety: true,
                         processingMethod: true,

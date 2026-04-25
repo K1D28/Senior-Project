@@ -519,11 +519,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
     };
 
     // Helper to resolve farmer name from multiple possible sources (users list or event participants)
-    const getFarmerName = (sample: { farmerId?: string | null; farmerName?: string | null } | null | undefined): string => {
+    const getFarmerName = (sample: { farmerId?: string | null; farmerName?: string | null; offlineFarmerName?: string | null; offlineFarmerTag?: string | null; sampleType?: string } | null | undefined): string => {
         if (!sample) return 'Unknown';
         // 0) Prefer server-provided farmerName to avoid id collisions across tables
         const provided = (sample as any).farmerName;
         if (typeof provided === 'string' && provided.trim() !== '') return provided;
+        // 0.5) For paper-based samples, display offline farmer details when linked farmer is absent
+        if ((sample as any).sampleType === 'PAPER_BASED_OFFLINE') {
+            const offlineName = String((sample as any).offlineFarmerName || '').trim();
+            const offlineTag = String((sample as any).offlineFarmerTag || '').trim();
+            if (offlineName) {
+                return offlineTag ? `${offlineName} (${offlineTag})` : offlineName;
+            }
+        }
         if (sample.farmerId === undefined || sample.farmerId === null || String(sample.farmerId).trim() === '') return 'Unknown';
         const fid = String(sample.farmerId);
         const users = Array.isArray(appData.users) ? appData.users : [];
@@ -1432,9 +1440,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                                                 sample.sampleType === 'CALIBRATION' ? 'bg-purple-100 text-purple-800' :
                                                 sample.sampleType === 'FARMER_REGISTERED' ? 'bg-blue-100 text-blue-800' :
                                                 sample.sampleType === 'FARMER_DIRECTREGISTERED' ? 'bg-green-100 text-green-800' :
+                                                sample.sampleType === 'PAPER_BASED_OFFLINE' ? 'bg-amber-100 text-amber-800' :
                                                 'bg-orange-100 text-orange-800'
                                             }`}>
-                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer (Manual)' : sample.sampleType === 'FARMER_DIRECTREGISTERED' ? '🚜 Farmer (Direct)' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : '👤 Admin'}
+                                                {sample.sampleType === 'FARMER_REGISTERED' ? '🚜 Farmer (Manual)' : sample.sampleType === 'FARMER_DIRECTREGISTERED' ? '🚜 Farmer (Direct)' : sample.sampleType === 'CALIBRATION' ? 'Calibration' : sample.sampleType === 'PAPER_BASED_OFFLINE' ? '📝 Paper-Based (Offline)' : '👤 Admin'}
                                             </span>
                                         </td>
                                         <td className="p-2">
