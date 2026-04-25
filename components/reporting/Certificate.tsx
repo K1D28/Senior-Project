@@ -4,6 +4,7 @@ import { CoffeeSample, CuppingEvent, User, ScoreSheet } from '../../types';
 import { Button } from '../ui/Button';
 import { Award, Printer, Star, MessageSquare } from 'lucide-react';
 import type { AppData } from '../../data';
+import { BACKEND_URL } from '../../utils/api';
 
 // A simple SVG seal for the certificate
 const CertificateSeal = () => (
@@ -35,6 +36,48 @@ interface CertificateProps {
 }
 
 const Certificate: React.FC<CertificateProps> = ({ sample, event, farmer, rank, appData }) => {
+    const [signatories, setSignatories] = React.useState<{ organizerName: string | null; headJudgeName: string | null }>({
+        organizerName: null,
+        headJudgeName: null,
+    });
+
+    React.useEffect(() => {
+        let isMounted = true;
+
+        const fetchSignatories = async () => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/certificates/signatories?sampleId=${encodeURIComponent(String(sample.id))}&eventId=${encodeURIComponent(String(event.id))}`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    console.warn('Certificate: failed to fetch signatories', response.status, errorBody);
+                    return;
+                }
+
+                const data = await response.json();
+                if (isMounted) {
+                    setSignatories({
+                        organizerName: data?.organizerName || null,
+                        headJudgeName: data?.headJudgeName || null,
+                    });
+                }
+            } catch (error) {
+                console.warn('Certificate: error fetching signatories', error);
+            }
+        };
+
+        fetchSignatories();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [sample.id, event.id]);
 
     const rankText = {
         1: 'First Place Winner',
@@ -196,14 +239,14 @@ const Certificate: React.FC<CertificateProps> = ({ sample, event, farmer, rank, 
 
                     <div className="w-full flex justify-between items-end mt-6 md:mt-12">
                         <div className="text-center">
-                            <p className="border-b-2 border-gray-600 px-8 pb-1 font-semibold italic">Alice Organizer</p>
+                            <p className="border-b-2 border-gray-600 px-8 pb-1 font-semibold italic">{signatories.organizerName || 'Organizer'}</p>
                             <p className="text-sm mt-1">Event Organizer</p>
                         </div>
 
                         <CertificateSeal />
 
                         <div className="text-center">
-                            <p className="border-b-2 border-gray-600 px-8 pb-1 font-semibold italic">Eve Adjudicator</p>
+                            <p className="border-b-2 border-gray-600 px-8 pb-1 font-semibold italic">{signatories.headJudgeName || 'Head Judge'}</p>
                             <p className="text-sm mt-1">Head Judge</p>
                         </div>
                     </div>

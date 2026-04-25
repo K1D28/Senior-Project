@@ -153,9 +153,9 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                     console.error('Error response body:', errorText);
                 }
 
-                // Fetch Head Judge individual decisions (admin-only endpoint)
+                // Fetch Head Judge individual decisions
                 try {
-                    const decisionResponse = await fetch(`${BACKEND_URL}/api/admin/samples/${sample.id}/headjudge-decisions`, {
+                    const decisionResponse = await fetch(`${BACKEND_URL}/api/samples/${sample.id}/headjudge-decisions`, {
                         method: 'GET',
                         credentials: 'include',
                         headers: authHeaders,
@@ -208,7 +208,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                         mappedScores = [...mappedScores, ...mappedHeadJudgeScores];
                     } else {
                         const errBody = await decisionResponse.text();
-                        console.warn('⚠️ SampleReport: Could not fetch head judge decisions for sample', {
+                        console.warn('⚠️ SampleReport: Could not fetch head judge decisions for sample (role-aware endpoint)', {
                             status: decisionResponse.status,
                             body: errBody,
                         });

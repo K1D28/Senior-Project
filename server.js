@@ -2593,6 +2593,124 @@ app.get('/api/qgrader/scores/sample/:sampleId', verifySupabaseToken, async (req,
   }
 });
 
+// Certificate: fetch real signatory names for a sample/event
+app.get('/api/certificates/signatories', verifySupabaseToken, async (req, res) => {
+  try {
+    const sampleIdRaw = req.query.sampleId;
+    const eventIdRaw = req.query.eventId;
+
+    const sampleId = parseInt(String(sampleIdRaw || ''), 10);
+    const eventId = parseInt(String(eventIdRaw || ''), 10);
+
+    if (!sampleId || Number.isNaN(sampleId)) {
+      return res.status(400).json({ message: 'sampleId is required' });
+    }
+
+    const sample = await prisma.sample.findUnique({ where: { id: sampleId } });
+    if (!sample) return res.status(404).json({ message: 'Sample not found' });
+
+    // Organizer: prefer the admin who approved the sample; fallback to any admin.
+    let organizerName = null;
+    if (sample.approvedByAdminId) {
+      const approvingAdmin = await prisma.admin.findUnique({ where: { id: sample.approvedByAdminId } });
+      organizerName = approvingAdmin?.name || null;
+    }
+    if (!organizerName) {
+      const fallbackAdmin = await prisma.admin.findFirst({ orderBy: { id: 'asc' } });
+      organizerName = fallbackAdmin?.name || null;
+    }
+
+    // Head Judge: prefer the latest decision maker for this sample.
+    let headJudgeName = null;
+    const latestDecision = await prisma.headJudgeDecision.findFirst({
+      where: {
+        sampleId,
+        ...(eventId && Number.isFinite(eventId)
+          ? { sample: { cuppingEventId: eventId } }
+          : {}),
+      },
+      include: { headJudge: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    headJudgeName = latestDecision?.headJudge?.name || null;
+
+    // Fallback: use assigned head judge for the event.
+    if (!headJudgeName) {
+      const fallbackEventId = eventId && Number.isFinite(eventId) ? eventId : sample.cuppingEventId;
+      if (fallbackEventId) {
+        const participant = await prisma.participant.findFirst({
+          where: { eventId: fallbackEventId, role: 'HEAD_JUDGE', headJudgeId: { not: null } },
+          include: { headJudge: true },
+          orderBy: { id: 'asc' },
+        });
+        headJudgeName = participant?.headJudge?.name || null;
+      }
+    }
+
+    return res.json({
+      organizerName,
+      headJudgeName,
+    });
+  } catch (error) {
+    console.error('Error fetching certificate signatories:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Fetch Head Judge decisions for a sample (used by reports across roles)
+app.get('/api/samples/:sampleId/headjudge-decisions', verifySupabaseToken, async (req, res) => {
+  try {
+    const { sampleId } = req.params;
+    if (!sampleId || isNaN(parseInt(sampleId))) return res.status(400).json({ message: 'Invalid sampleId' });
+
+    const numericSampleId = parseInt(sampleId);
+    const sample = await prisma.sample.findUnique({
+      where: { id: numericSampleId },
+      include: { cuppingEvent: true },
+    });
+
+    if (!sample) return res.status(404).json({ message: 'Sample not found' });
+
+    const roles = Array.isArray(req.user?.roles) ? req.user.roles : [req.user?.role].filter(Boolean);
+    const isAdmin = roles.includes('ADMIN');
+    const isFarmer = roles.includes('FARMER');
+
+    // Admin can always view.
+    // Farmer can view only their own sample and only after event results are revealed.
+    if (!isAdmin) {
+      if (isFarmer) {
+        const userEmail = req.user?.email;
+        if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
+
+        const farmer = await prisma.farmer.findUnique({ where: { email: userEmail } });
+        if (!farmer) return res.status(403).json({ message: 'Forbidden' });
+
+        const ownsSample = Number(sample.farmerId) === Number(farmer.id);
+        const resultsRevealed = Boolean(sample.cuppingEvent?.isResultsRevealed);
+        if (!ownsSample || !resultsRevealed) {
+          return res.status(403).json({ message: 'Forbidden' });
+        }
+      } else {
+        // Non-admin, non-farmer: require event results revealed to access report decisions.
+        if (!sample.cuppingEvent?.isResultsRevealed) {
+          return res.status(403).json({ message: 'Forbidden' });
+        }
+      }
+    }
+
+    const decisions = await prisma.headJudgeDecision.findMany({
+      where: { sampleId: numericSampleId },
+      include: { headJudge: true, sample: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json(decisions);
+  } catch (error) {
+    console.error('Error fetching head judge decisions for sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Admin: fetch all Head Judge decisions for a sample
 app.get('/api/admin/samples/:sampleId/headjudge-decisions', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
   try {
