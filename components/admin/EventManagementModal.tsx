@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import { CoffeeSample, CuppingEvent, Role } from '../../types';
 import type { EventSamplesUpdateData } from '../../App';
 import { Input } from '../ui/Input';

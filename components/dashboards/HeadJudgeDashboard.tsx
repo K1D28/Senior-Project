@@ -1,7 +1,7 @@
 import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { User, CuppingEvent, CoffeeSample, ScoreSheet, Descriptor, Role } from '../../types';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import type { AdjudicationData } from '../../App';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';

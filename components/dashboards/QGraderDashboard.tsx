@@ -1,7 +1,7 @@
 import { BACKEND_URL } from '../../utils/api';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { User, CuppingEvent, CoffeeSample, ScoreSheet, CuppingScore, Descriptor } from '../../types';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';

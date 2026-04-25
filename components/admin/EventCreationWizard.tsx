@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import type { NewFullEventData } from '../../App';
 import Step1Details from './Step1Details';
 import Step2Participants from './Step2Participants';

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Trophy, ArrowLeft } from 'lucide-react';

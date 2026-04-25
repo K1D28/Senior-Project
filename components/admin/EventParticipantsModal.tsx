@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { AppData } from '../../data';
+import type { AppData } from '../../data';
 import { CuppingEvent, Role, User } from '../../types';
 import type { EventParticipantsUpdateData } from '../../App';
 import { Select } from '../ui/Select';
