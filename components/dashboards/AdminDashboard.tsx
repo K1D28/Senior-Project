@@ -423,6 +423,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
     const [eventFilter, setEventFilter] = useState<string>('all');
     const [sampleEventFilter, setSampleEventFilter] = useState<string>('all');
+    const [leaderboardEventFilter, setLeaderboardEventFilter] = useState<string>('all');
     const [eventStatuses, setEventStatuses] = useState<Record<string, string>>({});
 
     const toggleEventExpansion = (eventId: string) => {
@@ -503,6 +504,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         });
         return ['All', ...Array.from(methods).sort()];
     }, [appData.samples]);
+
+    const revealedEvents = useMemo(() => {
+        return (appData.events || [])
+            .filter(event => event.isResultsRevealed)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [appData.events]);
     
     const allTags = useMemo(() => {
         const tags = new Set<string>();
@@ -1503,6 +1510,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                     <div className="flex items-center space-x-2">
                         <Select value={eventFilter} onChange={e => setEventFilter(e.target.value)}>
                             <option value="all">All Events</option>
+                            {revealedEvents.map(event => (
+                                <option key={event.id} value={event.id}>{event.name}</option>
+                            ))}
                         </Select>
                         <Select value={processFilter} onChange={e => setProcessFilter(e.target.value)}>
                             {processingMethods.map(method => <option key={method} value={method}>{method}</option>)}
@@ -1609,10 +1619,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         {activeTab === 'leaderboard' && (
             <Card>
                 <div className="space-y-6">
-                    <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <h3 className="text-2xl font-bold text-primary">Leaderboard</h3>
+                        <Select value={leaderboardEventFilter} onChange={e => setLeaderboardEventFilter(e.target.value)} className="sm:w-72">
+                            <option value="all">All Events</option>
+                            {revealedEvents.map(event => (
+                                <option key={event.id} value={event.id}>{event.name}</option>
+                            ))}
+                        </Select>
+                    </div>
                     {appData.events.length > 0 && appData.events.some(e => e.isResultsRevealed && e.sampleIds.length > 0) ? (
-                        appData.events
-                          .filter(e => e.isResultsRevealed && e.sampleIds.length > 0)
+                        revealedEvents
+                          .filter(event => leaderboardEventFilter === 'all' || event.id === leaderboardEventFilter)
+                          .filter(event => event.sampleIds.length > 0)
                           .map(event => {
                             const eventSamples = appData.samples.filter(s => event.sampleIds.includes(s.id) && s.sampleType !== 'CALIBRATION');
                             const rankedSamples = eventSamples
