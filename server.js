@@ -2593,6 +2593,25 @@ app.get('/api/qgrader/scores/sample/:sampleId', verifySupabaseToken, async (req,
   }
 });
 
+// Admin: fetch all Head Judge decisions for a sample
+app.get('/api/admin/samples/:sampleId/headjudge-decisions', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  try {
+    const { sampleId } = req.params;
+    if (!sampleId || isNaN(parseInt(sampleId))) return res.status(400).json({ message: 'Invalid sampleId' });
+
+    const decisions = await prisma.headJudgeDecision.findMany({
+      where: { sampleId: parseInt(sampleId) },
+      include: { headJudge: true, sample: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json(decisions);
+  } catch (error) {
+    console.error('Error fetching head judge decisions for sample:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Fetch the authenticated Q Grader's score for a sample (if any)
 app.get('/api/qgrader/scores/mine/:sampleId', verifySupabaseToken, async (req, res) => {
   try {

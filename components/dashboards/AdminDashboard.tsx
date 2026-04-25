@@ -722,22 +722,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         }
 
         const scores = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === eventForSample.id && s.isSubmitted);
-        const headJudgeScores = scores.filter(score => {
-            const scorer = appData.users.find(u => u.id === score.qGraderId);
-            return Boolean(scorer?.roles?.includes(Role.HEAD_JUDGE));
-        });
-        const qGraderScores = scores.filter(score => {
-            const scorer = appData.users.find(u => u.id === score.qGraderId);
-            return Boolean(scorer?.roles?.includes(Role.Q_GRADER));
-        });
-
-        const qGraderAverage = qGraderScores.length > 0
-            ? qGraderScores.reduce((sum, score) => sum + Number(score.scores.finalScore || 0), 0) / qGraderScores.length
-            : null;
-
-        const headJudgeAverage = headJudgeScores.length > 0
-            ? headJudgeScores.reduce((sum, score) => sum + Number(score.scores.finalScore || 0), 0) / headJudgeScores.length
-            : null;
 
         const combinedAverage = sample.adjudicatedFinalScore !== undefined && sample.adjudicatedFinalScore !== null
             ? Number(sample.adjudicatedFinalScore)
@@ -750,15 +734,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                 <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
                     <p className="text-xs font-semibold text-blue-800">Head Judges &amp; Q Grader Average score</p>
                     <p className="text-xl font-bold text-primary mt-1">{combinedAverage !== null ? combinedAverage.toFixed(2) : 'N/A'}</p>
-                    <div className="mt-2 text-xs text-gray-700 space-y-0.5">
-                        <p>Q Grader average: <span className="font-semibold">{qGraderAverage !== null ? qGraderAverage.toFixed(2) : 'N/A'}</span></p>
-                        <p>Head Judge average: <span className="font-semibold">{headJudgeAverage !== null ? headJudgeAverage.toFixed(2) : 'N/A'}</span></p>
-                    </div>
                 </div>
-
-                {scores.length === 0 && (
-                    <p className="text-sm text-text-light">No individual score sheets are available for this sample yet.</p>
-                )}
 
                 {scores.map(score => {
                     const grader = appData.users.find(u => u.id === score.qGraderId);

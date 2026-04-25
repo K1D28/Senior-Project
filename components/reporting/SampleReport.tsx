@@ -12,6 +12,11 @@ interface SampleReportProps {
   appData: AppData;
 }
 
+type ReportScoreRow = ScoreSheet & {
+    scorerRole: 'Q Grader' | 'Head Judge';
+    scorerName: string;
+};
+
 const calculateStats = (scores: number[]) => {
     if (!scores || scores.length === 0) return { average: 0, count: 0 };
     return {
@@ -43,7 +48,7 @@ const getEducationalText = (attribute: typeof scoreAttributes[number], score: nu
 };
 
 const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
-    const [localScores, setLocalScores] = useState<ScoreSheet[]>([]);
+    const [localScores, setLocalScores] = useState<ReportScoreRow[]>([]);
     const [localEvent, setLocalEvent] = useState<CuppingEvent | null>(null);
     
     const event = useMemo(() => {
@@ -63,26 +68,28 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
         return found || null;
     }, [appData.events, sample.id, localEvent]);
     
-    // Fetch scores independently if appData.scores is empty or has demo data
+    // Fetch scores independently from the database so report data is always current.
     useEffect(() => {
         if (!sample.id) return;
         
         const fetchScoresAndEvent = async () => {
             try {
                 console.log('🔍 SampleReport: Attempting to fetch scores for sample', { sampleId: sample.id, hasToken: !!localStorage.getItem('token') });
+                const authHeaders = {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                };
                 
                 // Try to fetch all Q Grader scores for this sample
                 const response = await fetch(`${BACKEND_URL}/api/qgrader/scores/sample/${sample.id}`, {
                     method: 'GET',
                     credentials: 'include',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        Authorization: `Bearer ${localStorage.getItem('token')}` 
-                    }
+                    headers: authHeaders,
                 });
                 
                 console.log('📊 SampleReport: Fetch response status:', response.status);
-                
+                let mappedScores: ReportScoreRow[] = [];
+
                 if (response.ok) {
                     const allScores = await response.json();
                     console.log('✓ SampleReport: Fetched raw scores from server:', allScores.length, 'scores');
@@ -93,15 +100,17 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                         console.log('Sample scores:', allScores.slice(0, 2).map(s => ({ sampleId: s.sampleId, eventId: s.cuppingEventId, fragrance: s.fragrance, isSubmitted: s.isSubmitted })));
                     }
                     
-                    // Map server format to ScoreSheet format
-                    const mappedScores: ScoreSheet[] = allScores.map((row: any) => ({
+                    // Map server format to report row format
+                    mappedScores = allScores.map((row: any) => ({
                         id: `${row.id}`,
                         eventId: `${row.cuppingEventId}`,
                         qGraderId: `${row.qGraderId}`,
                         sampleId: `${row.sampleId}`,
                         isSubmitted: !!row.isSubmitted,
                         notes: row.comments || '',
-                        descriptors: row.descriptors ? JSON.parse(row.descriptors) : [],
+                        descriptors: Array.isArray(row.descriptors)
+                            ? row.descriptors
+                            : (typeof row.descriptors === 'string' && row.descriptors.trim() ? JSON.parse(row.descriptors) : []),
                         scores: {
                             fragrance: Number(row.fragrance) || 0,
                             flavor: Number(row.flavor) || 0,
@@ -116,12 +125,11 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                             taints: Number(row.taints) || 0,
                             faults: Number(row.faults) || 0,
                             finalScore: Number(row.total) || 0,
-                        }
+                        },
+                        scorerRole: 'Q Grader',
+                        scorerName: row.qGrader?.name || appData.users.find(u => String(u.id) === String(row.qGraderId))?.name || 'Unknown Q Grader',
                     }));
-                    
-                    console.log('✓ SampleReport: Mapped scores ready:', mappedScores.length, 'scores with data');
-                    setLocalScores(mappedScores);
-                    
+
                     // Extract eventId from scores to fetch event details if needed
                     if (mappedScores.length > 0 && !event) {
                         const eventId = mappedScores[0].eventId;
@@ -144,6 +152,78 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                     const errorText = await response.text();
                     console.error('Error response body:', errorText);
                 }
+
+                // Fetch Head Judge individual decisions (admin-only endpoint)
+                try {
+                    const decisionResponse = await fetch(`${BACKEND_URL}/api/admin/samples/${sample.id}/headjudge-decisions`, {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: authHeaders,
+                    });
+
+                    if (decisionResponse.ok) {
+                        const decisions = await decisionResponse.json();
+                        const mappedHeadJudgeScores: ReportScoreRow[] = (Array.isArray(decisions) ? decisions : []).map((row: any) => {
+                            const calculatedTotal = [
+                                Number(row.fragrance || 0),
+                                Number(row.flavor || 0),
+                                Number(row.aftertaste || 0),
+                                Number(row.acidity || 0),
+                                Number(row.body || 0),
+                                Number(row.balance || 0),
+                                Number(row.uniformity || 0),
+                                Number(row.cleanCup || 0),
+                                Number(row.sweetness || 0),
+                                Number(row.overall || 0),
+                            ].reduce((sum, value) => sum + value, 0);
+
+                            return {
+                                id: `headjudge-${row.id}`,
+                                eventId: `${row.sample?.cuppingEventId ?? event?.id ?? ''}`,
+                                qGraderId: `${row.headJudgeId}`,
+                                sampleId: `${row.sampleId}`,
+                                isSubmitted: true,
+                                notes: row.notes || '',
+                                descriptors: [],
+                                scores: {
+                                    fragrance: Number(row.fragrance) || 0,
+                                    flavor: Number(row.flavor) || 0,
+                                    aftertaste: Number(row.aftertaste) || 0,
+                                    acidity: Number(row.acidity) || 0,
+                                    body: Number(row.body) || 0,
+                                    balance: Number(row.balance) || 0,
+                                    uniformity: Number(row.uniformity) || 0,
+                                    cleanCup: Number(row.cleanCup) || 0,
+                                    sweetness: Number(row.sweetness) || 0,
+                                    overall: Number(row.overall) || 0,
+                                    taints: 0,
+                                    faults: 0,
+                                    finalScore: Number(row.finalScore ?? calculatedTotal) || 0,
+                                },
+                                scorerRole: 'Head Judge',
+                                scorerName: row.headJudge?.name || appData.users.find(u => String(u.id) === String(row.headJudgeId))?.name || 'Unknown Head Judge',
+                            };
+                        });
+
+                        mappedScores = [...mappedScores, ...mappedHeadJudgeScores];
+                    } else {
+                        const errBody = await decisionResponse.text();
+                        console.warn('⚠️ SampleReport: Could not fetch head judge decisions for sample', {
+                            status: decisionResponse.status,
+                            body: errBody,
+                        });
+                    }
+                } catch (decisionError) {
+                    console.warn('⚠️ SampleReport: Error fetching head judge decisions', decisionError);
+                }
+
+                mappedScores.sort((a, b) => {
+                    if (a.scorerRole !== b.scorerRole) return a.scorerRole === 'Q Grader' ? -1 : 1;
+                    return a.scorerName.localeCompare(b.scorerName);
+                });
+
+                console.log('✓ SampleReport: Mapped report scores ready:', mappedScores.length, 'rows with data');
+                setLocalScores(mappedScores);
             } catch (err) {
                 console.error('✗ SampleReport: Fetch error:', err);
             }
@@ -153,7 +233,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
     }, [sample.id, event]);
     
     const scoresForSample = useMemo(() => {
-        // Always use localScores (fetched from DB), ignore appData.scores which may have mock data
+        // Always use localScores (fetched from DB), ignore appData.scores which may have stale/mock data.
         console.log('SampleReport: Attempting scores lookup', { 
             sampleId: String(sample.id), 
             eventId: String(event?.id), 
@@ -167,7 +247,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
         
         const scores = localScores.filter(s => {
             const sampleMatch = String(s.sampleId) === String(sample.id);
-            const eventMatch = String(s.eventId) === String(event?.id);
+            const eventMatch = !event?.id || String(s.eventId) === String(event.id);
             const submittedMatch = s.isSubmitted;
             const fullMatch = sampleMatch && eventMatch && submittedMatch;
             
@@ -181,6 +261,23 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
         console.log('SampleReport: Scores lookup result', { sampleId: sample.id, eventId: event?.id, scoresFound: scores.length });
         return scores;
     }, [localScores, sample.id, event]);
+
+    const qGraderScoresForSample = useMemo(
+        () => scoresForSample.filter(score => score.scorerRole === 'Q Grader'),
+        [scoresForSample]
+    );
+
+    const averageFinalScore = useMemo(() => {
+        const allFinalScores = scoresForSample
+            .map(score => Number(score.scores.finalScore))
+            .filter(score => Number.isFinite(score));
+
+        if (allFinalScores.length === 0) {
+            return sample.adjudicatedFinalScore ?? null;
+        }
+
+        return allFinalScores.reduce((sum, score) => sum + score, 0) / allFinalScores.length;
+    }, [scoresForSample, sample.adjudicatedFinalScore]);
     
     const farmer = useMemo(() => appData.users.find(u => u.id === sample.farmerId), [appData.users, sample.farmerId]);
 
@@ -244,12 +341,12 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
     }, [scoresForSample, competitionSamplesInCategory, localScores, event, appData.samples]);
     
     const descriptorFrequency = useMemo(() => {
-        const allDescriptors = scoresForSample.flatMap(s => s.descriptors.map(d => d.name));
+        const allDescriptors = qGraderScoresForSample.flatMap(s => s.descriptors.map(d => d.name));
         const counts = allDescriptors.reduce((acc, desc) => { acc[desc] = (acc[desc] || 0) + 1; return acc; }, {} as Record<string, number>);
         return Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 15);
-    }, [scoresForSample]);
+    }, [qGraderScoresForSample]);
 
-    const anonymizedNotes = useMemo(() => scoresForSample.map(s => s.notes).filter(Boolean), [scoresForSample]);
+    const anonymizedNotes = useMemo(() => qGraderScoresForSample.map(s => s.notes).filter(Boolean), [qGraderScoresForSample]);
 
     const ScoreAnalysisSection = () => (
       <div className="p-4 border border-border rounded-lg">
@@ -347,7 +444,7 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                         )}
                         <div>
                             <p className="text-sm text-text-light">Final Score</p>
-                            <p className="text-6xl font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</p>
+                            <p className="text-6xl font-bold text-primary">{averageFinalScore !== null ? averageFinalScore.toFixed(2) : 'N/A'}</p>
                             <p className="font-semibold text-text-dark bg-primary/20 text-primary/90 rounded-full px-3 py-1 inline-block text-lg mt-1">{sample.gradeLevel}</p>
                         </div>
                     </div>
@@ -423,15 +520,16 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                     <ScoreAnalysisSection />
                 </section>
                 
-                {/* Q Grader Individual Scores Section */}
+                {/* Individual Scores Section */}
                 <section className="p-4 border border-border rounded-lg">
-                    <h3 className="font-bold text-lg mb-4">Q Grader Individual Scores</h3>
+                    <h3 className="font-bold text-lg mb-4">Individual Scores (Q Grader &amp; Head Judge)</h3>
                     {scoresForSample.length > 0 ? (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-primary/10 border-b-2 border-primary">
                                     <tr>
-                                        <th className="px-3 py-2 text-left font-semibold">Q Grader</th>
+                                        <th className="px-3 py-2 text-left font-semibold">Scorer</th>
+                                        <th className="px-3 py-2 text-center font-semibold">Role</th>
                                         <th className="px-3 py-2 text-center font-semibold">Fragrance</th>
                                         <th className="px-3 py-2 text-center font-semibold">Flavor</th>
                                         <th className="px-3 py-2 text-center font-semibold">Aftertaste</th>
@@ -447,10 +545,10 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                                 </thead>
                                 <tbody>
                                     {scoresForSample.map((score, idx) => {
-                                        const qGrader = appData.users.find(u => u.id === score.qGraderId);
                                         return (
                                             <tr key={score.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-background'}>
-                                                <td className="px-3 py-2 font-semibold text-text-dark">{qGrader?.name || 'Unknown Q Grader'}</td>
+                                                <td className="px-3 py-2 font-semibold text-text-dark">{score.scorerName}</td>
+                                                <td className="px-3 py-2 text-center text-xs font-semibold">{score.scorerRole}</td>
                                                 <td className="px-3 py-2 text-center">{score.scores.fragrance.toFixed(1)}</td>
                                                 <td className="px-3 py-2 text-center">{score.scores.flavor.toFixed(1)}</td>
                                                 <td className="px-3 py-2 text-center">{score.scores.aftertaste.toFixed(1)}</td>
@@ -469,17 +567,17 @@ const SampleReport: React.FC<SampleReportProps> = ({ sample, appData }) => {
                             </table>
                         </div>
                     ) : (
-                        <p className="text-sm text-text-light">No Q Grader scores available yet.</p>
+                        <p className="text-sm text-text-light">No submitted scores are available yet.</p>
                     )}
                 </section>
 
-                {/* Head Judge Adjudication Details */}
+                {/* Final Score Summary */}
                 <section className="p-4 border border-border rounded-lg">
-                    <h3 className="font-bold text-lg mb-4">Head Judge Adjudication</h3>
+                    <h3 className="font-bold text-lg mb-4">Final Score Summary</h3>
                     <div className="space-y-4">
                         <div>
-                            <p className="font-semibold mb-2">Final Adjudicated Score</p>
-                            <p className="text-3xl font-bold text-primary">{sample.adjudicatedFinalScore?.toFixed(2)}</p>
+                            <p className="font-semibold mb-2">Average Final Score (Q Grader + Head Judge)</p>
+                            <p className="text-3xl font-bold text-primary">{averageFinalScore !== null ? averageFinalScore.toFixed(2) : 'N/A'}</p>
                         </div>
                         {sample.adjudicationJustification && (
                             <div>
