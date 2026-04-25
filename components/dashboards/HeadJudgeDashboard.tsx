@@ -1615,6 +1615,9 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {samplesForEvent.map(sample => {
                                                 const relevantScores = mergedAppData.scores.filter(s => s.sampleId === sample.id && s.eventId === selectedEvent.id && s.isSubmitted);
+                                                const mergedSample = mergedAppData.samples.find(s => String(s.id) === String(sample.id));
+                                                const eventSample = ((selectedEvent as any).sampleObjects || (selectedEvent as any).samples || []).find((s: any) => String(s.id) === String(sample.id));
+                                                const isSampleLocked = Boolean(sample.isLocked || mergedSample?.isLocked || eventSample?.isLocked);
 
                                                 const parseAssignedIds = (value: unknown): string[] => {
                                                     if (Array.isArray(value)) {
@@ -1674,7 +1677,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                                             }}
                                                             className="relative p-4 border-2 border-border rounded-lg cursor-pointer hover:bg-background hover:border-primary hover:shadow-md transition-all duration-200 text-center space-y-1 shadow-sm flex flex-col justify-between h-full"
                                                         >
-                                                            {Boolean(sample.isLocked) && <span className="absolute top-2 right-2 text-green-600" title="Judgement Locked"><CheckCircle size={18}/></span>}
+                                                            {isSampleLocked && <span className="absolute top-2 right-2 text-green-600" title="Judgement Locked"><CheckCircle size={18}/></span>}
                                                             {sample.flaggedForDiscussion && <span className="absolute top-2 left-2 text-yellow-600" title="Flagged for Discussion"><Flag size={18}/></span>}
                                                             <div className="flex-1 flex flex-col justify-center">
                                                                 <p className="font-mono text-xl font-bold text-gray-800">{sample.blindCode}</p>
