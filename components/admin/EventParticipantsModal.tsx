@@ -5,7 +5,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { AppData } from '../../data';
 import { CuppingEvent, Role, User } from '../../types';
-import { EventParticipantsUpdateData } from '../../App';
+import type { EventParticipantsUpdateData } from '../../App';
 import { Select } from '../ui/Select';
 import { Label } from '../ui/Label';
 import { X } from 'lucide-react';

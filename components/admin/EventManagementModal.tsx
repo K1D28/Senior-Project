@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { AppData } from '../../data';
 import { CoffeeSample, CuppingEvent, Role } from '../../types';
-import { EventSamplesUpdateData } from '../../App';
+import type { EventSamplesUpdateData } from '../../App';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Card } from '../ui/Card';

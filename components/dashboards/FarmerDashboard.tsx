@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, CoffeeSample, CuppingEvent } from '../../types';
 import { AppData } from '../../data';
-import { NewSampleRegistrationData, SubmissionResult } from '../../App';
+import type { NewSampleRegistrationData, SubmissionResult } from '../../App';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';

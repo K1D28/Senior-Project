@@ -4,7 +4,7 @@ import axios, { AxiosError } from 'axios';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { AppData } from '../../data';
-import { NewFullEventData } from '../../App';
+import type { NewFullEventData } from '../../App';
 import Step1Details from './Step1Details';
 import Step2Participants from './Step2Participants';
 import Step3Samples from './Step3Samples';

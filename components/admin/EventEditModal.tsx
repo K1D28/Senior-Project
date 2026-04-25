@@ -5,7 +5,7 @@ import { Label } from '../ui/Label';
 import { Button } from '../ui/Button';
 import axios from 'axios';
 import { CuppingEvent } from '../../types';
-import { EventDetailsUpdateData } from '../../App';
+import type { EventDetailsUpdateData } from '../../App';
 import { BACKEND_URL } from '../../utils/api';
 
 interface EventEditModalProps {

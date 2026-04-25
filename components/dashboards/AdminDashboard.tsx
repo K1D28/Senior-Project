@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { User, Role, CoffeeSample, CuppingEvent } from '../../types';
 import { AppData, initialData } from '../../data';
-import { NewFullEventData, UserInviteData, UserUpdateData, EventSamplesUpdateData, EventDetailsUpdateData, EventParticipantsUpdateData } from '../../App';
+import type { NewFullEventData, UserInviteData, UserUpdateData, EventSamplesUpdateData, EventDetailsUpdateData, EventParticipantsUpdateData } from '../../App';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, ActivityLog, Role } from '../../types';
-import { UserUpdateData } from '../../App';
+import type { UserUpdateData } from '../../App';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';

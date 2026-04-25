@@ -4,7 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Label } from '../ui/Label';
 import { Role, CuppingEvent } from '../../types';
-import { UserInviteData } from '../../App';
+import type { UserInviteData } from '../../App';
 import { AlertTriangle } from 'lucide-react';
 
 interface UserInvitationModalProps {
