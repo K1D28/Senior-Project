@@ -670,7 +670,13 @@ const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentUser, appData,
                 {allEventsWithFarmerSamples.map(event => (
                     <Card key={event.id} title={event.name}>
                     <div className="space-y-4 divide-y divide-border">
-                        {event.samples.map(sample => {
+                        {event.samples.length === 0 ? (
+                            <div className="pt-4 first:pt-0">
+                                <div className="rounded-lg border border-dashed border-border bg-background p-4">
+                                    <p className="font-semibold text-text-dark">No samples assigned to this event yet.</p>
+                                </div>
+                            </div>
+                        ) : event.samples.map(sample => {
                         const isFinalizedAndRevealed = event.isResultsRevealed && sample.adjudicatedFinalScore !== undefined;
                         let rank: number | null = null;
                         if (isFinalizedAndRevealed) {
