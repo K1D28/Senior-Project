@@ -181,7 +181,7 @@ const ScoreHeatmap: React.FC<{ comparisonData: Array<Record<string, any> & { att
                 <table className="w-full text-sm text-left">
                     <thead className="bg-background"><tr className="border-b border-border">
                         <th className="p-3 font-semibold">Attribute</th>
-                        {graders.map(g => <th key={g.id} className="p-3 font-semibold text-center">{g.name.split(' ')[0]}</th>)}
+                        {graders.map(g => <th key={g.id} className="p-3 font-semibold text-center">{g.name}</th>)}
                         <th className="p-3 font-semibold text-center">Avg</th>
                         <th className="p-3 font-semibold text-center">Variance</th>
                     </tr></thead>
