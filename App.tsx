@@ -1151,6 +1151,21 @@ function App() {
           }
         />
         <Route 
+          path="/headjudge-dashboard/bulk-import"
+          element={
+            currentUser ? (
+              <HeadJudgeDashboard
+                currentUser={currentUser}
+                appData={appData}
+                onUpdateAdjudication={updateSampleAdjudication}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <LoginScreen onLogin={handleLogin} />
+            )
+          }
+        />
+        <Route 
           path="/farmer-dashboard"
           element={
             currentUser ? (

@@ -837,6 +837,10 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         if (tabFromUrl) {
             setActiveTabState(tabFromUrl);
         }
+        if (location.pathname === '/headjudge-dashboard/leaderboard') {
+            setSelectedSample(null);
+            setSelectedEvent(null);
+        }
     }, [location.pathname]);
 
     useEffect(() => {
@@ -1339,7 +1343,11 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                 <span>Adjudicate</span>
                             </button>
                             <button
-                                onClick={() => handleTabClick('leaderboard')}
+                                onClick={() => {
+                                    setSelectedSample(null);
+                                    setSelectedEvent(null);
+                                    handleTabClick('leaderboard');
+                                }}
                                 className={`w-full px-4 py-3 text-sm font-medium transition-colors duration-200 flex items-center gap-3 rounded-lg ${
                                   activeTab === 'leaderboard' 
                                     ? 'bg-primary text-white'
