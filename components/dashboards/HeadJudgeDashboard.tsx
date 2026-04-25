@@ -764,14 +764,27 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
 
             try {
                 const finalScore = calculateFinalScoreFromValues(row.values);
-                onUpdateAdjudication(row.matchedSampleId, {
-                    score: finalScore,
-                    grade: getGradeFromScore(finalScore),
-                    notes: row.notes,
-                    scores: row.values,
-                    lock: false,
-                    flagged: false,
+                const resp = await fetch(`${BACKEND_URL}/api/headjudge/samples/${row.matchedSampleId}/decision`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${localStorage.getItem('token')}`,
+                    },
+                    body: JSON.stringify({
+                        finalScore,
+                        gradeLevel: getGradeFromScore(finalScore),
+                        notes: row.notes,
+                        scores: row.values,
+                        lock: false,
+                        flagged: false,
+                    }),
                 });
+
+                if (!resp.ok) {
+                    const errorText = await resp.text().catch(() => 'Failed to save score.');
+                    throw new Error(errorText || `HTTP ${resp.status}`);
+                }
 
                 successCount += 1;
                 nextRows.push({ ...row, importStatus: 'success', importMessage: `Submitted for sample ${row.matchedBlindCode || row.matchedSampleId} (not locked).` });
@@ -784,10 +797,17 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         setBulkImportRows(nextRows);
         setBulkImportStatus({ processing: false, completed: true, successCount, errorCount });
 
+        // Refresh local state once after batch to avoid request storms
+        try {
+            await loadSubmittedScores({ forceEventId: String(selectedEvent.id) });
+        } catch (error) {
+            console.warn('Failed to refresh submitted scores after bulk import:', error);
+        }
+
         window.setTimeout(() => {
             window.dispatchEvent(new CustomEvent('headjudge:decision-saved', { detail: { eventId: selectedEvent.id } }));
         }, 600);
-    }, [selectedEvent, bulkImportRows, onUpdateAdjudication]);
+    }, [selectedEvent, bulkImportRows, loadSubmittedScores]);
 
     const fetchReevaluationRequests = useCallback(async (eventId?: string) => {
         try {
