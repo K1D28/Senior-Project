@@ -1521,8 +1521,54 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {samplesForEvent.map(sample => {
                                                 const relevantScores = mergedAppData.scores.filter(s => s.sampleId === sample.id && s.eventId === selectedEvent.id && s.isSubmitted);
-                                                const totalAssigned = (selectedEvent.assignedQGraderIds?.length || 0) + (selectedEvent.assignedHeadJudgeIds?.length || 0);
-                                                const submittedCount = Math.min(relevantScores.length, totalAssigned);
+
+                                                const parseAssignedIds = (value: unknown): string[] => {
+                                                    if (Array.isArray(value)) {
+                                                        return value
+                                                            .map(v => String(v).trim())
+                                                            .filter(v => v.length > 0);
+                                                    }
+                                                    if (typeof value === 'string') {
+                                                        const raw = value.trim();
+                                                        if (!raw) return [];
+                                                        if (raw.startsWith('[') && raw.endsWith(']')) {
+                                                            try {
+                                                                const parsed = JSON.parse(raw);
+                                                                if (Array.isArray(parsed)) {
+                                                                    return parsed.map(v => String(v).trim()).filter(v => v.length > 0);
+                                                                }
+                                                            } catch {
+                                                                // Ignore invalid JSON and fallback to comma split
+                                                            }
+                                                        }
+                                                        return raw.split(',').map(v => v.trim()).filter(v => v.length > 0);
+                                                    }
+                                                    return [];
+                                                };
+
+                                                const assignedQSet = new Set(parseAssignedIds((selectedEvent as any).assignedQGraderIds));
+                                                const assignedHSet = new Set(parseAssignedIds((selectedEvent as any).assignedHeadJudgeIds));
+
+                                                // Fallback to participants payload when assigned arrays are missing/malformed
+                                                if (assignedQSet.size === 0 && Array.isArray((selectedEvent as any).participants)) {
+                                                    ((selectedEvent as any).participants as any[])
+                                                        .filter(p => p?.role === 'Q_GRADER')
+                                                        .forEach(p => {
+                                                            const id = p?.qGraderId ?? p?.qGrader?.id;
+                                                            if (id !== undefined && id !== null && String(id).trim()) assignedQSet.add(String(id).trim());
+                                                        });
+                                                }
+                                                if (assignedHSet.size === 0 && Array.isArray((selectedEvent as any).participants)) {
+                                                    ((selectedEvent as any).participants as any[])
+                                                        .filter(p => p?.role === 'HEAD_JUDGE')
+                                                        .forEach(p => {
+                                                            const id = p?.headJudgeId ?? p?.headJudge?.id;
+                                                            if (id !== undefined && id !== null && String(id).trim()) assignedHSet.add(String(id).trim());
+                                                        });
+                                                }
+
+                                                const totalAssigned = assignedQSet.size + assignedHSet.size;
+                                                const submittedCount = Math.min(new Set(relevantScores.map(s => String(s.qGraderId))).size, totalAssigned);
                                                 const { average } = calculateStats(relevantScores.map(s => s.scores.finalScore));
 
                                                 return (
