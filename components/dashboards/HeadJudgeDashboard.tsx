@@ -778,14 +778,8 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
 
         setBulkImportRows(prev => prev.map(existing => existing.rowNumber === row.rowNumber ? updatedRow : existing));
 
-        try {
-            await loadSubmittedScores({ forceEventId: String(selectedEvent.id) });
-        } catch (error) {
-            console.warn('Failed to refresh submitted scores after row import:', error);
-        }
-
         window.dispatchEvent(new CustomEvent('headjudge:decision-saved', { detail: { eventId: selectedEvent.id } }));
-    }, [selectedEvent, loadSubmittedScores]);
+    }, [selectedEvent]);
 
     const handleBulkImportSubmit = useCallback(async () => {
         if (!selectedEvent) {
