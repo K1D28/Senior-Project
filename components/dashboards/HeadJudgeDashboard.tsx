@@ -738,76 +738,87 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         }
     }, []);
 
+    const submitBulkImportRow = useCallback(async (row: BulkImportPreviewRow) => {
+        if (!selectedEvent) {
+            throw new Error('Please select an event first.');
+        }
+
+        if (row.validationErrors.length > 0 || !row.matchedSampleId) {
+            throw new Error(row.validationErrors[0] || 'Row could not be imported.');
+        }
+
+        const finalScore = calculateFinalScoreFromValues(row.values);
+        const resp = await fetch(`${BACKEND_URL}/api/headjudge/samples/${row.matchedSampleId}/decision`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+            },
+            body: JSON.stringify({
+                finalScore,
+                gradeLevel: getGradeFromScore(finalScore),
+                notes: row.notes,
+                scores: row.values,
+                lock: false,
+                flagged: false,
+            }),
+        });
+
+        if (!resp.ok) {
+            const errorText = await resp.text().catch(() => 'Failed to save score.');
+            throw new Error(errorText || `HTTP ${resp.status}`);
+        }
+
+        const updatedRow: BulkImportPreviewRow = {
+            ...row,
+            importStatus: 'success',
+            importMessage: `Submitted for sample ${row.matchedBlindCode || row.matchedSampleId} (not locked).`,
+        };
+
+        setBulkImportRows(prev => prev.map(existing => existing.rowNumber === row.rowNumber ? updatedRow : existing));
+
+        try {
+            await loadSubmittedScores({ forceEventId: String(selectedEvent.id) });
+        } catch (error) {
+            console.warn('Failed to refresh submitted scores after row import:', error);
+        }
+
+        window.dispatchEvent(new CustomEvent('headjudge:decision-saved', { detail: { eventId: selectedEvent.id } }));
+    }, [selectedEvent, loadSubmittedScores]);
+
     const handleBulkImportSubmit = useCallback(async () => {
         if (!selectedEvent) {
             alert('Please select an event first.');
             return;
         }
 
-        const eligibleRows = bulkImportRows.filter(row => row.validationErrors.length === 0 && row.matchedSampleId);
-        if (eligibleRows.length === 0) {
-            alert('Upload a valid CSV with at least one matching sample before importing.');
+        const nextPendingRow = bulkImportRows.find(row => row.importStatus === 'pending' && row.validationErrors.length === 0 && row.matchedSampleId);
+        if (!nextPendingRow) {
+            alert('No pending valid rows left to submit.');
             return;
         }
 
-        setBulkImportStatus({ processing: true, completed: false, successCount: 0, errorCount: bulkImportRows.length - eligibleRows.length });
-
-        let successCount = 0;
-        let errorCount = bulkImportRows.length - eligibleRows.length;
-        const nextRows: BulkImportPreviewRow[] = [];
-
-        for (const row of bulkImportRows) {
-            if (row.validationErrors.length > 0 || !row.matchedSampleId) {
-                nextRows.push({ ...row, importStatus: 'error', importMessage: row.validationErrors[0] || 'Row could not be imported.' });
-                continue;
-            }
-
-            try {
-                const finalScore = calculateFinalScoreFromValues(row.values);
-                const resp = await fetch(`${BACKEND_URL}/api/headjudge/samples/${row.matchedSampleId}/decision`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${localStorage.getItem('token')}`,
-                    },
-                    body: JSON.stringify({
-                        finalScore,
-                        gradeLevel: getGradeFromScore(finalScore),
-                        notes: row.notes,
-                        scores: row.values,
-                        lock: false,
-                        flagged: false,
-                    }),
-                });
-
-                if (!resp.ok) {
-                    const errorText = await resp.text().catch(() => 'Failed to save score.');
-                    throw new Error(errorText || `HTTP ${resp.status}`);
-                }
-
-                successCount += 1;
-                nextRows.push({ ...row, importStatus: 'success', importMessage: `Submitted for sample ${row.matchedBlindCode || row.matchedSampleId} (not locked).` });
-            } catch (error) {
-                errorCount += 1;
-                nextRows.push({ ...row, importStatus: 'error', importMessage: error instanceof Error ? error.message : 'Failed to save score.' });
-            }
-        }
-
-        setBulkImportRows(nextRows);
-        setBulkImportStatus({ processing: false, completed: true, successCount, errorCount });
-
-        // Refresh local state once after batch to avoid request storms
+        setBulkImportStatus(prev => ({ ...prev, processing: true, completed: false }));
         try {
-            await loadSubmittedScores({ forceEventId: String(selectedEvent.id) });
+            await submitBulkImportRow(nextPendingRow);
+            setBulkImportStatus(prev => ({
+                processing: false,
+                completed: true,
+                successCount: prev.successCount + 1,
+                errorCount: prev.errorCount,
+            }));
         } catch (error) {
-            console.warn('Failed to refresh submitted scores after bulk import:', error);
+            const message = error instanceof Error ? error.message : 'Failed to save score.';
+            setBulkImportRows(prev => prev.map(existing => existing.rowNumber === nextPendingRow.rowNumber ? { ...existing, importStatus: 'error', importMessage: message } : existing));
+            setBulkImportStatus(prev => ({
+                processing: false,
+                completed: true,
+                successCount: prev.successCount,
+                errorCount: prev.errorCount + 1,
+            }));
         }
-
-        window.setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('headjudge:decision-saved', { detail: { eventId: selectedEvent.id } }));
-        }, 600);
-    }, [selectedEvent, bulkImportRows, loadSubmittedScores]);
+    }, [selectedEvent, bulkImportRows, submitBulkImportRow]);
 
     const fetchReevaluationRequests = useCallback(async (eventId?: string) => {
         try {
@@ -1451,11 +1462,15 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Button onClick={handleBulkImportSubmit} disabled={bulkImportRows.length === 0 || bulkImportStatus.processing}>
-                                                    {bulkImportStatus.processing ? 'Importing...' : 'Import Scores'}
+                                                    {bulkImportStatus.processing ? 'Submitting...' : 'Submit Next Pending'}
                                                 </Button>
                                                 <Button variant="secondary" onClick={resetBulkImportState} disabled={bulkImportStatus.processing}>Clear</Button>
                                             </div>
                                         </div>
+
+                                        <p className="text-sm text-gray-600">
+                                            Submit rows one at a time. Each click saves a single sample score and keeps the judgement unlocked.
+                                        </p>
 
                                         {(bulkImportErrors.length > 0 || bulkImportStatus.completed) && (
                                             <div className="space-y-2">
@@ -1479,6 +1494,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                                                 <th key={field.key} className="py-2 px-3 text-center font-semibold">{field.label}</th>
                                                             ))}
                                                             <th className="py-2 px-3 text-left font-semibold">Status</th>
+                                                            <th className="py-2 px-3 text-left font-semibold">Action</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1497,6 +1513,36 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                                                                         {row.importStatus === 'success' ? <CheckCircle size={12} /> : row.importStatus === 'error' ? <AlertCircle size={12} /> : <FileSpreadsheet size={12} />}
                                                                         <span>{row.importMessage || (row.importStatus === 'pending' ? 'Ready' : row.importStatus)}</span>
                                                                     </div>
+                                                                </td>
+                                                                <td className="py-2 px-3">
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="secondary"
+                                                                        disabled={bulkImportStatus.processing || row.importStatus === 'success' || Boolean(row.validationErrors.length > 0 && !row.matchedSampleId)}
+                                                                        onClick={async () => {
+                                                                            setBulkImportStatus(prev => ({ ...prev, processing: true, completed: false }));
+                                                                            try {
+                                                                                await submitBulkImportRow(row);
+                                                                                setBulkImportStatus(prev => ({
+                                                                                    processing: false,
+                                                                                    completed: true,
+                                                                                    successCount: prev.successCount + 1,
+                                                                                    errorCount: prev.errorCount,
+                                                                                }));
+                                                                            } catch (error) {
+                                                                                const message = error instanceof Error ? error.message : 'Failed to save score.';
+                                                                                setBulkImportRows(prev => prev.map(existing => existing.rowNumber === row.rowNumber ? { ...existing, importStatus: 'error', importMessage: message } : existing));
+                                                                                setBulkImportStatus(prev => ({
+                                                                                    processing: false,
+                                                                                    completed: true,
+                                                                                    successCount: prev.successCount,
+                                                                                    errorCount: prev.errorCount + 1,
+                                                                                }));
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {row.importStatus === 'success' ? 'Saved' : 'Submit'}
+                                                                    </Button>
                                                                 </td>
                                                             </tr>
                                                         ))}

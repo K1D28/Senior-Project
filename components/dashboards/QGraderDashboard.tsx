@@ -772,66 +772,79 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
         }
     }, [bulkImportEvent, bulkImportSamples]);
 
+    const submitBulkImportRow = useCallback(async (row: BulkImportPreviewRow) => {
+        if (!bulkImportEvent) {
+            throw new Error('Select an event first.');
+        }
+
+        if (row.validationErrors.length > 0 || !row.matchedSampleId) {
+            throw new Error(row.validationErrors[0] || 'Row could not be imported.');
+        }
+
+        const updatedSheet: ScoreSheet = {
+            id: `bulk-${bulkImportEvent.id}-${row.matchedSampleId}-${currentUser.id}`,
+            eventId: String(bulkImportEvent.id),
+            qGraderId: currentUser.id,
+            sampleId: row.matchedSampleId,
+            isSubmitted: true,
+            notes: row.notes,
+            descriptors: [],
+            scores: {
+                ...row.values,
+                taints: 0,
+                faults: 0,
+                finalScore: calculateFinalScoreFromValues(row.values),
+            },
+        };
+
+        const saveResult = await Promise.resolve(onUpdateScoreSheet(updatedSheet) as unknown as Promise<{ ok?: boolean; message?: string }> | { ok?: boolean; message?: string } | void);
+        const wasSuccessful = typeof saveResult === 'object' && saveResult !== null && 'ok' in saveResult ? Boolean(saveResult.ok) : true;
+
+        if (!wasSuccessful) {
+            throw new Error((saveResult && typeof saveResult === 'object' && 'message' in saveResult && saveResult.message) ? String(saveResult.message) : 'Backend rejected this score.');
+        }
+
+        const updatedRow: BulkImportPreviewRow = {
+            ...row,
+            importStatus: 'success',
+            importMessage: `Saved for sample ${row.matchedBlindCode || row.matchedSampleId}.`,
+        };
+
+        setBulkImportRows(prev => prev.map(existing => existing.rowNumber === row.rowNumber ? updatedRow : existing));
+    }, [bulkImportEvent, currentUser.id, onUpdateScoreSheet]);
+
     const handleBulkImportSubmit = useCallback(async () => {
         if (!bulkImportEvent) {
             alert('Select an event first.');
             return;
         }
 
-        const eligibleRows = bulkImportRows.filter(row => row.validationErrors.length === 0 && row.matchedSampleId);
-        if (eligibleRows.length === 0) {
-            alert('Upload a valid CSV with at least one matching sample before importing.');
+        const nextPendingRow = bulkImportRows.find(row => row.importStatus === 'pending' && row.validationErrors.length === 0 && row.matchedSampleId);
+        if (!nextPendingRow) {
+            alert('No pending valid rows left to submit.');
             return;
         }
 
-        setBulkImportStatus({ processing: true, completed: false, successCount: 0, errorCount: bulkImportRows.length - eligibleRows.length });
-
-        let successCount = 0;
-        let errorCount = bulkImportRows.length - eligibleRows.length;
-        const nextRows: BulkImportPreviewRow[] = [];
-
-        for (const row of bulkImportRows) {
-            if (row.validationErrors.length > 0 || !row.matchedSampleId) {
-                nextRows.push({ ...row, importStatus: 'error', importMessage: row.validationErrors[0] || 'Row could not be imported.' });
-                continue;
-            }
-
-            const updatedSheet: ScoreSheet = {
-                id: `bulk-${bulkImportEvent.id}-${row.matchedSampleId}-${currentUser.id}`,
-                eventId: String(bulkImportEvent.id),
-                qGraderId: currentUser.id,
-                sampleId: row.matchedSampleId,
-                isSubmitted: true,
-                notes: row.notes,
-                descriptors: [],
-                scores: {
-                    ...row.values,
-                    taints: 0,
-                    faults: 0,
-                    finalScore: calculateFinalScoreFromValues(row.values),
-                },
-            };
-
-            try {
-                const saveResult = await Promise.resolve(onUpdateScoreSheet(updatedSheet) as unknown as Promise<{ ok?: boolean; message?: string }> | { ok?: boolean; message?: string } | void);
-                const wasSuccessful = typeof saveResult === 'object' && saveResult !== null && 'ok' in saveResult ? Boolean(saveResult.ok) : true;
-
-                if (wasSuccessful) {
-                    successCount += 1;
-                    nextRows.push({ ...row, importStatus: 'success', importMessage: `Saved for sample ${row.matchedBlindCode || row.matchedSampleId}.` });
-                } else {
-                    errorCount += 1;
-                    nextRows.push({ ...row, importStatus: 'error', importMessage: (saveResult && typeof saveResult === 'object' && 'message' in saveResult && saveResult.message) ? String(saveResult.message) : 'Backend rejected this score.' });
-                }
-            } catch (error) {
-                errorCount += 1;
-                nextRows.push({ ...row, importStatus: 'error', importMessage: error instanceof Error ? error.message : 'Failed to save score.' });
-            }
+        setBulkImportStatus(prev => ({ ...prev, processing: true, completed: false }));
+        try {
+            await submitBulkImportRow(nextPendingRow);
+            setBulkImportStatus(prev => ({
+                processing: false,
+                completed: true,
+                successCount: prev.successCount + 1,
+                errorCount: prev.errorCount,
+            }));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to save score.';
+            setBulkImportRows(prev => prev.map(existing => existing.rowNumber === nextPendingRow.rowNumber ? { ...existing, importStatus: 'error', importMessage: message } : existing));
+            setBulkImportStatus(prev => ({
+                processing: false,
+                completed: true,
+                successCount: prev.successCount,
+                errorCount: prev.errorCount + 1,
+            }));
         }
-
-        setBulkImportRows(nextRows);
-        setBulkImportStatus({ processing: false, completed: true, successCount, errorCount });
-    }, [bulkImportEvent, bulkImportRows, currentUser.id, onUpdateScoreSheet]);
+    }, [bulkImportEvent, bulkImportRows, submitBulkImportRow]);
 
     // Samples come from the server as `sampleObjects` on each event. Do not use appData.samples.
     const samplesForEvent = useMemo(() => {
@@ -1356,7 +1369,26 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
 
                                     <div className="mt-6 flex items-center gap-3">
                                         <Button onClick={handleBulkImportSubmit} disabled={!bulkImportEvent || bulkImportRows.length === 0 || bulkImportStatus.processing}>
-                                            {bulkImportStatus.processing ? 'Importing...' : 'Import Scores'}
+                                            {bulkImportStatus.processing ? 'Submitting...' : 'Submit Next Pending'}
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            onClick={async () => {
+                                                const pendingRows = bulkImportRows.filter(row => row.importStatus === 'pending' && row.validationErrors.length === 0 && row.matchedSampleId);
+                                                if (pendingRows.length === 0) return;
+                                                setBulkImportStatus(prev => ({ ...prev, processing: true, completed: false }));
+                                                try {
+                                                    await submitBulkImportRow(pendingRows[0]);
+                                                    setBulkImportStatus(prev => ({ processing: false, completed: true, successCount: prev.successCount + 1, errorCount: prev.errorCount }));
+                                                } catch (error) {
+                                                    const message = error instanceof Error ? error.message : 'Failed to save score.';
+                                                    setBulkImportRows(prev => prev.map(existing => existing.rowNumber === pendingRows[0].rowNumber ? { ...existing, importStatus: 'error', importMessage: message } : existing));
+                                                    setBulkImportStatus(prev => ({ processing: false, completed: true, successCount: prev.successCount, errorCount: prev.errorCount + 1 }));
+                                                }
+                                            }}
+                                            disabled={!bulkImportEvent || bulkImportRows.every(row => row.importStatus !== 'pending') || bulkImportStatus.processing}
+                                        >
+                                            Submit First Pending
                                         </Button>
                                         <div className="text-sm text-gray-600">
                                             {bulkImportStatus.completed ? `${bulkImportStatus.successCount} saved, ${bulkImportStatus.errorCount} failed` : 'Rows are validated after upload.'}
@@ -1378,6 +1410,7 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                         <th className="py-2 px-3 text-left font-semibold">Sample</th>
                                                         {BULK_SCORE_FIELDS.map(field => <th key={field.key} className="py-2 px-3 text-center font-semibold">{field.label}</th>)}
                                                         <th className="py-2 px-3 text-left font-semibold">Status</th>
+                                                        <th className="py-2 px-3 text-left font-semibold">Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1401,6 +1434,26 @@ const QGraderDashboard: React.FC<QGraderDashboardProps> = ({ currentUser, appDat
                                                                     {row.importStatus === 'success' ? <CheckCircle size={12} /> : row.importStatus === 'error' ? <AlertCircle size={12} /> : <FileSpreadsheet size={12} />}
                                                                     <span>{row.importMessage || (row.importStatus === 'pending' ? 'Ready' : row.importStatus)}</span>
                                                                 </div>
+                                                            </td>
+                                                            <td className="py-2 px-3">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="secondary"
+                                                                    disabled={bulkImportStatus.processing || row.importStatus === 'success' || (row.validationErrors.length > 0 && !row.matchedSampleId)}
+                                                                    onClick={async () => {
+                                                                        setBulkImportStatus(prev => ({ ...prev, processing: true, completed: false }));
+                                                                        try {
+                                                                            await submitBulkImportRow(row);
+                                                                            setBulkImportStatus(prev => ({ processing: false, completed: true, successCount: prev.successCount + 1, errorCount: prev.errorCount }));
+                                                                        } catch (error) {
+                                                                            const message = error instanceof Error ? error.message : 'Failed to save score.';
+                                                                            setBulkImportRows(prev => prev.map(existing => existing.rowNumber === row.rowNumber ? { ...existing, importStatus: 'error', importMessage: message } : existing));
+                                                                            setBulkImportStatus(prev => ({ processing: false, completed: true, successCount: prev.successCount, errorCount: prev.errorCount + 1 }));
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    {row.importStatus === 'success' ? 'Saved' : 'Submit'}
+                                                                </Button>
                                                             </td>
                                                         </tr>
                                                     ))}
