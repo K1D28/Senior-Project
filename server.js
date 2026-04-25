@@ -1217,9 +1217,10 @@ app.post('/api/cupping-events/draft', verifySupabaseToken, async (req, res) => {
         tags: { create: tags.map(tag => ({ tag })) },
         processingMethods: { create: processingMethods.map(method => ({ method })) },
         participants: {
+          // `eventId` is implicit in nested create; dedupe IDs to avoid duplicate participants
           create: [
-            ...assignedQGraderIds.map(qg => ({ role: 'Q_GRADER', qGraderId: parseInt(qg), eventId: newEvent.id })),
-            ...assignedHeadJudgeIds.map(hj => ({ role: 'HEAD_JUDGE', headJudgeId: parseInt(hj), eventId: newEvent.id })),
+            ...Array.from(new Set((Array.isArray(assignedQGraderIds) ? assignedQGraderIds : []).map(id => parseInt(id, 10)).filter(id => Number.isInteger(id) && id > 0))).map(qg => ({ role: 'Q_GRADER', qGraderId: qg })),
+            ...Array.from(new Set((Array.isArray(assignedHeadJudgeIds) ? assignedHeadJudgeIds : []).map(id => parseInt(id, 10)).filter(id => Number.isInteger(id) && id > 0))).map(hj => ({ role: 'HEAD_JUDGE', headJudgeId: hj })),
           ],
         },
         samples: {
@@ -1341,11 +1342,15 @@ app.post('/api/cupping-events', verifySupabaseToken, async (req, res) => {
       }
     }
 
-    // Add participants after the event is created
+    // Add participants after the event is created - dedupe ids to avoid accidental duplicates
+    const uniqueQ = Array.isArray(assignedQGraderIds) ? Array.from(new Set(assignedQGraderIds.map(id => parseInt(id, 10)))) : [];
+    const uniqueH = Array.isArray(assignedHeadJudgeIds) ? Array.from(new Set(assignedHeadJudgeIds.map(id => parseInt(id, 10)))) : [];
+    const uniqueF = Array.isArray(assignedFarmerIds) ? Array.from(new Set(assignedFarmerIds.map(id => parseInt(id, 10)))) : [];
+
     const participantPayload = [];
-    if (Array.isArray(assignedQGraderIds)) participantPayload.push(...assignedQGraderIds.map(qg => ({ role: 'Q_GRADER', qGraderId: parseInt(qg), eventId: newEvent.id })));
-    if (Array.isArray(assignedHeadJudgeIds)) participantPayload.push(...assignedHeadJudgeIds.map(hj => ({ role: 'HEAD_JUDGE', headJudgeId: parseInt(hj), eventId: newEvent.id })));
-    if (Array.isArray(assignedFarmerIds)) participantPayload.push(...assignedFarmerIds.map(f => ({ role: 'FARMER', farmerId: parseInt(f), eventId: newEvent.id })));
+    if (uniqueQ.length > 0) participantPayload.push(...uniqueQ.map(qg => ({ role: 'Q_GRADER', qGraderId: qg, eventId: newEvent.id })));
+    if (uniqueH.length > 0) participantPayload.push(...uniqueH.map(hj => ({ role: 'HEAD_JUDGE', headJudgeId: hj, eventId: newEvent.id })));
+    if (uniqueF.length > 0) participantPayload.push(...uniqueF.map(f => ({ role: 'FARMER', farmerId: f, eventId: newEvent.id })));
     if (participantPayload.length > 0) {
       await prisma.participant.createMany({ data: participantPayload });
     }
@@ -1742,25 +1747,60 @@ app.put('/api/cupping-events/:id/reveal-results', verifySupabaseToken, async (re
 // Update participants for a cupping event
 app.put('/api/cupping-events/:id/participants', verifySupabaseToken, async (req, res) => {
     const { id } = req.params;
+  const eventId = parseInt(id, 10);
   let { assignedQGraderIds, assignedHeadJudgeIds, assignedFarmerIds } = req.body;
   console.log('Received request to update participants for event ID:', id); // Debugging log
   console.log('Request body:', req.body); // Debugging log
 
-  // Allow clients to send only a subset of arrays (e.g., only QGraders/headJudges)
-  if (!Array.isArray(assignedQGraderIds)) assignedQGraderIds = [];
-  if (!Array.isArray(assignedHeadJudgeIds)) assignedHeadJudgeIds = [];
-  if (!Array.isArray(assignedFarmerIds)) assignedFarmerIds = [];
+  const hasQGraders = Object.prototype.hasOwnProperty.call(req.body, 'assignedQGraderIds');
+  const hasHeadJudges = Object.prototype.hasOwnProperty.call(req.body, 'assignedHeadJudgeIds');
+  const hasFarmers = Object.prototype.hasOwnProperty.call(req.body, 'assignedFarmerIds');
+
+  const normalizeIds = (value) => {
+    if (!Array.isArray(value)) return [];
+    return Array.from(
+      new Set(
+        value
+          .map(v => parseInt(v, 10))
+          .filter(v => Number.isInteger(v) && v > 0)
+      )
+    );
+  };
 
     try {
+        const existingParticipants = await prisma.participant.findMany({
+          where: { eventId },
+          select: {
+            role: true,
+            qGraderId: true,
+            headJudgeId: true,
+            farmerId: true,
+          },
+        });
+
+        const existingQ = existingParticipants
+          .filter(p => p.role === 'Q_GRADER' && p.qGraderId != null)
+          .map(p => p.qGraderId);
+        const existingH = existingParticipants
+          .filter(p => p.role === 'HEAD_JUDGE' && p.headJudgeId != null)
+          .map(p => p.headJudgeId);
+        const existingF = existingParticipants
+          .filter(p => p.role === 'FARMER' && p.farmerId != null)
+          .map(p => p.farmerId);
+
+        const nextQ = normalizeIds(hasQGraders ? assignedQGraderIds : existingQ);
+        const nextH = normalizeIds(hasHeadJudges ? assignedHeadJudgeIds : existingH);
+        const nextF = normalizeIds(hasFarmers ? assignedFarmerIds : existingF);
+
         const updatedEvent = await prisma.cuppingEvent.update({
-            where: { id: parseInt(id) },
+            where: { id: eventId },
             data: {
                 participants: {
                     deleteMany: {}, // Clear existing participants
                     create: [
-                        ...assignedQGraderIds.map(qGraderId => ({ role: 'Q_GRADER', qGraderId: parseInt(qGraderId) })),
-                        ...assignedHeadJudgeIds.map(headJudgeId => ({ role: 'HEAD_JUDGE', headJudgeId: parseInt(headJudgeId) })),
-                        ...assignedFarmerIds.map(farmerId => ({ role: 'FARMER', farmerId: parseInt(farmerId) })),
+                        ...nextQ.map(qGraderId => ({ role: 'Q_GRADER', qGraderId })),
+                        ...nextH.map(headJudgeId => ({ role: 'HEAD_JUDGE', headJudgeId })),
+                        ...nextF.map(farmerId => ({ role: 'FARMER', farmerId })),
                     ],
                 },
             },
