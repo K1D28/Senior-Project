@@ -63,6 +63,16 @@ model HeadJudgeDecision {
   finalScore    Float?
   gradeLevel    String?
   notes         String?
+  fragrance     Float?
+  flavor        Float?
+  aftertaste    Float?
+  acidity       Float?
+  body          Float?
+  balance       Float?
+  uniformity    Float?
+  cleanCup      Float?
+  sweetness     Float?
+  overall       Float?
   flagged       Boolean   @default(false)
 
   createdAt     DateTime  @default(now())

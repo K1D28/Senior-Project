@@ -2399,9 +2399,8 @@ function calculateGradeFromScore(score) {
 }
 
 // Canonical score recomputation for a sample:
-// 1) If at least one Head Judge final score exists -> use average of Head Judge final scores.
-// 2) Otherwise use average of submitted Q Grader totals.
-// 3) If none exist -> null.
+// 1) Average all submitted Q Grader totals and all Head Judge final scores together.
+// 2) If none exist -> null.
 async function recalculateSampleAdjudicatedScore(sampleId) {
   const numericSampleId = parseInt(sampleId);
 
@@ -2412,16 +2411,6 @@ async function recalculateSampleAdjudicatedScore(sampleId) {
     },
   });
 
-  if (headJudgeDecisions.length > 0) {
-    const headJudgeAvg = headJudgeDecisions.reduce((acc, decision) => acc + Number(decision.finalScore || 0), 0) / headJudgeDecisions.length;
-    return {
-      score: headJudgeAvg,
-      source: 'HEAD_JUDGE_AVG',
-      count: headJudgeDecisions.length,
-      grade: calculateGradeFromScore(headJudgeAvg),
-    };
-  }
-
   const submittedQGraderScores = await prisma.qGraderScore.findMany({
     where: {
       sampleId: numericSampleId,
@@ -2429,13 +2418,18 @@ async function recalculateSampleAdjudicatedScore(sampleId) {
     },
   });
 
-  if (submittedQGraderScores.length > 0) {
-    const qGraderAvg = submittedQGraderScores.reduce((acc, score) => acc + Number(score.total || 0), 0) / submittedQGraderScores.length;
+  const combinedScores = [
+    ...submittedQGraderScores.map(score => Number(score.total || 0)),
+    ...headJudgeDecisions.map(decision => Number(decision.finalScore || 0)),
+  ].filter(score => Number.isFinite(score));
+
+  if (combinedScores.length > 0) {
+    const combinedAvg = combinedScores.reduce((acc, score) => acc + score, 0) / combinedScores.length;
     return {
-      score: qGraderAvg,
-      source: 'Q_GRADER_SUBMITTED_AVG',
-      count: submittedQGraderScores.length,
-      grade: calculateGradeFromScore(qGraderAvg),
+      score: combinedAvg,
+      source: headJudgeDecisions.length > 0 && submittedQGraderScores.length > 0 ? 'COMBINED_AVG' : headJudgeDecisions.length > 0 ? 'HEAD_JUDGE_AVG' : 'Q_GRADER_SUBMITTED_AVG',
+      count: combinedScores.length,
+      grade: calculateGradeFromScore(combinedAvg),
     };
   }
 
@@ -2807,7 +2801,7 @@ app.post('/api/headjudge/events/:eventId/samples/:sampleId/lock', verifySupabase
 app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async (req, res) => {
   try {
     const { sampleId } = req.params;
-    const { finalScore, gradeLevel, notes, lock, flagged } = req.body;
+    const { finalScore, gradeLevel, notes, scores, lock, flagged } = req.body;
     console.log('HEADJUDGE DECISION called', { params: req.params, headers: { authorization: req.headers.authorization }, cookieToken: req.cookies && req.cookies.token, body: req.body });
     const userEmail = req.user?.email;
     if (!userEmail) return res.status(403).json({ message: 'Forbidden' });
@@ -2827,9 +2821,9 @@ app.post('/api/headjudge/samples/:sampleId/decision', verifySupabaseToken, async
     // Upsert HeadJudgeDecision for this sample and headJudge
     let decision = await prisma.headJudgeDecision.findFirst({ where: { sampleId: parseInt(sampleId), headJudgeId: headJudge.id } });
     if (decision) {
-      decision = await prisma.headJudgeDecision.update({ where: { id: decision.id }, data: { finalScore: finalScore ?? decision.finalScore, gradeLevel: gradeLevel ?? decision.gradeLevel, notes: notes ?? decision.notes, flagged: typeof flagged === 'boolean' ? flagged : decision.flagged } });
+      decision = await prisma.headJudgeDecision.update({ where: { id: decision.id }, data: { finalScore: finalScore ?? decision.finalScore, gradeLevel: gradeLevel ?? decision.gradeLevel, notes: notes ?? decision.notes, fragrance: scores?.fragrance ?? decision.fragrance, flavor: scores?.flavor ?? decision.flavor, aftertaste: scores?.aftertaste ?? decision.aftertaste, acidity: scores?.acidity ?? decision.acidity, body: scores?.body ?? decision.body, balance: scores?.balance ?? decision.balance, uniformity: scores?.uniformity ?? decision.uniformity, cleanCup: scores?.cleanCup ?? decision.cleanCup, sweetness: scores?.sweetness ?? decision.sweetness, overall: scores?.overall ?? decision.overall, flagged: typeof flagged === 'boolean' ? flagged : decision.flagged } });
     } else {
-      decision = await prisma.headJudgeDecision.create({ data: { sampleId: parseInt(sampleId), headJudgeId: headJudge.id, finalScore, gradeLevel, notes, flagged: Boolean(flagged) } });
+      decision = await prisma.headJudgeDecision.create({ data: { sampleId: parseInt(sampleId), headJudgeId: headJudge.id, finalScore, gradeLevel, notes, fragrance: scores?.fragrance, flavor: scores?.flavor, aftertaste: scores?.aftertaste, acidity: scores?.acidity, body: scores?.body, balance: scores?.balance, uniformity: scores?.uniformity, cleanCup: scores?.cleanCup, sweetness: scores?.sweetness, overall: scores?.overall, flagged: Boolean(flagged) } });
     }
 
     // Update the Sample record with adjudication summary fields

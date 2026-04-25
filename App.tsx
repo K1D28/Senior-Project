@@ -23,6 +23,7 @@ export interface AdjudicationData {
     grade?: string;
     notes?: string;
     justification?: string;
+    scores?: Partial<Omit<ScoreSheet['scores'], 'finalScore' | 'taints' | 'faults'>>;
     flagged?: boolean;
   lock?: boolean;
 }
@@ -730,7 +731,7 @@ function App() {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-            body: JSON.stringify({ finalScore: finalData.score, gradeLevel: finalData.grade, notes: finalData.notes || finalData.justification || '', lock: Boolean(finalData.lock), flagged: !!finalData.flagged }),
+            body: JSON.stringify({ finalScore: finalData.score, gradeLevel: finalData.grade, notes: finalData.notes || finalData.justification || '', scores: finalData.scores, lock: Boolean(finalData.lock), flagged: !!finalData.flagged }),
           });
           if (!resp.ok) {
             try {

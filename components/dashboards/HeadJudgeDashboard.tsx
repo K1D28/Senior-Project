@@ -263,41 +263,11 @@ const QualitativeInsights: React.FC<{ scoresForSample: ScoreSheet[], graders: Us
 };
 
 const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, descriptorProfile: string, onUpdateAdjudication: (data: AdjudicationData) => void, onBack: () => void, aiAnalysis?: string, appData?: AppData, event?: CuppingEvent }> = ({ sample, avgScore, descriptorProfile, onUpdateAdjudication, onBack, aiAnalysis, appData, event }) => {
-    const [justification, setJustification] = useState<string>(sample.adjudicationJustification || '');
     const [gradeLevel, setGradeLevel] = useState<string>(sample.gradeLevel || getGradeFromScore(avgScore));
     const [headJudgeNotes, setHeadJudgeNotes] = useState<string>(sample.headJudgeNotes || '');
     
-    // Initialize adjusted scores from Q Grader averages
-    const [adjustedScores, setAdjustedScores] = useState<ScoreAdjustments>(() => {
-        if (!appData || !event) {
-            return defaultScoreAdjustments;
-        }
-        
-        const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
-        
-        if (scoresForSample.length === 0) {
-            return defaultScoreAdjustments;
-        }
-        
-        const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
-        
-        const avgScores: ScoreAdjustments = { ...defaultScoreAdjustments };
-        attributes.forEach(attr => {
-            const values = scoresForSample.map(s => s.scores[attr]);
-            avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
-        });
-        
-        // avgScore is the average of finalScores from Q Graders
-        // We need to scale individual attributes proportionally so they sum to avgScore
-        const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
-        const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
-        
-        attributes.forEach(attr => {
-            avgScores[attr] = avgScores[attr] * scaleFactor;
-        });
-        
-        return avgScores;
-    });
+    // Head Judge score sheet values start from a neutral baseline.
+    const [adjustedScores, setAdjustedScores] = useState<ScoreAdjustments>(defaultScoreAdjustments);
     
     // Calculate final score based on adjusted scores (same formula as Q Grader)
     const calculatedFinalScore = useMemo(() => {
@@ -307,44 +277,10 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
 
     // Reset form state when sample changes (by blind code)
     useEffect(() => {
-        if (!appData || !event) {
-            setAdjustedScores(defaultScoreAdjustments);
-        } else {
-            const scoresForSample = appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted);
-            
-            if (scoresForSample.length === 0) {
-                setAdjustedScores(defaultScoreAdjustments);
-            } else {
-                const attributes = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'] as const;
-                
-                const avgScores: ScoreAdjustments = { ...defaultScoreAdjustments };
-                attributes.forEach(attr => {
-                    const values = scoresForSample.map(s => s.scores[attr]);
-                    avgScores[attr] = values.reduce((a, b) => a + b, 0) / values.length;
-                });
-                
-                // Scale individual attributes proportionally so they sum to avgScore
-                const currentSum = Object.values(avgScores).reduce((a, b) => a + b, 0);
-                const scaleFactor = currentSum > 0 ? avgScore / currentSum : 1;
-                
-                attributes.forEach(attr => {
-                    avgScores[attr] = avgScores[attr] * scaleFactor;
-                });
-                
-                setAdjustedScores(avgScores);
-            }
-        }
-        setJustification(sample.adjudicationJustification || '');
+        setAdjustedScores(defaultScoreAdjustments);
         setGradeLevel(sample.gradeLevel || getGradeFromScore(avgScore));
         setHeadJudgeNotes(sample.headJudgeNotes || '');
     }, [sample.id, sample.blindCode, appData, event, avgScore]);
-
-    // Auto-fill justification when AI analysis is received
-    useEffect(() => {
-        if (aiAnalysis) {
-            setJustification(prev => prev ? `${prev}\n${aiAnalysis}` : aiAnalysis);
-        }
-    }, [aiAnalysis]);
 
     // Auto-fill final notes for farmer when AI analysis is received
     useEffect(() => {
@@ -357,12 +293,12 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('HeadJudge Finalization: Save & Lock clicked', { calculatedFinalScore, gradeLevel, headJudgeNotes, justification, showJustification });
+        console.log('HeadJudge Finalization: Save & Lock clicked', { calculatedFinalScore, gradeLevel, headJudgeNotes });
         onUpdateAdjudication({
             score: calculatedFinalScore,
             grade: gradeLevel,
             notes: headJudgeNotes,
-            justification: showJustification ? justification : '',
+            scores: adjustedScores,
             flagged: false,
             lock: true,
         });
@@ -396,9 +332,17 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                       </div>
                 ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Score Adjustment Section */}
                     <div className="border border-border rounded-lg p-4 bg-blue-50">
-                        <h4 className="font-semibold text-gray-900 mb-3">Adjust Average Final Score (Optional)</h4>
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                            <div>
+                                <h4 className="font-semibold text-gray-900">Head Judge Score</h4>
+                                <p className="text-xs text-gray-600 mt-1">Score the sample independently. This submission is stored as the Head Judge decision.</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                                <p className="text-xs font-semibold text-gray-600">Q Grader Average Reference</p>
+                                <p className="text-lg font-bold text-primary">{avgScore.toFixed(2)}</p>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             {['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance'].map(score => (
                                 <div key={score} className="space-y-1">
@@ -436,22 +380,13 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
                             ))}
                         </div>
                         <div className="mt-3 p-2 bg-white rounded text-sm text-gray-700">
-                            <p>Calculated Final Score: <span className="font-bold text-primary">{calculatedFinalScore.toFixed(2)}</span></p>
+                            <p>Submitted Head Judge Score: <span className="font-bold text-primary">{calculatedFinalScore.toFixed(2)}</span></p>
                         </div>
                     </div>
                     <div>
-                        <Label htmlFor="finalScore">Final Official Score</Label>
+                        <Label htmlFor="finalScore">Submitted Head Judge Score</Label>
                         <Input id="finalScore" type="number" step="0.01" value={calculatedFinalScore.toFixed(2)} disabled className="bg-gray-100 cursor-not-allowed" />
                     </div>
-                    {showJustification && (
-                        <div>
-                            <div className="flex justify-between items-baseline mb-1">
-                                <Label htmlFor="justification" className="mb-0">Justification for change</Label>
-                                <span className="text-xs italic text-primary">Why did you adjust the score?</span>
-                            </div>
-                            <Input id="justification" type="text" value={justification} onChange={e => setJustification(e.target.value)} required placeholder="e.g., Sided with majority on acidity." />
-                        </div>
-                    )}
                     <div>
                         <Label htmlFor="gradeLevel">Grade Level</Label>
                         <Select id="gradeLevel" value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} required>
@@ -850,73 +785,115 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         }
 
         try {
-            const url = `${BACKEND_URL}/api/headjudge/events/${evId}/scores`;
-            console.log('HeadJudge: fetching submitted scores from', url);
-            const res = await fetch(url, {
-                method: 'GET',
-                credentials: 'include',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                // Map server QGraderScore objects to frontend ScoreSheet shape
-                const mapped: ScoreSheet[] = Array.isArray(data) ? data.map((s: any) => ({
-                    id: String(s.id),
-                    qGraderId: String(s.qGraderId ?? s.qGrader?.id ?? ''),
-                    sampleId: String(s.sampleId ?? s.sample?.id ?? ''),
-                    eventId: String(s.cuppingEventId ?? (s.sample && s.sample.cuppingEventId) ?? evId ?? ''),
-                    scores: {
-                        fragrance: Number(s.fragrance ?? 0),
-                        flavor: Number(s.flavor ?? 0),
-                        aftertaste: Number(s.aftertaste ?? 0),
-                        acidity: Number(s.acidity ?? 0),
-                        body: Number(s.body ?? 0),
-                        balance: Number(s.balance ?? 0),
-                        uniformity: Number(s.uniformity ?? 0),
-                        cleanCup: Number(s.cleanCup ?? 0),
-                        sweetness: Number(s.sweetness ?? 0),
-                        overall: Number(s.overall ?? 0),
-                        taints: Number(s.defects ?? 0),
-                        faults: 0,
-                        finalScore: Number(s.total ?? 0),
-                    },
-                    descriptors: s.descriptors ? JSON.parse(s.descriptors) : [],
-                    notes: s.comments || s.notes || '',
-                    isSubmitted: Boolean(s.isSubmitted),
-                })) : [];
-                setFetchedScores(mapped);
-                console.log('HeadJudge: fetched mapped scores count', mapped.length, mapped.slice(0,3));
+            const headers = {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            };
+            const [scoresRes, decisionsRes] = await Promise.all([
+                fetch(`${BACKEND_URL}/api/headjudge/events/${evId}/scores`, { method: 'GET', credentials: 'include', headers }),
+                fetch(`${BACKEND_URL}/api/headjudge/events/${evId}/decisions`, { method: 'GET', credentials: 'include', headers }),
+            ]);
 
-                // Build grader list from included qGrader objects (if present)
-                const gradersMap = new Map<string, User>();
-                if (Array.isArray(data)) {
-                    data.forEach((s: any) => {
-                        const q = s.qGrader || s.qGraderId ? s.qGrader : null;
-                        if (q && q.id) {
-                            const id = String(q.id);
-                            if (!gradersMap.has(id)) {
-                                gradersMap.set(id, {
-                                    id,
-                                    name: q.name || q.email || `Grader ${id}`,
-                                    email: q.email || '',
-                                    roles: [Role.Q_GRADER],
-                                    status: 'Active',
-                                    lastLogin: q.lastLogin || '',
-                                    profilePictureUrl: q.profilePictureUrl || undefined,
-                                } as User);
-                            }
+            const qGraderData = scoresRes.ok ? await scoresRes.json() : [];
+            const headJudgeDecisionData = decisionsRes.ok ? await decisionsRes.json() : [];
+
+            const mappedQGraderScores: ScoreSheet[] = Array.isArray(qGraderData) ? qGraderData.map((s: any) => ({
+                id: String(s.id),
+                qGraderId: String(s.qGraderId ?? s.qGrader?.id ?? ''),
+                sampleId: String(s.sampleId ?? s.sample?.id ?? ''),
+                eventId: String(s.cuppingEventId ?? (s.sample && s.sample.cuppingEventId) ?? evId ?? ''),
+                scores: {
+                    fragrance: Number(s.fragrance ?? 0),
+                    flavor: Number(s.flavor ?? 0),
+                    aftertaste: Number(s.aftertaste ?? 0),
+                    acidity: Number(s.acidity ?? 0),
+                    body: Number(s.body ?? 0),
+                    balance: Number(s.balance ?? 0),
+                    uniformity: Number(s.uniformity ?? 0),
+                    cleanCup: Number(s.cleanCup ?? 0),
+                    sweetness: Number(s.sweetness ?? 0),
+                    overall: Number(s.overall ?? 0),
+                    taints: Number(s.defects ?? 0),
+                    faults: 0,
+                    finalScore: Number(s.total ?? 0),
+                },
+                descriptors: s.descriptors ? JSON.parse(s.descriptors) : [],
+                notes: s.comments || s.notes || '',
+                isSubmitted: Boolean(s.isSubmitted),
+            })) : [];
+
+            const mappedHeadJudgeScores: ScoreSheet[] = Array.isArray(headJudgeDecisionData) ? headJudgeDecisionData
+                .filter((decision: any) => decision && decision.finalScore !== null && decision.finalScore !== undefined)
+                .map((decision: any) => ({
+                    id: String(decision.id),
+                    qGraderId: String(decision.headJudgeId ?? decision.headJudge?.id ?? ''),
+                    sampleId: String(decision.sampleId ?? decision.sample?.id ?? ''),
+                    eventId: String(decision.sample?.cuppingEventId ?? evId ?? ''),
+                    scores: {
+                        fragrance: Number(decision.fragrance ?? 0),
+                        flavor: Number(decision.flavor ?? 0),
+                        aftertaste: Number(decision.aftertaste ?? 0),
+                        acidity: Number(decision.acidity ?? 0),
+                        body: Number(decision.body ?? 0),
+                        balance: Number(decision.balance ?? 0),
+                        uniformity: Number(decision.uniformity ?? 0),
+                        cleanCup: Number(decision.cleanCup ?? 0),
+                        sweetness: Number(decision.sweetness ?? 0),
+                        overall: Number(decision.overall ?? 0),
+                        taints: 0,
+                        faults: 0,
+                        finalScore: Number(decision.finalScore ?? 0),
+                    },
+                    descriptors: [],
+                    notes: decision.notes || '',
+                    isSubmitted: true,
+                })) : [];
+
+            const mapped = [...mappedQGraderScores, ...mappedHeadJudgeScores];
+            setFetchedScores(mapped);
+            console.log('HeadJudge: fetched combined score count', mapped.length, { qGrader: mappedQGraderScores.length, headJudge: mappedHeadJudgeScores.length });
+
+            const gradersMap = new Map<string, User>();
+            if (Array.isArray(qGraderData)) {
+                qGraderData.forEach((s: any) => {
+                    const q = s.qGrader || s.qGraderId ? s.qGrader : null;
+                    if (q && q.id) {
+                        const id = String(q.id);
+                        if (!gradersMap.has(id)) {
+                            gradersMap.set(id, {
+                                id,
+                                name: q.name || q.email || `Grader ${id}`,
+                                email: q.email || '',
+                                roles: [Role.Q_GRADER],
+                                status: 'Active',
+                                lastLogin: q.lastLogin || '',
+                                profilePictureUrl: q.profilePictureUrl || undefined,
+                            } as User);
                         }
-                    });
-                }
-                const gradersArr = Array.from(gradersMap.values());
-                setFetchedGraders(gradersArr);
-                console.log('HeadJudge: fetched graders count', gradersArr.length, gradersArr.slice(0,3));
-            } else {
-                console.error('Failed to fetch submitted scores for event', evId, res.status);
-                setFetchedScores([]);
+                    }
+                });
             }
+            if (Array.isArray(headJudgeDecisionData)) {
+                headJudgeDecisionData.forEach((decision: any) => {
+                    const headJudge = decision.headJudge;
+                    if (headJudge?.id) {
+                        const id = String(headJudge.id);
+                        if (!gradersMap.has(id)) {
+                            gradersMap.set(id, {
+                                id,
+                                name: headJudge.name || headJudge.email || `Head Judge ${id}`,
+                                email: headJudge.email || '',
+                                roles: [Role.HEAD_JUDGE],
+                                status: 'Active',
+                                lastLogin: headJudge.lastLogin || '',
+                                profilePictureUrl: headJudge.profilePictureUrl || undefined,
+                            } as User);
+                        }
+                    }
+                });
+            }
+            const gradersArr = Array.from(gradersMap.values());
+            setFetchedGraders(gradersArr);
+            console.log('HeadJudge: fetched graders count', gradersArr.length, gradersArr.slice(0,3));
         } catch (err) {
             console.error('Error fetching submitted scores for event', evId, err);
             setFetchedScores([]);
