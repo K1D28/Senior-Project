@@ -1315,7 +1315,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
         if (!selectedEvent) return appData;
 
         // Scores: keep all scores not belonging to this event, then append server-provided submitted scores
-        const otherScores = appData.scores.filter(s => s.eventId !== selectedEvent.id);
+        const otherScores = appData.scores.filter(s => String(s.eventId) !== String(selectedEvent.id));
         const mergedScores = fetchedScores.length > 0 ? [...otherScores, ...fetchedScores] : appData.scores;
 
         // Ensure samples include any sampleObjects provided on the event (fallback source)
@@ -1614,7 +1614,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
 
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                             {samplesForEvent.map(sample => {
-                                                const relevantScores = mergedAppData.scores.filter(s => s.sampleId === sample.id && s.eventId === selectedEvent.id && s.isSubmitted);
+                                                const relevantScores = mergedAppData.scores.filter(s => String(s.sampleId) === String(sample.id) && String(s.eventId) === String(selectedEvent.id) && s.isSubmitted);
                                                 const mergedSample = mergedAppData.samples.find(s => String(s.id) === String(sample.id));
                                                 const eventSample = ((selectedEvent as any).sampleObjects || (selectedEvent as any).samples || []).find((s: any) => String(s.id) === String(sample.id));
                                                 const isSampleLocked = Boolean(sample.isLocked || mergedSample?.isLocked || eventSample?.isLocked);
