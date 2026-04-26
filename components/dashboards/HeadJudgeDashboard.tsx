@@ -1169,7 +1169,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 .filter((decision: any) => decision && decision.finalScore !== null && decision.finalScore !== undefined)
                 .map((decision: any) => ({
                     id: String(decision.id),
-                    qGraderId: String(decision.headJudgeId ?? decision.headJudge?.id ?? ''),
+                    qGraderId: `HJ-${String(decision.headJudgeId ?? decision.headJudge?.id ?? '')}`,
                     sampleId: String(decision.sampleId ?? decision.sample?.id ?? ''),
                     eventId: String(decision.sample?.cuppingEventId ?? evId ?? ''),
                     scores: {
@@ -1220,7 +1220,7 @@ const HeadJudgeDashboard: React.FC<HeadJudgeDashboardProps> = ({ currentUser, ap
                 headJudgeDecisionData.forEach((decision: any) => {
                     const headJudge = decision.headJudge;
                     if (headJudge?.id) {
-                        const id = String(headJudge.id);
+                        const id = `HJ-${String(headJudge.id)}`;
                         if (!gradersMap.has(id)) {
                             gradersMap.set(id, {
                                 id,
