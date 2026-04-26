@@ -638,8 +638,8 @@ const FinalizationPanel: React.FC<{ sample: CoffeeSample, avgScore: number, desc
 interface AdjudicationCockpitProps { sample: CoffeeSample; appData: AppData; event: CuppingEvent; onBack: () => void; onUpdateAdjudication: (sampleId: string, finalData: AdjudicationData) => void; onAIAnalyze: () => void; isAILoading: boolean; aiAnalysis?: string; }
 
 const AdjudicationCockpit: React.FC<AdjudicationCockpitProps> = ({ sample, appData, event, onBack, onUpdateAdjudication, onAIAnalyze, isAILoading, aiAnalysis }) => {
-    const scoresForSample = useMemo(() => appData.scores.filter(s => s.sampleId === sample.id && s.eventId === event.id && s.isSubmitted), [appData.scores, sample.id, event.id]);
-    const graders = useMemo(() => appData.users.filter(u => scoresForSample.some(s => s.qGraderId === u.id)), [appData.users, scoresForSample]);
+    const scoresForSample = useMemo(() => appData.scores.filter(s => String(s.sampleId) === String(sample.id) && String(s.eventId) === String(event.id) && s.isSubmitted), [appData.scores, sample.id, event.id]);
+    const graders = useMemo(() => appData.users.filter(u => scoresForSample.some(s => String(s.qGraderId) === String(u.id))), [appData.users, scoresForSample]);
     const scoreAttributes: (keyof Omit<ScoreSheet['scores'], 'finalScore' | 'taints' | 'faults'>)[] = ['fragrance', 'flavor', 'aftertaste', 'acidity', 'body', 'balance', 'uniformity', 'cleanCup', 'sweetness', 'overall'];
 
     const overallStats = useMemo(() => calculateStats(scoresForSample.map(s => s.scores.finalScore)), [scoresForSample]);

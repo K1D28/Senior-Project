@@ -772,10 +772,11 @@ function App() {
             
             // Also add the head judge decision as a score entry so the heatmap displays it
             if (currentUser?.id) {
+              const normalizedSampleId = String(sampleId);
               const headJudgeScoreEntry: ScoreSheet = {
-                id: `hj-${sampleId}-${currentUser.id}-${Date.now()}`,
-                qGraderId: currentUser.id,
-                sampleId: sampleId,
+                id: `hj-${normalizedSampleId}-${currentUser.id}-${Date.now()}`,
+                qGraderId: String(currentUser.id),
+                sampleId: normalizedSampleId,
                 eventId: String(updatedSample.cuppingEventId ?? ''),
                 scores: {
                   fragrance: finalData.scores?.fragrance ?? 0,
@@ -800,7 +801,7 @@ function App() {
               setAppData(prevData => {
                 // Check if a score from this head judge for this sample already exists
                 const existingScoreIndex = prevData.scores.findIndex(
-                  s => s.sampleId === sampleId && s.qGraderId === currentUser.id
+                  s => String(s.sampleId) === normalizedSampleId && String(s.qGraderId) === String(currentUser.id)
                 );
                 
                 if (existingScoreIndex >= 0) {
