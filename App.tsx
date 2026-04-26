@@ -769,6 +769,56 @@ function App() {
                 return { ...prevData, samples: [...prevData.samples, normalizedSample] };
               }
             });
+            
+            // Also add the head judge decision as a score entry so the heatmap displays it
+            if (currentUser?.id) {
+              const headJudgeScoreEntry: ScoreSheet = {
+                id: `hj-${sampleId}-${currentUser.id}-${Date.now()}`,
+                qGraderId: currentUser.id,
+                sampleId: sampleId,
+                eventId: String(updatedSample.cuppingEventId ?? ''),
+                scores: {
+                  fragrance: finalData.scores?.fragrance ?? 0,
+                  flavor: finalData.scores?.flavor ?? 0,
+                  aftertaste: finalData.scores?.aftertaste ?? 0,
+                  acidity: finalData.scores?.acidity ?? 0,
+                  body: finalData.scores?.body ?? 0,
+                  balance: finalData.scores?.balance ?? 0,
+                  uniformity: finalData.scores?.uniformity ?? 0,
+                  cleanCup: finalData.scores?.cleanCup ?? 0,
+                  sweetness: finalData.scores?.sweetness ?? 0,
+                  overall: finalData.scores?.overall ?? finalData.score ?? 0,
+                  taints: 0,
+                  faults: 0,
+                  finalScore: finalData.score ?? 0,
+                },
+                descriptors: [],
+                notes: finalData.notes ?? '',
+                isSubmitted: true,
+              };
+              
+              setAppData(prevData => {
+                // Check if a score from this head judge for this sample already exists
+                const existingScoreIndex = prevData.scores.findIndex(
+                  s => s.sampleId === sampleId && s.qGraderId === currentUser.id
+                );
+                
+                if (existingScoreIndex >= 0) {
+                  // Update existing score
+                  return {
+                    ...prevData,
+                    scores: prevData.scores.map((s, idx) => idx === existingScoreIndex ? headJudgeScoreEntry : s)
+                  };
+                } else {
+                  // Add new score
+                  return {
+                    ...prevData,
+                    scores: [...prevData.scores, headJudgeScoreEntry]
+                  };
+                }
+              });
+            }
+            
             // Disabled: Do not auto-reveal results. Admin must manually click "Reveal Results" button.
             // if (body.resultsRevealed && updatedSample.cuppingEventId) {
             //   setAppData(prev => ({ ...prev, events: prev.events.map(e => e.id === String(updatedSample.cuppingEventId) ? { ...e, isResultsRevealed: true } : e) }));
