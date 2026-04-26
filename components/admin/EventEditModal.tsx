@@ -4,8 +4,9 @@ import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Button } from '../ui/Button';
 import axios from 'axios';
-import { CuppingEvent } from '../../types';
-import type { EventDetailsUpdateData } from '../../App';
+import { CoffeeSample, CuppingEvent, Role } from '../../types';
+import type { AppData } from '../../data';
+import type { EventDetailsUpdateData, EventSamplesUpdateData } from '../../App';
 import { BACKEND_URL } from '../../utils/api';
 
 interface EventEditModalProps {
@@ -13,10 +14,13 @@ interface EventEditModalProps {
     onClose: () => void;
     event: CuppingEvent | null;
     onUpdate: (eventId: string, data: EventDetailsUpdateData) => void;
+    appData: AppData;
+    onUpdateSamples: (data: EventSamplesUpdateData) => void;
 }
 
-const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event, onUpdate }) => {
+const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event, onUpdate, appData, onUpdateSamples }) => {
     const [isLoading, setIsLoading] = useState(false);
+    const [canAddPaperSamples, setCanAddPaperSamples] = useState(false);
     const [formData, setFormData] = useState<{
         name: string;
         date: string;
@@ -29,6 +33,18 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
         description: '',
         processingMethods: [],
         tags: [],
+    });
+    const [offlineDraft, setOfflineDraft] = useState({
+        farmName: '',
+        variety: '',
+        region: '',
+        processingMethod: '',
+        altitude: '',
+        moisture: '',
+        farmerId: '',
+        offlineFarmerName: '',
+        offlineFarmerTag: '',
+        offlineSubmissionRef: '',
     });
 
     // Initialize form when modal opens with event data
@@ -88,6 +104,19 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                     processingMethods: processingMethodsArray,
                     tags: tagsArray,
                 });
+                setCanAddPaperSamples(!Boolean(freshEvent.isResultsRevealed));
+                setOfflineDraft({
+                    farmName: '',
+                    variety: '',
+                    region: '',
+                    processingMethod: processingMethodsArray[0] || '',
+                    altitude: '',
+                    moisture: '',
+                    farmerId: '',
+                    offlineFarmerName: '',
+                    offlineFarmerTag: '',
+                    offlineSubmissionRef: '',
+                });
             } catch (error) {
                 console.error('Error loading event data:', error);
                 // Fallback to local event object if fetch fails
@@ -124,6 +153,19 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                     processingMethods: processingMethodsArray,
                     tags: tagsArray,
                 });
+                setCanAddPaperSamples(!Boolean(event.isResultsRevealed));
+                setOfflineDraft({
+                    farmName: '',
+                    variety: '',
+                    region: '',
+                    processingMethod: processingMethodsArray[0] || '',
+                    altitude: '',
+                    moisture: '',
+                    farmerId: '',
+                    offlineFarmerName: '',
+                    offlineFarmerTag: '',
+                    offlineSubmissionRef: '',
+                });
             } finally {
                 // Ensure loading shows for at least 500ms for better UX
                 const elapsedTime = Date.now() - startTime;
@@ -144,6 +186,105 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
 
     const handleArrayChange = (name: 'processingMethods' | 'tags', value: string[]) => {
         setFormData((prev) => ({ ...prev, [name]: value }));
+    };
+
+    const resetOfflineDraft = () => {
+        setOfflineDraft({
+            farmName: '',
+            variety: '',
+            region: '',
+            processingMethod: formData.processingMethods[0] || '',
+            altitude: '',
+            moisture: '',
+            farmerId: '',
+            offlineFarmerName: '',
+            offlineFarmerTag: '',
+            offlineSubmissionRef: '',
+        });
+    };
+
+    useEffect(() => {
+        if (formData.processingMethods.length > 0) {
+            setOfflineDraft(prev => prev.processingMethod ? prev : { ...prev, processingMethod: formData.processingMethods[0] });
+        }
+    }, [formData.processingMethods]);
+
+    const handleAddPaperSample = async () => {
+        if (!event) return;
+
+        if (!canAddPaperSamples) {
+            alert('Paper-based samples can only be added while the event is in progress.');
+            return;
+        }
+
+        const farmName = offlineDraft.farmName.trim();
+        const variety = offlineDraft.variety.trim();
+        const region = offlineDraft.region.trim();
+        const processingMethod = offlineDraft.processingMethod.trim();
+        const altitude = Number(offlineDraft.altitude);
+        const moisture = offlineDraft.moisture.trim() === '' ? undefined : Number(offlineDraft.moisture);
+        const farmerId = offlineDraft.farmerId.trim();
+        const offlineFarmerName = offlineDraft.offlineFarmerName.trim();
+        const offlineFarmerTag = offlineDraft.offlineFarmerTag.trim();
+        const offlineSubmissionRef = offlineDraft.offlineSubmissionRef.trim();
+
+        if (!farmName || !variety || !region || !processingMethod || !Number.isFinite(altitude) || altitude <= 0) {
+            alert('Please complete Farm Name, Variety, Region, Processing Method, and Altitude.');
+            return;
+        }
+
+        if (!farmerId && !offlineFarmerName) {
+            alert('Please select a farmer or provide an offline farmer name.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const samplePayload = {
+                farmName,
+                variety,
+                region,
+                processingMethod,
+                altitude,
+                moisture,
+                farmerId: farmerId ? parseInt(farmerId, 10) : null,
+                sampleType: 'PAPER_BASED_OFFLINE',
+                offlineFarmerName: offlineFarmerName || null,
+                offlineFarmerTag: offlineFarmerTag || null,
+                offlineSubmissionRef: offlineSubmissionRef || null,
+            };
+
+            const response = await axios.post(`${BACKEND_URL}/api/cupping-events/${event.id}/samples`, {
+                samples: [samplePayload],
+            }, {
+                withCredentials: true,
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+
+            const createdSamples = Array.isArray(response.data) ? response.data : [];
+            const currentEventSampleIds = new Set((event.sampleIds || []).map(id => String(id)));
+            const currentEventSamples = appData.samples.filter(sample => currentEventSampleIds.has(String(sample.id)));
+            const normalizedCreatedSamples = createdSamples.map((sample: any) => ({
+                ...sample,
+                id: String(sample.id),
+                farmerId: sample.farmerId !== undefined && sample.farmerId !== null ? String(sample.farmerId) : null,
+            })) as CoffeeSample[];
+
+            onUpdateSamples({
+                eventId: event.id,
+                samples: [...currentEventSamples, ...normalizedCreatedSamples],
+            });
+
+            resetOfflineDraft();
+            alert('Paper-based sample added successfully.');
+        } catch (error) {
+            console.error('Error adding paper-based sample:', error);
+            if (axios.isAxiosError(error)) {
+                alert(error.response?.data?.message || error.message || 'Failed to add paper-based sample.');
+            } else {
+                alert('Failed to add paper-based sample.');
+            }
+        }
     };
 
     const validatePayload = (data: typeof formData) => {
@@ -292,6 +433,79 @@ const EventEditModal: React.FC<EventEditModalProps> = ({ isOpen, onClose, event,
                         ))}
                     </div>
                 </div>
+                {canAddPaperSamples && (
+                    <div className="p-4 border border-blue-200 rounded-md bg-blue-50 space-y-4">
+                        <div>
+                            <h4 className="font-semibold text-blue-900">Add Paper-Based Sample</h4>
+                            <p className="text-xs text-blue-800 mt-1">Paper-based samples can be added while the event is in progress.</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <Label htmlFor="paper-farmName">Farm Name</Label>
+                                <Input id="paper-farmName" value={offlineDraft.farmName} onChange={(e) => setOfflineDraft(prev => ({ ...prev, farmName: e.target.value }))} placeholder="Farm name" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-variety">Variety</Label>
+                                <Input id="paper-variety" value={offlineDraft.variety} onChange={(e) => setOfflineDraft(prev => ({ ...prev, variety: e.target.value }))} placeholder="Variety" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-region">Region</Label>
+                                <Input id="paper-region" value={offlineDraft.region} onChange={(e) => setOfflineDraft(prev => ({ ...prev, region: e.target.value }))} placeholder="Region" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-processing">Processing Method</Label>
+                                <select
+                                    id="paper-processing"
+                                    className="w-full p-2 border border-border rounded-md focus:ring-1 focus:ring-primary focus:border-primary bg-background"
+                                    value={offlineDraft.processingMethod}
+                                    onChange={(e) => setOfflineDraft(prev => ({ ...prev, processingMethod: e.target.value }))}
+                                >
+                                    <option value="">Select method...</option>
+                                    {formData.processingMethods.map(method => (
+                                        <option key={method} value={method}>{method}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-altitude">Altitude (m)</Label>
+                                <Input id="paper-altitude" type="number" value={offlineDraft.altitude} onChange={(e) => setOfflineDraft(prev => ({ ...prev, altitude: e.target.value }))} placeholder="Altitude" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-moisture">Moisture (%)</Label>
+                                <Input id="paper-moisture" type="number" step="0.1" value={offlineDraft.moisture} onChange={(e) => setOfflineDraft(prev => ({ ...prev, moisture: e.target.value }))} placeholder="Moisture" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-farmer">Linked Farmer (optional)</Label>
+                                <select
+                                    id="paper-farmer"
+                                    className="w-full p-2 border border-border rounded-md focus:ring-1 focus:ring-primary focus:border-primary bg-background"
+                                    value={offlineDraft.farmerId}
+                                    onChange={(e) => setOfflineDraft(prev => ({ ...prev, farmerId: e.target.value }))}
+                                >
+                                    <option value="">No linked farmer</option>
+                                    {appData.users.filter(user => user.roles.includes(Role.FARMER)).map(farmer => (
+                                        <option key={farmer.id} value={farmer.id}>{farmer.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-offline-name">Offline Farmer Name</Label>
+                                <Input id="paper-offline-name" value={offlineDraft.offlineFarmerName} onChange={(e) => setOfflineDraft(prev => ({ ...prev, offlineFarmerName: e.target.value }))} placeholder="Name on paper form" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-offline-tag">Offline Farmer Tag</Label>
+                                <Input id="paper-offline-tag" value={offlineDraft.offlineFarmerTag} onChange={(e) => setOfflineDraft(prev => ({ ...prev, offlineFarmerTag: e.target.value }))} placeholder="Village/co-op tag" />
+                            </div>
+                            <div>
+                                <Label htmlFor="paper-offline-ref">Offline Submission Ref</Label>
+                                <Input id="paper-offline-ref" value={offlineDraft.offlineSubmissionRef} onChange={(e) => setOfflineDraft(prev => ({ ...prev, offlineSubmissionRef: e.target.value }))} placeholder="Paper reference" />
+                            </div>
+                        </div>
+                        <div className="flex justify-end">
+                            <Button type="button" onClick={handleAddPaperSample}>Add Paper-Based Sample</Button>
+                        </div>
+                    </div>
+                )}
                 <div className="flex justify-end space-x-2">
                     <Button variant="secondary" onClick={onClose}>
                         Cancel

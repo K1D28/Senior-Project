@@ -630,6 +630,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             }
         }
     };
+
+    const handleUpdateEventSamples = (updateData: EventSamplesUpdateData) => {
+        onUpdateEventSamples(updateData);
+
+        setAppData(prevData => {
+            const eventToUpdate = prevData.events.find(event => event.id === updateData.eventId);
+            if (!eventToUpdate) return prevData;
+
+            const currentSampleIds = new Set(eventToUpdate.sampleIds || []);
+            const nextSamples = updateData.samples.map(sample => ({
+                ...sample,
+                id: String(sample.id),
+                farmerId: sample.farmerId !== undefined && sample.farmerId !== null ? String(sample.farmerId) : sample.farmerId,
+            }));
+            const nextSampleIds = new Set(nextSamples.map(sample => String(sample.id)));
+
+            const updatedSamples = prevData.samples
+                .filter(sample => !currentSampleIds.has(String(sample.id)) || nextSampleIds.has(String(sample.id)))
+                .map(sample => nextSamples.find(nextSample => String(nextSample.id) === String(sample.id)) || sample);
+
+            nextSamples.forEach(sample => {
+                if (!updatedSamples.some(existing => String(existing.id) === String(sample.id))) {
+                    updatedSamples.push(sample);
+                }
+            });
+
+            return {
+                ...prevData,
+                samples: updatedSamples,
+                events: prevData.events.map(event =>
+                    event.id === updateData.eventId
+                        ? { ...event, sampleIds: Array.from(nextSampleIds) }
+                        : event
+                ),
+            };
+        });
+    };
     
      const handleViewSampleDetails = (sample: CoffeeSample) => {
         setSelectedSample(sample);
@@ -1713,7 +1750,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             onClose={() => setIsManageEventModalOpen(false)}
             event={eventToManage}
             appData={appData}
-            onUpdate={onUpdateEventSamples}
+            onUpdate={handleUpdateEventSamples}
         />
 
         <EventEditModal
@@ -1721,6 +1758,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             onClose={() => setIsEditEventModalOpen(false)}
             event={eventToEdit}
             onUpdate={onUpdateEventDetails}
+            appData={appData}
+            onUpdateSamples={handleUpdateEventSamples}
         />
         
         <EventParticipantsModal
