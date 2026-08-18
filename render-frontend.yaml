@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: Senior-Project-Frontend
+    runtime: static
+    buildCommand: npm install --include=optional && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: "/*"
+        headers:
+          - key: "Cache-Control"
+            value: "public, max-age=3600"
+    routes:
+      - path: "/*"
+        destination: /index.html

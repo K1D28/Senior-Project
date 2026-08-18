@@ -1,0 +1,239 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  name     String
+}
+
+model HeadJudge {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String        @default("Active")
+  participants Participant[] // Relation to Participant
+  headJudgeDecisions HeadJudgeDecision[]
+  reEvaluationRequests ReEvaluationRequest[] // Relation to re-evaluation requests
+}
+
+model Farmer {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String
+  lastLogin    DateTime?
+  participants Participant[]
+}
+
+model QGrader {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  status       String
+  lastLogin    DateTime?
+  participants Participant[] // Relation to Participant
+  qGraderScores QGraderScore[]
+}
+
+model HeadJudgeDecision {
+  id            Int       @id @default(autoincrement())
+  sampleId      Int
+  sample        Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  headJudgeId   Int
+  headJudge     HeadJudge @relation(fields: [headJudgeId], references: [id])
+
+  finalScore    Float?
+  gradeLevel    String?
+  notes         String?
+  fragrance     Float?
+  flavor        Float?
+  aftertaste    Float?
+  acidity       Float?
+  body          Float?
+  balance       Float?
+  uniformity    Float?
+  cleanCup      Float?
+  sweetness     Float?
+  overall       Float?
+  flagged       Boolean   @default(false)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([sampleId, headJudgeId])
+}
+
+model CuppingEvent {
+  id                Int                            @id @default(autoincrement())
+  name              String
+  date              DateTime
+  description       String?
+  isResultsRevealed Boolean                        @default(false)
+  participants      Participant[]
+  samples           Sample[]
+  qGraderScores     QGraderScore[]
+  tags              CuppingEventTag[]
+  processingMethods CuppingEventProcessingMethod[]
+  reEvaluationRequests ReEvaluationRequest[] // Relation to re-evaluation requests
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+}
+
+model Participant {
+  id           Int          @id @default(autoincrement())
+  role         String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  headJudgeId  Int? // Optional relation to HeadJudge
+  headJudge    HeadJudge?   @relation(fields: [headJudgeId], references: [id])
+  qGraderId    Int? // Optional relation to QGrader
+  qGrader      QGrader?     @relation(fields: [qGraderId], references: [id])
+  farmerId     Int? // Optional relation to Farmer
+  farmer       Farmer?      @relation(fields: [farmerId], references: [id])
+}
+
+model Sample {
+  id                    Int           @id @default(autoincrement())
+  blindCode             String? // Optional - null for pending farmer samples, UUID when approved
+  farmName              String
+  farmerId              Int?          // Optional for CALIBRATION samples, required for others
+  offlineFarmerName     String?       // Admin-entered farmer name for paper/offline submission
+  offlineFarmerTag      String?       // Optional tag/code for offline farmer grouping
+  offlineSubmissionRef  String?       // Optional paper form reference number
+  region                String?
+  variety               String
+  processingMethod      String
+  altitude              Float // Added altitude field
+  moisture              Float? // Optional moisture field
+  sampleType            String        @default("FARMER_REGISTERED") // FARMER_REGISTERED, FARMER_DIRECTREGISTERED, PROXY_SUBMISSION, or CALIBRATION
+  approvalStatus        String        @default("PENDING") // PENDING, APPROVED, REJECTED - for farmer-registered samples
+  approvedByAdminId     Int?
+  approvalDate          DateTime?
+  approvalNotes         String?
+  adjudicatedFinalScore Float?
+  gradeLevel            String?
+  headJudgeNotes        String?
+  adjudicationJustification String?
+  flaggedForDiscussion  Boolean?     
+  cuppingEventId        Int?
+  cuppingEvent          CuppingEvent? @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  qGraderScores         QGraderScore[]
+  // Head Judge can lock judgement for this sample; once locked QGraders cannot modify scores
+  isLocked              Boolean       @default(false)
+  lockedByHeadJudgeId   Int?
+  lockedAt              DateTime?
+  headJudgeDecisions    HeadJudgeDecision[]
+  reEvaluationRequests  ReEvaluationRequest[] // Relation to re-evaluation requests
+}
+
+// QGraderScore: stores per-Q grader scoring for a sample within an event
+model QGraderScore {
+  id              Int           @id @default(autoincrement())
+  sampleId        Int
+  sample          Sample        @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  cuppingEventId  Int?
+  cuppingEvent    CuppingEvent? @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  qGraderId       Int
+  qGrader         QGrader       @relation(fields: [qGraderId], references: [id])
+
+  // Attribute fields (0-10 scale expected)
+  fragrance       Float
+  flavor          Float
+  aftertaste      Float
+  acidity         Float
+  body            Float
+  balance         Float
+  uniformity      Float
+  cleanCup        Float
+  sweetness       Float
+  overall         Float
+
+  // Deductions / comments
+  defects         Int     @default(0)
+  comments        String?
+  descriptors     String? // JSON array of {name: string, intensity: number}
+
+  // Whether this grader has finalized/submitted their score (prevents further edits by that grader)
+  isSubmitted     Boolean @default(false)
+  submittedAt     DateTime?
+
+  // Cached total for quick aggregates
+  total           Float
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sampleId, qGraderId])
+}
+
+model CuppingEventTag {
+  id           Int          @id @default(autoincrement())
+  tag          String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model CuppingEventProcessingMethod {
+  id           Int          @id @default(autoincrement())
+  method       String
+  eventId      Int
+  cuppingEvent CuppingEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+// Re-evaluation Request: Head Judge can request a sample to be re-evaluated after Q Grader submits scores
+model ReEvaluationRequest {
+  id               Int       @id @default(autoincrement())
+  sampleId         Int
+  sample           Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  cuppingEventId   Int
+  cuppingEvent     CuppingEvent @relation(fields: [cuppingEventId], references: [id], onDelete: Cascade)
+  headJudgeId      Int
+  headJudge        HeadJudge @relation(fields: [headJudgeId], references: [id])
+  
+  status           String    @default("PENDING") // PENDING, APPROVED, COMPLETED, REJECTED
+  reason           String?   // Why re-evaluation is needed
+  notes            String?   // Additional notes from head judge
+  
+  requestedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  completedAt      DateTime?
+  
+  @@unique([sampleId, cuppingEventId, headJudgeId])
+}
+
+enum Role {
+  ADMIN
+  FARMER
+  Q_GRADER
+  HEAD_JUDGE
+}
+
+model User {
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  supabaseId String    @unique
+  role       Role // Removed default role
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  name       String? // Added name field
+  status     String? // Added status field
+  lastLogin  DateTime? // Added lastLogin field
+}

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    publishDirectory: ""
+    envVars:
+      - key: VITE_API_URL
+        value: https://backend-production-b273.up.railway.app
+      - key: VITE_BACKEND_URL
+        value: https://backend-production-b273.up.railway.app
+
