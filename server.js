@@ -9,6 +9,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import jwt from 'jsonwebtoken';
+import { generateSecret as generateTotpSecret, generateURI as generateTotpUri, verify as verifyTotp } from 'otplib';
+import QRCode from 'qrcode';
 
 const app = express();
 
@@ -67,6 +70,10 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://mbmilbbdjywnmagxfcyg.su
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'sb_secret_fTKNdqnbnz3XTOaM_LOusA_JIMpfxdk';
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 const supabase = createClient(supabaseUrl, supabaseServiceKey); // Correctly initialize Supabase client
+
+// Secret used to sign short-lived pending-2FA tokens issued after password verification
+const JWT_SECRET = process.env.JWT_SECRET || supabaseServiceKey;
+const TOTP_ISSUER = 'Cupping Hub';
 
 // Add CORS middleware to allow requests from the frontend
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -1954,45 +1961,18 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('Database password verified for:', email);
 
-    // Step 4: Try Supabase Auth sign in
-    let supabaseToken = null;
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+    // Step 3.5: 2FA is only enforced for Admin accounts
+    if (user.role === 'ADMIN' && user.twoFactorEnabled) {
+      const twoFactorToken = jwt.sign({ userId: user.id, purpose: '2fa-pending' }, JWT_SECRET, { expiresIn: '5m' });
+      console.log('2FA required for user:', email);
+      return res.status(200).json({
+        message: '2FA verification required',
+        requires2FA: true,
+        twoFactorToken,
       });
-
-      if (!authError && authData && authData.session) {
-        supabaseToken = authData.session.access_token;
-        console.log('Supabase Auth successful, got token');
-      } else {
-        console.log('Supabase Auth failed (using database-auth fallback):', authError?.message);
-        // If Supabase auth fails but DB password is correct, use database-auth token with email
-        supabaseToken = `database-auth:${email}`;
-      }
-    } catch (supabaseErr) {
-      console.error('Supabase Auth error (using database-auth fallback):', supabaseErr.message);
-      supabaseToken = `database-auth:${email}`;
     }
 
-    console.log('Login successful, returning user data');
-
-    const responseData = {
-      message: 'Login successful',
-      token: supabaseToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name || roleData.name,
-        status: user.status || roleData.status,
-        lastLogin: user.lastLogin,
-        supabaseId: user.supabaseId,
-      }
-    };
-
-    console.log('Sending response with token type:', supabaseToken === 'database-auth' ? 'database-auth' : 'supabase-jwt');
-    res.status(200).json(responseData);
+    return completeLogin(user, roleData, res);
   } catch (err) {
     console.error('Login endpoint error:', err.message);
     console.error('Error type:', err.constructor.name);
@@ -2000,9 +1980,191 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.post('/api/auth/verify-2fa', async (req, res) => {
+  const { twoFactorToken, code } = req.body;
+
+  if (!twoFactorToken || !code) {
+    return res.status(400).json({ message: 'Verification token and code are required.' });
+  }
+
+  try {
+    let payload;
+    try {
+      payload = jwt.verify(twoFactorToken, JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: 'Verification session expired. Please log in again.' });
+    }
+
+    if (payload.purpose !== '2fa-pending') {
+      return res.status(401).json({ message: 'Invalid verification session.' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (!user || user.role !== 'ADMIN' || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(401).json({ message: 'Two-factor authentication is not enabled for this account.' });
+    }
+
+    const { valid: isValid } = await verifyTotp({ token: String(code).trim(), secret: user.twoFactorSecret });
+    if (!isValid) {
+      return res.status(401).json({ message: 'Invalid verification code.' });
+    }
+
+    let roleData = null;
+    if (user.role === 'ADMIN') {
+      roleData = await prisma.admin.findUnique({ where: { email: user.email } });
+    } else if (user.role === 'HEAD_JUDGE') {
+      roleData = await prisma.headJudge.findUnique({ where: { email: user.email } });
+    } else if (user.role === 'FARMER') {
+      roleData = await prisma.farmer.findUnique({ where: { email: user.email } });
+    } else if (user.role === 'Q_GRADER') {
+      roleData = await prisma.qGrader.findUnique({ where: { email: user.email } });
+    }
+
+    if (!roleData) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    return completeLogin(user, roleData, res);
+  } catch (err) {
+    console.error('2FA verification error:', err.message);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
+  }
+});
+
+// Finalizes a login after credentials (and 2FA, if enabled) have been verified
+async function completeLogin(user, roleData, res) {
+  // Try Supabase Auth sign in
+  let supabaseToken = null;
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: roleData.password,
+    });
+
+    if (!authError && authData && authData.session) {
+      supabaseToken = authData.session.access_token;
+      console.log('Supabase Auth successful, got token');
+    } else {
+      console.log('Supabase Auth failed (using database-auth fallback):', authError?.message);
+      supabaseToken = `database-auth:${user.email}`;
+    }
+  } catch (supabaseErr) {
+    console.error('Supabase Auth error (using database-auth fallback):', supabaseErr.message);
+    supabaseToken = `database-auth:${user.email}`;
+  }
+
+  console.log('Login successful, returning user data');
+
+  const responseData = {
+    message: 'Login successful',
+    token: supabaseToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name || roleData.name,
+      status: user.status || roleData.status,
+      lastLogin: user.lastLogin,
+      supabaseId: user.supabaseId,
+      twoFactorEnabled: user.twoFactorEnabled,
+    }
+  };
+
+  res.status(200).json(responseData);
+}
+
 app.post('/api/auth/logout', (req, res) => {
   res.clearCookie('token'); // Clear the token cookie
   res.json({ message: 'Logout successful' });
+});
+
+// Returns whether the authenticated user currently has 2FA enabled
+app.get('/api/2fa/status', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    res.json({ enabled: !!(user && user.twoFactorEnabled) });
+  } catch (err) {
+    console.error('2FA status error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Generates a new TOTP secret and QR code for the authenticated user to scan.
+// The secret is stored but 2FA stays disabled until confirmed via /api/2fa/verify.
+// 2FA is only supported for Admin accounts.
+app.post('/api/2fa/setup', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  try {
+    const secret = generateTotpSecret();
+    const otpauthUrl = generateTotpUri({ issuer: TOTP_ISSUER, label: req.user.email, secret });
+    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { twoFactorSecret: secret, twoFactorEnabled: false },
+    });
+
+    res.json({ qrCodeDataUrl, otpauthUrl, secret });
+  } catch (err) {
+    console.error('2FA setup error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Confirms setup by validating a code from the authenticator app, then enables 2FA
+app.post('/api/2fa/verify', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ message: 'Verification code is required.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.twoFactorSecret) {
+      return res.status(400).json({ message: 'No pending 2FA setup found. Please restart setup.' });
+    }
+
+    const { valid: isValid } = await verifyTotp({ token: String(code).trim(), secret: user.twoFactorSecret });
+    if (!isValid) {
+      return res.status(401).json({ message: 'Invalid verification code.' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { twoFactorEnabled: true },
+    });
+
+    res.json({ message: '2FA enabled successfully.', enabled: true });
+  } catch (err) {
+    console.error('2FA verify error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Disables 2FA; requires a valid current code to confirm the request
+app.post('/api/2fa/disable', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { code } = req.body;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || !user.twoFactorEnabled) {
+      return res.status(400).json({ message: '2FA is not currently enabled.' });
+    }
+
+    const disableCheck = code ? await verifyTotp({ token: String(code).trim(), secret: user.twoFactorSecret }) : { valid: false };
+    if (!disableCheck.valid) {
+      return res.status(401).json({ message: 'Invalid verification code.' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { twoFactorEnabled: false, twoFactorSecret: null },
+    });
+
+    res.json({ message: '2FA disabled successfully.', enabled: false });
+  } catch (err) {
+    console.error('2FA disable error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {

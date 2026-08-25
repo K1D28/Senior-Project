@@ -45,6 +45,7 @@ export interface UserUpdateData {
   name?: string;
   phone?: string;
   roles?: Role[];
+  twoFactorEnabled?: boolean;
 }
 
 export interface NewSampleRegistrationData {
@@ -521,6 +522,9 @@ function App() {
     if (!currentUser) return;
     setAppData(prevData => {
       let logAction = 'Profile updated';
+      if (updateData.twoFactorEnabled !== undefined) {
+        logAction = updateData.twoFactorEnabled ? 'Two-factor authentication enabled' : 'Two-factor authentication disabled';
+      }
       if (updateData.roles) logAction = 'Roles updated';
 
       const newLog: ActivityLog = {

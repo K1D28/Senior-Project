@@ -14,6 +14,7 @@ export interface User {
   status: 'Active' | 'Pending Invitation' | 'Deactivated';
   lastLogin: string; // ISO Date string
   profilePictureUrl?: string;
+  twoFactorEnabled?: boolean;
 }
 
 export interface Farmer extends User {

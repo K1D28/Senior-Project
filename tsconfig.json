@@ -30,6 +30,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "baseUrl": "./",
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true, // Allow default imports from CommonJS modules
     "strict": true // Enable strict type-checking options
   }

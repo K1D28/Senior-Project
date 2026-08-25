@@ -21,6 +21,7 @@ import UserInvitationModal from '../admin/UserInvitationModal';
 import EventManagementModal from '../admin/EventManagementModal';
 import EventEditModal from '../admin/EventEditModal';
 import EventParticipantsModal from '../admin/EventParticipantsModal';
+import SettingsModal from '../admin/SettingsModal';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Dropdown } from '../ui/DropdownMenu';
@@ -212,6 +213,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
         return pathToTab[location.pathname] || 'events';
     });
     const [isEventsLoading, setIsEventsLoading] = useState(true);
+    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     
     // Function for when user clicks a tab button - updates state AND navigates URL
     const handleTabClick = (tab: Tab) => {
@@ -1162,6 +1164,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
                         </div>
                     </div>
 
+                    {/* Settings Button */}
+                    <button
+                        onClick={() => setIsSettingsModalOpen(true)}
+                        className="w-full bg-gray-100 text-gray-800 px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition-colors text-sm border border-gray-200"
+                    >
+                        Settings
+                    </button>
+
                     {/* Logout Button */}
                     <button
                         onClick={onLogout}
@@ -1775,6 +1785,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
             onClose={() => setIsInviteModalOpen(false)}
             onSubmit={handleInviteSubmit}
             events={appData.events}
+        />
+
+        <SettingsModal
+            isOpen={isSettingsModalOpen}
+            onClose={() => setIsSettingsModalOpen(false)}
+            currentUser={currentUser}
         />
 
         <Modal isOpen={isSampleDetailModalOpen} onClose={() => setIsSampleDetailModalOpen(false)} title={`Sample Details: ${selectedSample?.blindCode}`}>

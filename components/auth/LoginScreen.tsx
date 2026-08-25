@@ -36,6 +36,8 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,6 +93,64 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
     checkExistingLogin();
   }, [navigate, onLogin]);
 
+  const finishLogin = async (loginData: any) => {
+    if (loginData.token) {
+      // Store token for future API calls
+      localStorage.setItem('token', loginData.token);
+
+      // If we already have user data from login, use it directly
+      if (loginData.user) {
+        const user = { ...loginData.user, roles: normalizeRoles(loginData.user) };
+        if (user.roles.length === 0) {
+          console.error('User returned from login has no role');
+          setError('Login failed: User has no assigned role.');
+          return;
+        }
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        const primaryRole = user.roles[0];
+        handleRoleBasedRedirection(primaryRole, navigate, setError);
+        onLogin(user);
+        return;
+      }
+
+      // Fallback: verify with token
+      const userResponse = await fetch(`${BACKEND_URL}/api/auth/verify`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${loginData.token}`,
+        },
+      });
+
+      if (userResponse.ok) {
+        const user = await userResponse.json();
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        const roles = normalizeRoles(user);
+        if (roles.length === 0) {
+          console.error('Verified user has no roles');
+          setError('Login failed: User has no assigned role.');
+          return;
+        }
+        const primaryRole = roles[0];
+        handleRoleBasedRedirection(primaryRole, navigate, setError);
+        onLogin(user);
+      } else {
+        console.error('Failed to verify user role:', userResponse.status);
+        setError('Failed to verify user role.');
+      }
+    } else if (loginData.user) {
+      // Login successful but no token - use user data directly
+      if (!loginData.user.role) {
+        console.error('User has no role assigned');
+        setError('Login failed: User has no assigned role.');
+        return;
+      }
+      const user = { ...loginData.user, roles: [loginData.user.role] };
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      handleRoleBasedRedirection(user.role, navigate, setError);
+      onLogin(user);
+    }
+  };
+
   const handleLogin = async () => {
     try {
       // Call backend login endpoint which handles everything
@@ -117,60 +177,14 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
         return;
       }
 
-      if (response.ok && loginData.token) {
-        // Store token for future API calls
-        localStorage.setItem('token', loginData.token);
+      if (response.ok && loginData.requires2FA) {
+        setError('');
+        setTwoFactorToken(loginData.twoFactorToken);
+        return;
+      }
 
-        // If we already have user data from login, use it directly
-        if (loginData.user) {
-          const user = { ...loginData.user, roles: normalizeRoles(loginData.user) };
-          if (user.roles.length === 0) {
-            console.error('User returned from login has no role');
-            setError('Login failed: User has no assigned role.');
-            return;
-          }
-          localStorage.setItem('currentUser', JSON.stringify(user));
-          const primaryRole = user.roles[0];
-          handleRoleBasedRedirection(primaryRole, navigate, setError);
-          onLogin(user);
-          return;
-        }
-
-        // Fallback: verify with token
-        const userResponse = await fetch(`${BACKEND_URL}/api/auth/verify`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${loginData.token}`,
-          },
-        });
-
-        if (userResponse.ok) {
-          const user = await userResponse.json();
-          localStorage.setItem('currentUser', JSON.stringify(user));
-          const roles = normalizeRoles(user);
-          if (roles.length === 0) {
-            console.error('Verified user has no roles');
-            setError('Login failed: User has no assigned role.');
-            return;
-          }
-          const primaryRole = roles[0];
-          handleRoleBasedRedirection(primaryRole, navigate, setError);
-          onLogin(user);
-        } else {
-          console.error('Failed to verify user role:', userResponse.status);
-          setError('Failed to verify user role.');
-        }
-      } else if (response.ok && loginData.user) {
-        // Login successful but no token - use user data directly
-        if (!loginData.user.role) {
-          console.error('User has no role assigned');
-          setError('Login failed: User has no assigned role.');
-          return;
-        }
-        const user = { ...loginData.user, roles: [loginData.user.role] };
-        localStorage.setItem('currentUser', JSON.stringify(user));
-        handleRoleBasedRedirection(user.role, navigate, setError);
-        onLogin(user);
+      if (response.ok && (loginData.token || loginData.user)) {
+        await finishLogin(loginData);
       } else {
         console.error('Login failed:', response.status, loginData);
         setError(loginData.message || 'Login failed. Invalid email or password.');
@@ -181,12 +195,94 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
     }
   };
 
+  const handleVerifyTwoFactor = async () => {
+    if (!twoFactorCode.trim()) {
+      setError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/verify-2fa`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ twoFactorToken, code: twoFactorCode }),
+        credentials: 'include',
+      });
+
+      const loginData = await response.json();
+
+      if (response.ok) {
+        setTwoFactorToken(null);
+        setTwoFactorCode('');
+        await finishLogin(loginData);
+      } else {
+        setError(loginData.message || 'Invalid verification code.');
+      }
+    } catch (err) {
+      console.error('Unexpected error during 2FA verification:', err);
+      setError('An error occurred while verifying your code.');
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleLogin();
     }
   };
+
+  const handleTwoFactorKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleVerifyTwoFactor();
+    }
+  };
+
+  if (twoFactorToken) {
+    return (
+      <div className="login-screen min-h-screen flex flex-col items-center justify-center bg-background p-4">
+        <h1 className="text-2xl font-bold mb-8">Welcome to Cupping Hub</h1>
+        <div className="w-full max-w-md bg-surface p-6 rounded-lg shadow-md">
+          <h1 className="text-2xl font-bold mb-4">Two-Factor Verification</h1>
+          {error && <p className="text-red-500 mb-4">{error}</p>}
+          <p className="text-sm text-text-light mb-4">
+            Enter the 6-digit code from your authenticator app to finish signing in.
+          </p>
+          <form onSubmit={(e) => { e.preventDefault(); handleVerifyTwoFactor(); }} autoComplete="off">
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Verification Code</label>
+              <input
+                type="text"
+                autoComplete="off"
+                inputMode="numeric"
+                maxLength={6}
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                onKeyPress={handleTwoFactorKeyPress}
+                className="w-full p-2 border border-border rounded"
+                autoFocus
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-primary text-white py-2 rounded hover:bg-primary-dark"
+            >
+              Verify
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTwoFactorToken(null); setTwoFactorCode(''); setError(''); }}
+              className="w-full mt-2 text-sm text-gray-500 hover:text-primary"
+            >
+              Back to login
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="login-screen min-h-screen flex flex-col items-center justify-center bg-background p-4">
