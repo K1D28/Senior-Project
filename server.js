@@ -2267,6 +2267,55 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ message: 'Logout successful' });
 });
 
+// Changes the authenticated Admin's password (requires current password confirmation)
+app.post('/api/auth/change-password', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Current password and new password are required.' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user || user.role !== 'ADMIN') {
+      return res.status(404).json({ message: 'Admin account not found.' });
+    }
+
+    const admin = await prisma.admin.findUnique({ where: { email: user.email } });
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin account not found.' });
+    }
+
+    const isCurrentPasswordValid = await verifyPassword(currentPassword, admin.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await prisma.admin.update({ where: { email: user.email }, data: { password: hashedPassword } });
+
+    // Best-effort: keep Supabase Auth password in sync (non-blocking on failure)
+    if (user.supabaseId && !user.supabaseId.startsWith('local-')) {
+      try {
+        const { error: supabaseError } = await supabase.auth.admin.updateUserById(user.supabaseId, { password: newPassword });
+        if (supabaseError) {
+          console.error('Failed to sync new password to Supabase Auth (continuing):', supabaseError.message);
+        }
+      } catch (syncErr) {
+        console.error('Failed to sync new password to Supabase Auth (continuing):', syncErr.message);
+      }
+    }
+
+    res.json({ message: 'Password changed successfully.' });
+  } catch (err) {
+    console.error('Change password error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Returns whether the authenticated user currently has 2FA enabled
 app.get('/api/2fa/status', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
   try {

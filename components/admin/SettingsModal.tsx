@@ -29,6 +29,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentU
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     setError('');
@@ -106,12 +113,84 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentU
 
   const handleClose = () => {
     resetToIdle();
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setPasswordSuccess('');
     onClose();
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('All fields are required.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await axios.post(
+        `${BACKEND_URL}/api/auth/change-password`,
+        { currentPassword, newPassword },
+        { headers: authHeaders(), withCredentials: true }
+      );
+      setPasswordSuccess('Password changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPasswordError(err?.response?.data?.message || 'Failed to change password.');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Settings" size="md">
       <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 p-4 rounded-lg border border-border bg-background">
+          <h3 className="font-semibold text-text-dark">Change Password</h3>
+          <Input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Current password"
+            autoComplete="current-password"
+          />
+          <Input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password"
+            autoComplete="new-password"
+          />
+          <Input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+            autoComplete="new-password"
+          />
+          {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
+          {passwordSuccess && <p className="text-sm text-green-600">{passwordSuccess}</p>}
+          <div className="flex justify-end">
+            <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+              {isChangingPassword ? 'Changing...' : 'Change Password'}
+            </Button>
+          </div>
+        </div>
+
         <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-background">
           <ShieldCheck className="text-primary flex-shrink-0 mt-1" size={22} />
           <div className="flex-1">
