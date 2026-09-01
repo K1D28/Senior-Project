@@ -12,8 +12,55 @@ import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import { generateSecret as generateTotpSecret, generateURI as generateTotpUri, verify as verifyTotp } from 'otplib';
 import QRCode from 'qrcode';
+import bcrypt from 'bcrypt';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 
 const app = express();
+
+// ============================================================================
+// PASSWORD HASHING HELPERS - Support lazy migration from plaintext to bcrypt
+// ============================================================================
+
+/**
+ * Hash a plaintext password using bcrypt.
+ * @param plaintext {string} - The plaintext password to hash
+ * @returns {Promise<string>} - The bcrypt hash
+ */
+async function hashPassword(plaintext) {
+  const saltRounds = 10;
+  return bcrypt.hash(plaintext, saltRounds);
+}
+
+/**
+ * Verify a password against a stored hash or plaintext (for lazy migration).
+ * Detects whether the stored value is a bcrypt hash or legacy plaintext.
+ * @param plaintext {string} - The plaintext password provided by the user
+ * @param storedValue {string} - The value from the database (hash or plaintext)
+ * @returns {Promise<boolean>} - True if the password matches
+ */
+async function verifyPassword(plaintext, storedValue) {
+  if (!storedValue) return false;
+
+  // Bcrypt hashes start with '$2a$', '$2b$', or '$2y$'
+  if (storedValue.startsWith('$2a$') || storedValue.startsWith('$2b$') || storedValue.startsWith('$2y$')) {
+    // Modern bcrypt hash
+    return bcrypt.compare(plaintext, storedValue);
+  } else {
+    // Legacy plaintext comparison (for backward compatibility during migration)
+    return plaintext === storedValue;
+  }
+}
+
+/**
+ * Check if a password hash is legacy plaintext (not bcrypt).
+ * @param storedValue {string} - The value from the database
+ * @returns {boolean} - True if the value is plaintext (needs rehashing)
+ */
+function isLegacyPlaintext(storedValue) {
+  if (!storedValue) return false;
+  return !(storedValue.startsWith('$2a$') || storedValue.startsWith('$2b$') || storedValue.startsWith('$2y$'));
+}
 
 // Debug: Check if DATABASE_URL is available
 console.log('Environment check:');
@@ -65,14 +112,31 @@ const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });
 
-// Initialize Supabase Admin Client from environment variables
-const supabaseUrl = process.env.SUPABASE_URL || 'https://mbmilbbdjywnmagxfcyg.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || 'sb_secret_fTKNdqnbnz3XTOaM_LOusA_JIMpfxdk';
+// Initialize Supabase Admin Client from environment variables - fail fast if missing
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const jwtSecret = process.env.JWT_SECRET;
+
+// Validate required secrets on startup
+if (!supabaseUrl) {
+  console.error('FATAL: SUPABASE_URL env var is not set');
+  process.exit(1);
+}
+if (!supabaseServiceKey) {
+  console.error('FATAL: SUPABASE_SERVICE_KEY env var is not set');
+  process.exit(1);
+}
+if (!jwtSecret) {
+  console.error('FATAL: JWT_SECRET env var is not set');
+  process.exit(1);
+}
+
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-const supabase = createClient(supabaseUrl, supabaseServiceKey); // Correctly initialize Supabase client
+const supabase = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceKey); // Use anon key for frontend-safe operations
 
 // Secret used to sign short-lived pending-2FA tokens issued after password verification
-const JWT_SECRET = process.env.JWT_SECRET || supabaseServiceKey;
+const JWT_SECRET = jwtSecret;
 const TOTP_ISSUER = 'Cupping Hub';
 
 // Add CORS middleware to allow requests from the frontend
@@ -101,6 +165,30 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(cookieParser()); // Add cookie parser middleware
+
+// Add Helmet for security headers (including HSTS)
+app.use(helmet());
+
+// Add HSTS header for HTTPS enforcement (if in production)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+}
+
+// Rate limiting for login endpoints - max 5 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 requests per windowMs
+  message: 'Too many login attempts, please try again later',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for health checks or non-login requests
+    return false;
+  },
+});
 
 // Middleware
 app.use((req, res, next) => {
@@ -232,24 +320,40 @@ const verifySupabaseToken = async (req, res, next) => {
     return res.status(401).json({ message: 'Unauthorized: No token provided' });
   }
 
-  // Support database-auth token format: database-auth:<email>
+  // Support database-auth token format: database-auth:<jwt>
+  // The JWT is signed and cannot be forged without the JWT_SECRET
   if (token.startsWith('database-auth:')) {
-    const email = token.slice('database-auth:'.length).trim();
-    if (!email) {
-      console.log('Database auth token missing email');
+    const jwtPart = token.slice('database-auth:'.length).trim();
+    if (!jwtPart) {
+      console.log('Database auth token missing JWT');
       return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
-      const prismaUser = await prisma.user.findUnique({ where: { email } });
-      if (!prismaUser) {
-        console.log('Database auth token email not found:', email);
+      // Verify the JWT signature
+      const payload = jwt.verify(jwtPart, JWT_SECRET);
+      const email = payload.email;
+      const userId = payload.userId;
+
+      if (!email || !userId) {
+        console.log('Database auth JWT missing email or userId');
         return res.status(401).json({ message: 'Unauthorized' });
       }
+
+      const prismaUser = await prisma.user.findUnique({ where: { email } });
+      if (!prismaUser) {
+        console.log('Database auth JWT email not found:', email);
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
       req.user = prismaUser;
-      console.log('Database auth token verified (email):', email);
+      console.log('Database auth JWT verified (email):', email);
       return next();
     } catch (err) {
-      console.error('Database auth verification failed:', err.message);
+      if (err instanceof jwt.JsonWebTokenError) {
+        console.log('Database auth JWT verification failed:', err.message);
+        return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+      }
+      console.error('Database auth verification error:', err.message);
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
@@ -366,7 +470,7 @@ app.get('/api/protected-route', verifySupabaseToken, (req, res) => {
 });
 
 // Head Judge login endpoint
-app.post('/api/headjudge/login', async (req, res) => {
+app.post('/api/headjudge/login', loginLimiter, async (req, res) => {
   console.log('Head Judge login attempt:', req.body);
   const { email, password } = req.body;
   try {
@@ -377,8 +481,21 @@ app.post('/api/headjudge/login', async (req, res) => {
     if (!headJudge) {
       return res.status(404).json({ message: 'Head Judge not found' });
     }
-    if (headJudge.password !== password) {
+
+    // Verify password using bcrypt (or legacy plaintext)
+    const isPasswordValid = await verifyPassword(password, headJudge.password);
+    if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Lazy rehash: if password is legacy plaintext, rehash it
+    if (isLegacyPlaintext(headJudge.password)) {
+      const hashedPassword = await hashPassword(password);
+      await prisma.headJudge.update({
+        where: { email },
+        data: { password: hashedPassword },
+      });
+      console.log('Password rehashed for Head Judge:', email);
     }
 
     // Ensure the name field is populated during login
@@ -400,16 +517,33 @@ app.post('/api/headjudge/login', async (req, res) => {
 });
 
 // Farmer login endpoint
-app.post('/api/farmer/login', async (req, res) => {
+app.post('/api/farmer/login', loginLimiter, async (req, res) => {
   console.log('Farmer login attempt:', req.body);
   const { email, password } = req.body;
 
   try {
     const farmer = await prisma.farmer.findUnique({ where: { email } });
 
-    if (!farmer || farmer.password !== password) {
-      console.log('Farmer not found or invalid password');
+    if (!farmer) {
+      console.log('Farmer not found');
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Verify password using bcrypt (or legacy plaintext)
+    const isPasswordValid = await verifyPassword(password, farmer.password);
+    if (!isPasswordValid) {
+      console.log('Password verification failed for farmer');
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Lazy rehash: if password is legacy plaintext, rehash it
+    if (isLegacyPlaintext(farmer.password)) {
+      const hashedPassword = await hashPassword(password);
+      await prisma.farmer.update({
+        where: { email },
+        data: { password: hashedPassword },
+      });
+      console.log('Password rehashed for farmer:', email);
     }
 
     // Update lastLogin field
@@ -427,16 +561,33 @@ app.post('/api/farmer/login', async (req, res) => {
 });
 
 // QGrader login endpoint
-app.post('/api/qgrader/login', async (req, res) => {
+app.post('/api/qgrader/login', loginLimiter, async (req, res) => {
   console.log('QGrader login attempt:', req.body);
   const { email, password } = req.body;
 
   try {
     const qGrader = await prisma.qGrader.findUnique({ where: { email } });
 
-    if (!qGrader || qGrader.password !== password) {
-      console.log('QGrader not found or invalid password');
+    if (!qGrader) {
+      console.log('QGrader not found');
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Verify password using bcrypt (or legacy plaintext)
+    const isPasswordValid = await verifyPassword(password, qGrader.password);
+    if (!isPasswordValid) {
+      console.log('Password verification failed for QGrader');
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Lazy rehash: if password is legacy plaintext, rehash it
+    if (isLegacyPlaintext(qGrader.password)) {
+      const hashedPassword = await hashPassword(password);
+      await prisma.qGrader.update({
+        where: { email },
+        data: { password: hashedPassword },
+      });
+      console.log('Password rehashed for QGrader:', email);
     }
 
     // Update lastLogin field
@@ -584,6 +735,9 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
   try {
     console.log('Attempting to create user in Supabase with email:', email);
 
+    // Hash the password before storing
+    const hashedPassword = await hashPassword(password);
+
     const { data: supabaseUser, error: supabaseError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -621,22 +775,22 @@ app.post('/api/users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res
     if (normalizedRole === 'FARMER') {
       const count = await prisma.farmer.count();
       roleModel = await prisma.farmer.create({
-        data: { name, email, password, status: 'Active' },
+        data: { name, email, password: hashedPassword, status: 'Active' },
       });
     } else if (normalizedRole === 'Q_GRADER') {
       const count = await prisma.qGrader.count();
       roleModel = await prisma.qGrader.create({
-        data: { name, email, password, status: 'Active' },
+        data: { name, email, password: hashedPassword, status: 'Active' },
       });
     } else if (normalizedRole === 'HEAD_JUDGE') {
       const count = await prisma.headJudge.count();
       roleModel = await prisma.headJudge.create({
-        data: { name, email, password, status: 'Active' },
+        data: { name, email, password: hashedPassword, status: 'Active' },
       });
     } else if (normalizedRole === 'ADMIN') {
       const count = await prisma.admin.count();
       roleModel = await prisma.admin.create({
-        data: { name, email, password },
+        data: { name, email, password: hashedPassword },
       });
     } else {
       console.error('Invalid role specified:', role);
@@ -1917,7 +2071,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   console.log('Login attempt with email:', email);
 
@@ -1952,14 +2106,41 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Step 3: Verify password from database first
-    const dbPassword = roleData.password.trim();
-    if (dbPassword !== password) {
+    // Step 3: Verify password using bcrypt (or legacy plaintext)
+    const isPasswordValid = await verifyPassword(password, roleData.password);
+    if (!isPasswordValid) {
       console.error('Password mismatch for:', email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     console.log('Database password verified for:', email);
+
+    // Lazy rehash: if password is legacy plaintext, rehash it
+    if (isLegacyPlaintext(roleData.password)) {
+      const hashedPassword = await hashPassword(password);
+      if (user.role === 'ADMIN') {
+        await prisma.admin.update({
+          where: { email },
+          data: { password: hashedPassword },
+        });
+      } else if (user.role === 'HEAD_JUDGE') {
+        await prisma.headJudge.update({
+          where: { email },
+          data: { password: hashedPassword },
+        });
+      } else if (user.role === 'FARMER') {
+        await prisma.farmer.update({
+          where: { email },
+          data: { password: hashedPassword },
+        });
+      } else if (user.role === 'Q_GRADER') {
+        await prisma.qGrader.update({
+          where: { email },
+          data: { password: hashedPassword },
+        });
+      }
+      console.log('Password rehashed for user:', email);
+    }
 
     // Step 3.5: 2FA is only enforced for Admin accounts
     if (user.role === 'ADMIN' && user.twoFactorEnabled) {
@@ -2045,12 +2226,14 @@ async function completeLogin(user, roleData, res) {
       supabaseToken = authData.session.access_token;
       console.log('Supabase Auth successful, got token');
     } else {
-      console.log('Supabase Auth failed (using database-auth fallback):', authError?.message);
-      supabaseToken = `database-auth:${user.email}`;
+      console.log('Supabase Auth failed (using signed JWT fallback):', authError?.message);
+      // Sign a JWT fallback token instead of trusting raw email
+      supabaseToken = `database-auth:${jwt.sign({ email: user.email, userId: user.id }, JWT_SECRET, { expiresIn: '24h' })}`;
     }
   } catch (supabaseErr) {
-    console.error('Supabase Auth error (using database-auth fallback):', supabaseErr.message);
-    supabaseToken = `database-auth:${user.email}`;
+    console.error('Supabase Auth error (using signed JWT fallback):', supabaseErr.message);
+    // Sign a JWT fallback token instead of trusting raw email
+    supabaseToken = `database-auth:${jwt.sign({ email: user.email, userId: user.id }, JWT_SECRET, { expiresIn: '24h' })}`;
   }
 
   console.log('Login successful, returning user data');
@@ -2175,6 +2358,9 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
   }
 
   try {
+    // Hash the password before storing
+    const hashedPassword = await hashPassword(password);
+
     // Step 1: Create role-specific record first (Admin, Farmer, QGrader, HeadJudge)
     let roleRecord = null;
     const roleUpper = String(role).toUpperCase();
@@ -2182,26 +2368,26 @@ app.post('/api/users/invite', verifySupabaseToken, verifyRole('ADMIN'), async (r
     if (roleUpper === 'ADMIN') {
       roleRecord = await prisma.admin.upsert({
         where: { email },
-        update: { password },
-        create: { email, password, name: email.split('@')[0] },
+        update: { password: hashedPassword },
+        create: { email, password: hashedPassword, name: email.split('@')[0] },
       });
     } else if (roleUpper === 'FARMER') {
       roleRecord = await prisma.farmer.upsert({
         where: { email },
-        update: { password },
-        create: { email, password, name: email.split('@')[0], status: 'Active' },
+        update: { password: hashedPassword },
+        create: { email, password: hashedPassword, name: email.split('@')[0], status: 'Active' },
       });
     } else if (roleUpper === 'Q_GRADER') {
       roleRecord = await prisma.qGrader.upsert({
         where: { email },
-        update: { password },
-        create: { email, password, name: email.split('@')[0], status: 'Active' },
+        update: { password: hashedPassword },
+        create: { email, password: hashedPassword, name: email.split('@')[0], status: 'Active' },
       });
     } else if (roleUpper === 'HEAD_JUDGE') {
       roleRecord = await prisma.headJudge.upsert({
         where: { email },
-        update: { password },
-        create: { email, password, name: email.split('@')[0], status: 'Active' },
+        update: { password: hashedPassword },
+        create: { email, password: hashedPassword, name: email.split('@')[0], status: 'Active' },
       });
     } else {
       return res.status(400).json({ message: `Invalid role: ${role}` });
@@ -2256,12 +2442,15 @@ app.post('/api/admin/seed-demo', verifySupabaseToken, verifyRole('ADMIN'), async
       return res.json({ message: 'Seed skipped: data already exists', sampleCount, eventCount });
     }
 
+    // Hash demo password
+    const hashedDemoPassword = await hashPassword('demo1234');
+
     const farmer = await prisma.farmer.upsert({
       where: { email: 'demo.farmer@cuppinghub.com' },
       update: {},
       create: {
         email: 'demo.farmer@cuppinghub.com',
-        password: 'demo1234',
+        password: hashedDemoPassword,
         name: 'Demo Farmer',
         status: 'Active',
       },
@@ -2272,7 +2461,7 @@ app.post('/api/admin/seed-demo', verifySupabaseToken, verifyRole('ADMIN'), async
       update: {},
       create: {
         email: 'demo.headjudge@cuppinghub.com',
-        password: 'demo1234',
+        password: hashedDemoPassword,
         name: 'Demo Head Judge',
         status: 'Active',
       },
@@ -2283,7 +2472,7 @@ app.post('/api/admin/seed-demo', verifySupabaseToken, verifyRole('ADMIN'), async
       update: {},
       create: {
         email: 'demo.qgrader@cuppinghub.com',
-        password: 'demo1234',
+        password: hashedDemoPassword,
         name: 'Demo Q Grader',
         status: 'Active',
       },

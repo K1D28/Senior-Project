@@ -9,12 +9,7 @@ import { Select } from '../ui/Select';
 import { UserPlus, Search, Filter, MoreHorizontal, Calendar, Key, UserX, Send } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Label } from '../ui/Label';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mbmilbbdjywnmagxfcyg.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ibWlsYmJkanl3bm1hZ3hmY3lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzAzNzgxOSwiZXhwIjoyMDc4NjEzODE5fQ.tPwy3VsVQfqUdHboJ_jT5jk8QyT5o1CBAHR4dCZvCQ4'
-);
+import { supabase } from '../auth/supabaseClient';
 
 interface UserManagementProps {
     users: User[];
