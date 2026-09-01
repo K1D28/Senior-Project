@@ -613,14 +613,20 @@ app.get('/api/auth/verify', async (req, res) => {
     if (auth.startsWith('Bearer ')) token = auth.slice('Bearer '.length);
   }
   
-  // For database-auth token, parse embedded email and return user
+  // For database-auth token, verify the signed JWT and return user
   if (token && token.startsWith('database-auth:')) {
-    const email = token.slice('database-auth:'.length).trim();
-    if (!email) {
-      console.log('Database auth token missing email');
+    const jwtPart = token.slice('database-auth:'.length).trim();
+    if (!jwtPart) {
+      console.log('Database auth token missing JWT');
       return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
+      const payload = jwt.verify(jwtPart, JWT_SECRET);
+      const email = payload.email;
+      if (!email) {
+        console.log('Database auth JWT missing email');
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
       const prismaUser = await prisma.user.findUnique({ where: { email } });
       if (!prismaUser) {
         console.log('Database auth token email not found:', email);
@@ -630,8 +636,8 @@ app.get('/api/auth/verify', async (req, res) => {
       console.log('Database auth token verified for user:', email);
       return res.json(userWithRoles);
     } catch (err) {
-      console.error('Database auth verification failed:', err.message);
-      return res.status(500).json({ message: 'Internal server error' });
+      console.log('Database auth JWT verification failed:', err.message);
+      return res.status(401).json({ message: 'Unauthorized: Invalid token' });
     }
   }
   
