@@ -99,6 +99,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
             if (response.status === 201) {
                 alert('User added successfully.');
                 setUsers((prevUsers) => [...prevUsers, response.data]);
+                setIsAddUserModalOpen(false);
+                setCurrentStep(1);
             } else {
                 alert('Failed to add user.');
             }
