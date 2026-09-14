@@ -2316,6 +2316,100 @@ app.post('/api/auth/change-password', verifySupabaseToken, verifyRole('ADMIN'), 
   }
 });
 
+// Verifies the requesting admin's current password against the Admin table.
+// Returns the Admin record on success, or null if the password/account is invalid.
+async function verifyAdminPassword(req, password) {
+  if (!password) return null;
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user || user.role !== 'ADMIN') return null;
+  const admin = await prisma.admin.findUnique({ where: { email: user.email } });
+  if (!admin) return null;
+  const isValid = await verifyPassword(password, admin.password);
+  return isValid ? admin : null;
+}
+
+// Deletes every cupping event; Prisma cascades samples/participants/scores/tags/etc.
+async function resetEventsData() {
+  const events = await prisma.cuppingEvent.findMany({ select: { id: true } });
+  for (const { id } of events) {
+    await prisma.cuppingEvent.delete({ where: { id } });
+  }
+  return events.length;
+}
+
+// Deletes every non-admin user (Farmer/QGrader/HeadJudge + User rows) from Supabase and Prisma.
+async function resetUsersData() {
+  const users = await prisma.user.findMany({ where: { role: { not: 'ADMIN' } } });
+  for (const u of users) {
+    if (u.supabaseId && !u.supabaseId.startsWith('local-')) {
+      try {
+        const { error } = await supabase.auth.admin.deleteUser(u.supabaseId);
+        if (error) console.error(`Failed to delete Supabase user ${u.email}:`, error.message);
+      } catch (e) {
+        console.error(`Failed to delete Supabase user ${u.email}:`, e.message);
+      }
+    }
+    if (u.role === 'FARMER') {
+      await prisma.farmer.deleteMany({ where: { email: u.email } });
+    } else if (u.role === 'Q_GRADER') {
+      await prisma.qGrader.deleteMany({ where: { email: u.email } });
+    } else if (u.role === 'HEAD_JUDGE') {
+      await prisma.headJudge.deleteMany({ where: { email: u.email } });
+    }
+    await prisma.user.delete({ where: { id: u.id } });
+  }
+  return users.length;
+}
+
+// Reset all cupping event data (cascades samples, participants, scores, tags, methods, re-eval requests).
+app.post('/api/admin/reset-events', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { password } = req.body;
+  try {
+    const admin = await verifyAdminPassword(req, password);
+    if (!admin) {
+      return res.status(401).json({ message: 'Incorrect password.' });
+    }
+    const deletedEvents = await resetEventsData();
+    res.json({ message: 'All event data has been reset.', deletedEvents });
+  } catch (err) {
+    console.error('Reset events error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Reset all non-admin user data (Farmers, Q Graders, Head Judges) so admin access is preserved.
+app.post('/api/admin/reset-users', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { password } = req.body;
+  try {
+    const admin = await verifyAdminPassword(req, password);
+    if (!admin) {
+      return res.status(401).json({ message: 'Incorrect password.' });
+    }
+    const deletedUsers = await resetUsersData();
+    res.json({ message: 'All non-admin user data has been reset.', deletedUsers });
+  } catch (err) {
+    console.error('Reset users error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Reset all data (events + non-admin users) while preserving admin accounts so admins can still log in.
+app.post('/api/admin/reset-all', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
+  const { password } = req.body;
+  try {
+    const admin = await verifyAdminPassword(req, password);
+    if (!admin) {
+      return res.status(401).json({ message: 'Incorrect password.' });
+    }
+    const deletedEvents = await resetEventsData();
+    const deletedUsers = await resetUsersData();
+    res.json({ message: 'All data except admin accounts has been reset.', deletedEvents, deletedUsers });
+  } catch (err) {
+    console.error('Reset all data error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Returns whether the authenticated user currently has 2FA enabled
 app.get('/api/2fa/status', verifySupabaseToken, verifyRole('ADMIN'), async (req, res) => {
   try {

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, AlertTriangle } from 'lucide-react';
 import { User } from '../../types';
 import { BACKEND_URL } from '../../utils/api';
 
@@ -14,6 +14,28 @@ interface SettingsModalProps {
 }
 
 type Step = 'loading' | 'idle' | 'enrolling' | 'disabling';
+type ResetAction = 'events' | 'users' | 'all';
+
+const RESET_ACTIONS: Record<ResetAction, { label: string; endpoint: string; description: string; confirmWord: string }> = {
+  events: {
+    label: 'Reset Events Data',
+    endpoint: 'reset-events',
+    description: 'Permanently deletes all cupping events, samples, participants, and scores.',
+    confirmWord: 'RESET EVENTS',
+  },
+  users: {
+    label: 'Reset User Data',
+    endpoint: 'reset-users',
+    description: 'Permanently deletes all Farmer, Q Grader, and Head Judge accounts. Admin accounts are kept.',
+    confirmWord: 'RESET USERS',
+  },
+  all: {
+    label: 'Reset All Data',
+    endpoint: 'reset-all',
+    description: 'Permanently deletes all events, samples, and non-admin users. Admin accounts are kept so admins can still log in.',
+    confirmWord: 'RESET ALL',
+  },
+};
 
 const authHeaders = () => {
   const token = localStorage.getItem('token');
@@ -35,6 +57,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentU
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const [activeResetAction, setActiveResetAction] = useState<ResetAction | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -118,7 +147,45 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentU
     setConfirmPassword('');
     setPasswordError('');
     setPasswordSuccess('');
+    cancelDataReset();
     onClose();
+  };
+
+  const cancelDataReset = () => {
+    setActiveResetAction(null);
+    setResetPassword('');
+    setResetConfirmText('');
+    setResetError('');
+  };
+
+  const handleConfirmDataReset = async () => {
+    if (!activeResetAction) return;
+    const config = RESET_ACTIONS[activeResetAction];
+    setResetError('');
+
+    if (!resetPassword) {
+      setResetError('Enter your password to confirm.');
+      return;
+    }
+    if (resetConfirmText.trim().toUpperCase() !== config.confirmWord) {
+      setResetError(`Type "${config.confirmWord}" to confirm.`);
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      await axios.post(
+        `${BACKEND_URL}/api/admin/${config.endpoint}`,
+        { password: resetPassword },
+        { headers: authHeaders(), withCredentials: true }
+      );
+      setResetSuccess(`${config.label} completed successfully.`);
+      cancelDataReset();
+    } catch (err: any) {
+      setResetError(err?.response?.data?.message || 'Failed to reset data.');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -274,6 +341,77 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, currentU
                 Confirm Disable
               </Button>
             </div>
+          </div>
+        )}
+
+        {step !== 'enrolling' && step !== 'disabling' && (
+          <div className="flex flex-col gap-3 p-4 rounded-lg border border-red-300 bg-red-50">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="text-red-500 flex-shrink-0 mt-1" size={22} />
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-700">Danger Zone</h3>
+                <p className="text-sm text-red-600 mt-1">
+                  These actions permanently delete data and cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {(Object.keys(RESET_ACTIONS) as ResetAction[]).map((action) => {
+              const config = RESET_ACTIONS[action];
+              return (
+                <div key={action} className="flex flex-col gap-2 p-3 rounded-lg border border-red-200 bg-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-text-dark">{config.label}</p>
+                      <p className="text-xs text-text-light mt-0.5">{config.description}</p>
+                    </div>
+                    {activeResetAction !== action && (
+                      <Button
+                        onClick={() => {
+                          setActiveResetAction(action);
+                          setResetPassword('');
+                          setResetConfirmText('');
+                          setResetError('');
+                          setResetSuccess('');
+                        }}
+                        className="bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
+                      >
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+
+                  {activeResetAction === action && (
+                    <div className="flex flex-col gap-2 pt-2 border-t border-red-100">
+                      <Input
+                        type="password"
+                        value={resetPassword}
+                        onChange={(e) => setResetPassword(e.target.value)}
+                        placeholder="Your password"
+                        autoComplete="current-password"
+                      />
+                      <Input
+                        value={resetConfirmText}
+                        onChange={(e) => setResetConfirmText(e.target.value)}
+                        placeholder={`Type "${config.confirmWord}" to confirm`}
+                      />
+                      {resetError && <p className="text-sm text-red-500">{resetError}</p>}
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={cancelDataReset} variant="secondary" disabled={isResetting}>Cancel</Button>
+                        <Button
+                          onClick={handleConfirmDataReset}
+                          disabled={isResetting}
+                          className="bg-red-500 text-white hover:bg-red-600"
+                        >
+                          {isResetting ? 'Resetting...' : 'Confirm Reset'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {resetSuccess && <p className="text-sm text-green-600">{resetSuccess}</p>}
           </div>
         )}
 
