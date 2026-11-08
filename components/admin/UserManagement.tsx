@@ -55,6 +55,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
     const [editedUser, setEditedUser] = useState<User | null>(null);
     const [newUserName, setNewUserName] = useState('');
     const [newUserPassword, setNewUserPassword] = useState('');
+    const [showNewUserPassword, setShowNewUserPassword] = useState(false);
     const getAuthHeaders = () => ({
         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
     });
@@ -101,6 +102,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
                 setUsers((prevUsers) => [...prevUsers, response.data]);
                 setIsAddUserModalOpen(false);
                 setCurrentStep(1);
+                setShowNewUserPassword(false);
             } else {
                 alert('Failed to add user.');
             }
@@ -321,7 +323,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
             <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
                 <h3 className="text-xl font-bold">User Management</h3>
                 <div className="flex items-center gap-2">
-                    <Button onClick={() => setIsAddUserModalOpen(true)} className="flex items-center gap-2">
+                    <Button onClick={() => {
+                        setShowNewUserPassword(false);
+                        setIsAddUserModalOpen(true);
+                    }} className="flex items-center gap-2">
                         <UserPlus size={16} /> Add New Users
                     </Button>
                 </div>
@@ -334,6 +339,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
                     onClose={() => {
                         setIsAddUserModalOpen(false);
                         setCurrentStep(1);
+                        setShowNewUserPassword(false);
                     }}
                 >
                     {currentStep === 1 && (
@@ -354,13 +360,23 @@ const UserManagement: React.FC<UserManagementProps> = ({ events, onViewUser, onA
                                 placeholder="e.g., user1@example.com"
                             />
                             <Label htmlFor="password" className="mt-4">Password</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={newUserPassword}
-                                onChange={(e) => setNewUserPassword(e.target.value)}
-                                placeholder="Set a password"
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="password"
+                                    type={showNewUserPassword ? 'text' : 'password'}
+                                    value={newUserPassword}
+                                    onChange={(e) => setNewUserPassword(e.target.value)}
+                                    placeholder="Set a password"
+                                    className="pr-14"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewUserPassword((isVisible) => !isVisible)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500 hover:text-primary focus:outline-none"
+                                >
+                                    {showNewUserPassword ? 'Hide' : 'Show'}
+                                </button>
+                            </div>
                         </div>
                     )}
 
