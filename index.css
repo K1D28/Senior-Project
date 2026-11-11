@@ -19,3 +19,47 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+@media print {
+  body:has(#report-content) :has(#report-content) > :not(:has(#report-content)):not(#report-content) {
+    display: none !important;
+  }
+
+  html:has(#report-content),
+  body:has(#report-content),
+  body:has(#report-content) :has(#report-content) {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  #report-content [class*="overflow-"] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #report-content table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 8px;
+    overflow-wrap: anywhere;
+  }
+
+  #report-content th,
+  #report-content td {
+    padding: 4px 2px;
+  }
+
+  #report-content tr {
+    break-inside: avoid;
+  }
+}
